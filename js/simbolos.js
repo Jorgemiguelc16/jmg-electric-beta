@@ -33,7 +33,9 @@ function trazos(o) {
    calentador de agua 09-93-69, interfono 09-93-73, caja 09-93-08, canalizaciones 09-93-05/06, conductores
    09-93-01/02, tablero 09-91-17, contador de energía 08-80-22, interruptor automático 07-72-21, diferencial
    07-72-17, contactor 07-72-18, pararrayos 07-75-23, relé de tensión 07-73-01, reloj 08-80-40 y tierra
-   03-31-44/46. */
+   03-31-44/46. Para el editor de diseño (js/diseno.js) también: interruptores bipolar, de tres y de cuatro vías
+   09-93-31/32/33, tomacorriente a prueba de agua 09-93-19, bloque autónomo de emergencia 09-93-68, pulsador de
+   timbre 09-93-43 y timbre 08-80-49. */
 function simboloDGE(o, k, x, y, z = 1) {
   const { L, T, R, C, TRI } = trazos(o);
   // Tomacorriente: círculo atravesado por n líneas que llegan desde la izquierda; letra abajo a la derecha
@@ -59,6 +61,11 @@ function simboloDGE(o, k, x, y, z = 1) {
     L(x - r, y, x - r - t, y);
     if (pared) L(x - r - t, y - r, x - r - t, y + r, 1.4);
   };
+  const intN = n => {
+    C(x - 5 * z, y + 1.5 * z, 1.5 * z, { fi: INK_S, st: "" });
+    T(x - 2.5 * z, y + 5 * z, "S", { s: 12 * z, b: 1, it: 1 });
+    T(x + 4.6 * z, y + 7.5 * z, n, { s: 7 * z, b: 1, it: 1 });
+  };
   const S = {
     toma: () => toma(2, "T"),
     tomaC: () => toma(2, "T"),
@@ -74,6 +81,11 @@ function simboloDGE(o, k, x, y, z = 1) {
       C(x - 5 * z, y + 1.5 * z, 1.5 * z, { fi: INK_S, st: "" });
       T(x - 2.5 * z, y + 5 * z, "S", { s: 12 * z, b: 1, it: 1 });
     },
+    tomaPA: () => toma(2, "PA"),
+    // Interruptores bipolar (S2), de tres vías (S3) y de cuatro vías (S4): la forma literal con su número
+    int2: () => intN("2"),
+    int3: () => intN("3"),
+    int4: () => intN("4"),
     luz: () => luz(false),
     braq: () => luz(true),
     // Luminaria de emergencia: aspa con un cuadrado negro al centro
@@ -83,6 +95,32 @@ function simboloDGE(o, k, x, y, z = 1) {
       L(x + a, y - a, x - a, y + a, 1.3);
       TRI(x - 2.8 * z, y - 2.8 * z, x + 2.8 * z, y - 2.8 * z, x + 2.8 * z, y + 2.8 * z);
       TRI(x - 2.8 * z, y - 2.8 * z, x + 2.8 * z, y + 2.8 * z, x - 2.8 * z, y + 2.8 * z);
+    },
+    // Bloque autónomo de emergencia (09-93-68): cuadrado con aspa y punto al centro
+    emerB: () => {
+      const a = 6 * z;
+      R(x - a, y - a, 2 * a, 2 * a, { fi: "#fff" });
+      L(x - a, y - a, x + a, y + a, 1.1);
+      L(x + a, y - a, x - a, y + a, 1.1);
+      C(x, y, 1.5 * z, { fi: INK_S, st: "" });
+    },
+    // Pulsador de timbre (09-93-43): círculo dentro de otro, con punto al centro
+    pul: () => {
+      C(x, y, 5.5 * z);
+      C(x, y, 3 * z, { fi: "none" });
+      C(x, y, 1 * z, { fi: INK_S, st: "" });
+    },
+    // Timbre, campana (08-80-49): semicírculo con su base y dos terminales
+    timbre: () => {
+      const r = 6 * z;
+      for (let i = 0; i < 8; i++) {
+        const a1 = Math.PI + (Math.PI * i) / 8,
+          a2 = Math.PI + (Math.PI * (i + 1)) / 8;
+        L(x + r * Math.cos(a1), y + 2 * z + r * Math.sin(a1), x + r * Math.cos(a2), y + 2 * z + r * Math.sin(a2), 1.2);
+      }
+      L(x - r, y + 2 * z, x + r, y + 2 * z, 1.2);
+      L(x - 3 * z, y + 2 * z, x - 3 * z, y + 6 * z, 1.1);
+      L(x + 3 * z, y + 2 * z, x + 3 * z, y + 6 * z, 1.1);
     },
     // Calentador de agua: círculo con rayado vertical y la canalización desde la izquierda
     terma: () => {

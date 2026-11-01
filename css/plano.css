@@ -75,6 +75,13 @@
 .pl-lienzo.moviendo {
   cursor: grabbing;
 }
+/* Barra espaciadora presionada: arrastrar desplaza; sobre un elemento del diseño: se puede mover */
+.pl-lienzo.mano {
+  cursor: grab;
+}
+.pl-lienzo.sobre-dis:not(.con-herr) {
+  cursor: move;
+}
 .pl-lienzo canvas {
   position: absolute;
   inset: 0;
@@ -214,7 +221,7 @@
   min-height: 0;
   max-height: 38%;
 }
-.pl-sec-capas {
+.pl-sec-dis {
   flex: 1;
   max-height: none;
 }
@@ -488,4 +495,259 @@
   opacity: 0.42;
   cursor: default;
   pointer-events: none;
+}
+
+/* Diseño eléctrico (js/diseno.js): botones de los símbolos con el dibujo de la Norma DGE */
+.ds-ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--icon, #14304f);
+  overflow: visible;
+}
+.ed-ribbon .ds-b {
+  padding: 2px 8px;
+}
+.ds-actual select {
+  max-width: 150px;
+}
+.pl-cod {
+  font: 600 10.5px var(--f-mono);
+  color: var(--ws-text2, #66737f);
+}
+/* Resumen del diseño en el panel izquierdo: un clic selecciona todos los de ese tipo */
+.ds-fila {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 3px 10px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: 12px var(--f-body);
+  color: var(--ws-text, #1f2a36);
+  cursor: pointer;
+}
+.ds-fila:hover {
+  background: var(--ws-hover, #e7eef8);
+}
+.ds-fila span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-fila em {
+  font: 600 11px var(--f-mono);
+  font-style: normal;
+  color: var(--ws-text2, #66737f);
+}
+.ds-lin {
+  display: block;
+  height: 2px;
+  margin-top: 7px;
+  background: var(--icon, #14304f);
+}
+/* Propiedades editables del elemento seleccionado */
+.ed-pc {
+  align-items: center;
+}
+.ed-pc input,
+.ed-pc select {
+  min-width: 0;
+  width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--ws-line, #d6dde6);
+  border-radius: 4px;
+  background: var(--input-bg, #fff);
+  color: var(--ws-text, #1f2a36);
+  font: 12px var(--f-body);
+}
+.ed-pc:has(i) {
+  grid-template-columns: 92px minmax(0, 1fr) 22px;
+}
+.ed-pc i {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ws-text2, #66737f);
+}
+.ds-crit {
+  margin: 0;
+  padding: 0 10px 4px 110px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ws-text2, #66737f);
+}
+.ds-prev {
+  display: grid;
+  place-items: center;
+  height: 64px;
+  margin: 0 10px 6px;
+  border: 1px solid var(--ws-line, #d6dde6);
+  border-radius: 6px;
+  background: var(--ws-doc, #fff);
+}
+.ds-prev .ds-ico {
+  width: 46px;
+  height: 46px;
+}
+.ed-pb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+}
+.ed-pb .ed-del:hover {
+  color: var(--bad, #b3261e);
+  border-color: var(--bad, #b3261e);
+}
+/* Administrador de capas (js/capas.js) */
+.ca-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--dl-grid2, #c9cfd6);
+}
+.ca-barra select,
+.ca-barra input {
+  width: auto;
+  flex: none;
+  padding: 3px 6px;
+  border: 1px solid var(--dl-grid2, #c9cfd6);
+  border-radius: 3px;
+  font: 12px var(--f-body);
+}
+.ca-barra input {
+  width: 150px;
+}
+.ca-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--dl-grid2, #c9cfd6);
+  margin: 0 2px;
+}
+.ca-tabla {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+.ca-t {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--f-body);
+  color: var(--dl-ink, #1b1b1b);
+}
+/* Sin los estilos generales de las tablas de resultados (alineadas a la derecha, en letra monoespaciada) */
+.ca-t th,
+.ca-t td {
+  text-align: left;
+  font-family: var(--f-body);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ca-t tbody tr:nth-child(even) td {
+  background: none;
+}
+.ca-t th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 8px;
+  background: var(--dl-bg, #f0f0f0);
+  color: var(--dl-ink, #1b1b1b);
+  border-bottom: 1px solid var(--dl-grid2, #c9cfd6);
+  border-right: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ca-t td {
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--dl-grid, #e1e4e8);
+  white-space: nowrap;
+}
+.ca-t tr[data-cad],
+.ca-t tr[data-caa] {
+  cursor: default;
+}
+.ca-t tr.sel td {
+  background: #dde9f6;
+}
+.ca-g td {
+  padding: 6px 8px 3px;
+  background: #f7f9fb;
+  font: 600 10.5px var(--f-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dl-ink2, #5f6b77);
+}
+.ca-t input[type="text"] {
+  width: 100%;
+  min-width: 140px;
+  padding: 2px 5px;
+  border: 1px solid transparent;
+  background: none;
+  font: 12px var(--f-body);
+}
+.ca-t input[type="text"]:hover,
+.ca-t input[type="text"]:focus {
+  border-color: var(--dl-grid2, #c9cfd6);
+  background: #fff;
+}
+.ca-t input[type="color"] {
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--dl-grid2, #c9cfd6);
+  background: none;
+}
+.ca-t select {
+  width: auto;
+  padding: 1px 4px;
+  font: 12px var(--f-body);
+}
+.ca-t input[type="checkbox"] {
+  width: auto;
+}
+.ca-c,
+.ca-act {
+  text-align: center;
+  width: 64px;
+}
+.ca-act b {
+  color: #2e7d32;
+}
+.ca-sw {
+  display: inline-block;
+  width: 28px;
+  height: 12px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  vertical-align: middle;
+}
+.ca-or,
+.ca-lt {
+  color: var(--dl-ink2, #5f6b77);
+}
+.ca-t .ca-n {
+  text-align: right;
+  font-family: var(--f-mono);
+}
+.ca-t .ca-c,
+.ca-t .ca-act {
+  text-align: center;
+}
+.ca-nom {
+  padding: 0 6px;
+}
+.ca-arq td {
+  color: var(--dl-ink2, #5f6b77);
+}
+.ca-box {
+  display: flex;
+  flex-direction: column;
 }

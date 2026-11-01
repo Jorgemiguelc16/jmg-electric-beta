@@ -404,18 +404,18 @@ prueba("Editor de diseño: plano, capas, plantas, deshacer, aplicar, cancelar y 
   ok(await ev("EPL.f === 1 && EPL.de === 'cotas'"), "unidad: metros según las cotas (la cabecera dice mm)");
   ok(await ev("PLANO === null && !$('edSucio').hidden"), "el proyecto no cambia hasta aplicar");
   ok(await ev("['OCULTA', 'CONGELADA'].every(c => EPL.ocultas.includes(c))"), "capas apagada y congelada ocultas");
+  // Capas en su ventana (Administrador de capas)
+  await clic('#editor [data-pl="capas"]');
   ok(
-    (await ev("document.querySelectorAll('#plCapas .pl-capa').length")) === 8,
-    "8 capas con algo dibujado en el panel"
+    (await ev("document.querySelectorAll('#caTabla tr[data-caa]').length")) === 8,
+    "8 capas de la arquitectura en la ventana"
   );
   const hist0 = await ev("HIST.length");
-  await clic('#plCapas input[data-plc="EJES"]');
+  await clic('#caTabla tr[data-caa="EJES"] input[data-caf="vis"]');
   ok(await ev("EPL.ocultas.includes('EJES')"), "ocultar la capa EJES");
+  await clic('[data-ca="cerrar"]');
   await ctrlZ();
-  ok(
-    await ev("!EPL.ocultas.includes('EJES') && document.querySelector('#plCapas input[data-plc=\"EJES\"]').checked"),
-    "Ctrl+Z deshace en el editor"
-  );
+  ok(await ev("!EPL.ocultas.includes('EJES')"), "Ctrl+Z deshace en el editor");
   ok((await ev("HIST.length")) === hist0 && (await ev("PLANO === null")), "el deshacer del proyecto no se toca");
   await clic('#editor [data-pl="planta"]');
   await clicPlano(OX - 0.5, OY - 0.5, 0);
@@ -429,7 +429,9 @@ prueba("Editor de diseño: plano, capas, plantas, deshacer, aplicar, cancelar y 
     "Aplicar pasa el plano y la planta al proyecto"
   );
   // Un cambio sin aplicar y Cancelar: pide confirmación y no llega al proyecto
-  await clic('#plCapas input[data-plc="EJES"]');
+  await clic('#editor [data-pl="capas"]');
+  await clic('#caTabla tr[data-caa="EJES"] input[data-caf="vis"]');
+  await clic('[data-ca="cerrar"]');
   await clic('[data-ed="cancelar"]');
   ok(await ev("!$('cfmDlg').hidden"), "Cancelar con cambios pide confirmación");
   await clic("#cfmSi");
@@ -485,6 +487,115 @@ prueba("Editor de diseño: selección, distancia con enganche, recorrido, objeto
   ok(await ev("EPL.f === 1"), "Ctrl+Z vuelve a la escala anterior");
   await clic('[data-ed="aceptar"]');
   ok(await ev("$('editor').hidden && PLANO.f === 1"), "Aceptar pasa el plano al proyecto");
+});
+
+// Teclas para el editor
+const teclaE = (key, code, vk, mod = 0) =>
+  cdp("Input.dispatchKeyEvent", { type: "keyDown", key, code, windowsVirtualKeyCode: vk, modifiers: mod });
+// Arrastra con el botón izquierdo entre dos puntos del dibujo
+async function arrastrarPlano(a, b) {
+  const pant = ([x, y]) =>
+    J(
+      `(() => { const [X, Y] = plAPant(${x}, ${y}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+    );
+  const [X0, Y0] = await pant(a),
+    [X1, Y1] = await pant(b);
+  await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: X0, y: Y0 });
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: X0,
+    y: Y0,
+    button: "left",
+    buttons: 1,
+    clickCount: 1
+  });
+  for (let i = 1; i <= 6; i++)
+    await cdp("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: X0 + ((X1 - X0) * i) / 6,
+      y: Y0 + ((Y1 - Y0) * i) / 6,
+      button: "left",
+      buttons: 1
+    });
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: X1,
+    y: Y1,
+    button: "left",
+    buttons: 0,
+    clickCount: 1
+  });
+  await esperar(80);
+}
+
+prueba("Editor de diseño: símbolos DGE, enganche, mover, girar, borrar, tuberías, capas y guardado", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  ok(await ev("EPL.dis && EPL.dis.capas.length === 9 && !EPL.dis.els.length"), "diseño nuevo con sus 9 capas");
+  // Una luminaria en el centro de la sala y un tomacorriente que se engancha al punto medio del muro
+  await clic('#editor [data-pl="col:luz"]');
+  await clicPlano(OX + 1.5, OY + 6, 0);
+  await clic('#editor [data-pl="col:toma"]');
+  await clicPlano(OX + 0.06, OY + 4.06, 0);
+  await teclaE("Escape", "Escape", 27);
+  const els = await J("EPL.dis.els.map(e => [e.k, e.x, e.y, e.capa])");
+  ok(
+    els.length === 2 && els[0][0] === "luz" && Math.abs(els[0][1] - OX - 1.5) < 0.03 && els[0][3] === "E-ALUMBRADO",
+    `luminaria (DGE 09-93-51) en la capa E-ALUMBRADO (${JSON.stringify(els[0])})`
+  );
+  ok(
+    els[1] && els[1][1] === OX && els[1][2] === OY + 4 && els[1][3] === "E-TOMACORRIENTES",
+    "tomacorriente enganchado al punto medio del muro"
+  );
+  ok(/Salida de alumbrado en techo/.test(await ev("$('dsResumen').textContent")), "el resumen cuenta lo colocado");
+  // Mover la luminaria arrastrándola, girarla con R, deshacer y borrarla con Supr
+  await arrastrarPlano([OX + 1.5, OY + 6], [OX + 2.5, OY + 6.5]);
+  const lum = await J("EPL.dis.els[0]");
+  ok(
+    Math.abs(lum.x - OX - 2.5) < 0.05 && Math.abs(lum.y - OY - 6.5) < 0.05,
+    `arrastrar mueve la luminaria (${lum.x - OX}, ${lum.y - OY})`
+  );
+  await teclaE("r", "KeyR", 82);
+  ok((await ev("EPL.dis.els[0].r")) === 90, "R la gira 90°");
+  await ctrlZ();
+  ok((await ev("EPL.dis.els[0].r")) === 0, "Ctrl+Z deshace el giro");
+  await teclaE("Delete", "Delete", 46);
+  ok((await ev("EPL.dis.els.length")) === 1 && (await ev("EPL.dis.els[0].k")) === "toma", "Supr borra lo seleccionado");
+  // Tubería por piso de dos tramos
+  await clic('#editor [data-pl="tubP"]');
+  await clicPlano(OX, OY);
+  await clicPlano(OX + 10, OY);
+  await clicPlano(OX + 10, OY + 8);
+  await teclaE("Enter", "Enter", 13);
+  const tub = await J("EPL.dis.els.find(e => e.t === 'tub')");
+  ok(tub && tub.modo === "piso" && tub.pts.length === 6 && tub.capa === "E-TUBERIAS", "tubería por piso de dos tramos");
+  ok(/Tubería en piso\s*18\.00 m/.test(await ev("$('dsResumen').textContent")), "el resumen suma 18.00 m de tubería");
+  await teclaE("Escape", "Escape", 27);
+  // Marco de selección de derecha a izquierda (captura) sobre todo el dibujo
+  await arrastrarPlano([OX + 9, OY + 5], [OX - 0.3, OY + 3]);
+  ok((await ev("DS_SEL.size")) === 2, "el marco de captura selecciona los dos elementos");
+  await teclaE("Escape", "Escape", 27);
+  // Administrador de capas: capa nueva, actual y una línea en ella; capa oculta no se selecciona
+  await clic('#editor [data-pl="capas"]');
+  ok(await ev("!$('capasDlg').hidden"), "el botón Capas abre su ventana");
+  await clic('[data-ca="nueva"]');
+  await poner("#caTabla tr.sel input[data-caf='n']", "E-PRUEBA");
+  await clic('[data-ca="actual"]');
+  ok(await ev("EPL.dis.actual === 'E-PRUEBA'"), "capa nueva renombrada y actual");
+  await clic('#caTabla tr[data-cad="E-TOMACORRIENTES"] input[data-caf="vis"]');
+  ok(await ev("dsCapa('E-TOMACORRIENTES').vis === false"), "ocultar la capa E-TOMACORRIENTES");
+  await clic('[data-ca="cerrar"]');
+  ok((await ev(`dsHit(${OX}, ${OY + 4}, 0.1)`)) === null, "lo de una capa oculta no se selecciona");
+  await clic('#editor [data-pl="lin"]');
+  await clicPlano(OX + 1, OY + 1, 0);
+  await clicPlano(OX + 4, OY + 1, 0);
+  ok(await ev("EPL.dis.els.some(e => e.t === 'lin' && e.capa === 'E-PRUEBA')"), "la línea va a la capa actual");
+  // Aplicar: el diseño pasa al proyecto y vuelve igual al abrirlo de nuevo
+  await clic('[data-ed="aceptar"]');
+  const n = await ev("PLANO.dis.els.length");
+  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+  ok(n === 3 && (await ev("PLANO.dis.els.length")) === 3, "el diseño se guarda y se vuelve a abrir con el proyecto");
+  ok(/3 elementos del diseño/.test(await ev("$('plInfo').textContent")), "la pestaña Diseño cuenta los elementos");
 });
 
 // Ejecución

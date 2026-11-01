@@ -335,8 +335,84 @@ function planoValido(v) {
           .slice(0, 60)
           .map(p => ({ n: txt(p.n, 60) || "Planta", x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1 }))
       : [],
-    tenue: v.tenue === true
+    tenue: v.tenue === true,
+    dis: disValido(v.dis)
   };
+}
+/* Diseño eléctrico dibujado sobre el plano (js/diseno.js): capas, capa actual, elementos y escala de impresión,
+   solo con datos válidos. Los elementos sin datos completos se descartan; los de una capa que no existe la crean. */
+function disValido(v) {
+  if (!v || typeof v !== "object") return undefined;
+  const n = x => typeof x === "number" && Number.isFinite(x),
+    txt = (x, m) =>
+      String(x ?? "")
+        .replace(/[<>]/g, "")
+        .slice(0, m),
+    color = x => (typeof x === "string" && /^#[0-9a-f]{6}$/i.test(x) ? x.toLowerCase() : "#37474f"),
+    capa = c => ({
+      n: txt(c.n, 60).trim() || "E-CAPA",
+      col: color(c.col),
+      lt: ["cont", "trazos", "punto"].includes(c.lt) ? c.lt : "cont",
+      vis: c.vis !== false,
+      bloq: c.bloq === true
+    });
+  const capas = [];
+  (Array.isArray(v.capas) ? v.capas : []).slice(0, 200).forEach(c => {
+    if (c && typeof c === "object" && !capas.some(x => x.n === capa(c).n)) capas.push(capa(c));
+  });
+  const els = (Array.isArray(v.els) ? v.els : [])
+    .slice(0, 20000)
+    .map(e => {
+      if (!e || typeof e !== "object") return null;
+      const b = {
+          id: typeof e.id === "string" && /^d[0-9]{1,7}$/.test(e.id) ? e.id : "",
+          capa: txt(e.capa, 60).trim() || "E-DIBUJO"
+        },
+        cir = e.cir ? { cir: txt(e.cir, 12) } : {};
+      if (e.t === "sim" && typeof e.k === "string" && /^[a-zA-Z0-9]{1,12}$/.test(e.k) && n(e.x) && n(e.y))
+        return {
+          ...b,
+          t: "sim",
+          k: e.k,
+          x: e.x,
+          y: e.y,
+          r: n(e.r) ? e.r : 0,
+          ...(n(e.h) && e.h >= 0 ? { h: e.h } : {}),
+          ...(n(e.p) && e.p >= 0 ? { p: e.p } : {}),
+          ...cir
+        };
+      if (e.t === "txt" && n(e.x) && n(e.y) && n(e.ht) && e.ht > 0)
+        return { ...b, t: "txt", x: e.x, y: e.y, ht: e.ht, r: n(e.r) ? e.r : 0, s: txt(e.s, 200) || "Texto" };
+      if (e.t === "cir" && n(e.x) && n(e.y) && n(e.rad) && e.rad > 0)
+        return { ...b, t: "cir", x: e.x, y: e.y, rad: e.rad };
+      if (
+        (e.t === "lin" || e.t === "tub") &&
+        Array.isArray(e.pts) &&
+        e.pts.length >= 4 &&
+        e.pts.length % 2 === 0 &&
+        e.pts.length <= 20000 &&
+        e.pts.every(n)
+      )
+        return {
+          ...b,
+          t: e.t,
+          pts: e.pts.slice(),
+          c: e.c === true,
+          ...(e.t === "tub" ? { modo: e.modo === "piso" ? "piso" : "techo", ...cir } : {})
+        };
+      return null;
+    })
+    .filter(Boolean);
+  // Identificadores únicos; capas para todos los elementos
+  const ids = new Set();
+  let k = els.reduce((m, e) => Math.max(m, parseInt(e.id.slice(1), 10) || 0), 0);
+  els.forEach(e => {
+    if (!e.id || ids.has(e.id)) e.id = "d" + ++k;
+    ids.add(e.id);
+    if (!capas.some(c => c.n === e.capa)) capas.push(capa({ n: e.capa }));
+  });
+  const actual = capas.some(c => c.n === v.actual) ? v.actual : "E-DIBUJO";
+  return { capas, actual, els, escala: [50, 75, 100].includes(v.escala) ? v.escala : 50 };
 }
 /* Proyecto listo para calcular(), con el mismo formato que estado(), a partir de un proyecto guardado o de un
    caso de prueba (lo usan las pruebas sin navegador, herramientas/pruebas.js). Los datos que falten toman el

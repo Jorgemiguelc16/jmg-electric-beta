@@ -129,6 +129,40 @@ for (const cp of run("CASOS_PRUEBA").slice(0, 3)) {
     }
 }
 
+/* 3. El plano y el diseño eléctrico se guardan con el proyecto solo con datos válidos (planoValido) */
+const planoValido = run("planoValido"),
+  sha = "a".repeat(40);
+const dis = {
+  capas: [{ n: "E-ALUMBRADO", col: "#D08700", lt: "cont", vis: true, bloq: false }],
+  actual: "E-ALUMBRADO",
+  escala: 75,
+  els: [
+    { id: "d1", t: "sim", k: "luz", x: OX + 1.5, y: OY + 6, r: 90, capa: "E-ALUMBRADO", p: 100, cir: "C-1" },
+    { id: "d2", t: "tub", pts: [OX, OY, OX + 5, OY], modo: "piso", capa: "E-TUBERIAS", cir: "C-2" },
+    { id: "d2", t: "txt", x: OX, y: OY, ht: 0.12, s: "<b>SALA</b>", capa: "E-DIBUJO" },
+    { id: "d9", t: "sim", k: "luz", x: "mal", y: 0 },
+    { t: "lin", pts: [1, 2, 3] },
+    "basura"
+  ]
+};
+const pv = planoValido({ nombre: "a.dxf", sha, f: 1, de: "cotas", ocultas: [], plantas: [], dis });
+ok(
+  pv && pv.dis && pv.dis.els.length === 3,
+  `el diseño conserva sus 3 elementos válidos (dio ${pv && pv.dis && pv.dis.els.length})`
+);
+ok(pv.dis.els[0].k === "luz" && pv.dis.els[0].r === 90 && pv.dis.els[0].cir === "C-1", "símbolo con giro y circuito");
+ok(pv.dis.els[1].modo === "piso" && pv.dis.els[1].pts.length === 4, "tubería por piso con sus puntos");
+ok(
+  pv.dis.els[2].id !== "d2" && pv.dis.els[2].s === "bSALA/b",
+  "identificador repetido renumerado y texto sin etiquetas HTML"
+);
+ok(
+  pv.dis.capas.some(c => c.n === "E-TUBERIAS") && pv.dis.capas[0].col === "#d08700",
+  "capa creada para un elemento y color normalizado"
+);
+ok(pv.dis.escala === 75 && pv.dis.actual === "E-ALUMBRADO", "escala de impresión y capa actual");
+ok(planoValido({ nombre: "a.dxf", sha, f: 1 }).dis === undefined, "un plano sin diseño sigue sin diseño");
+
 const s = ((Date.now() - t0) / 1000).toFixed(2);
 console.log(
   mal

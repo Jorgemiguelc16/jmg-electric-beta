@@ -28,7 +28,22 @@ const ED = { abierto: false, hist: [], redo: [], base: "null" };
 // Vista: punto del dibujo en el centro del lienzo y escala en píxeles del lienzo por unidad del dibujo
 const PLV = { cx: 0, cy: 0, s: 1 };
 // Herramienta activa y sus puntos; el cursor (en el dibujo), el punto enganchado y el objeto seleccionado
-const PLH = { h: null, pts: [], sel: [], cur: null, eng: null, med: null, pan: null, obj: -1, sobre: -1 };
+const PLH = {
+  h: null,
+  pts: [],
+  sel: [],
+  cur: null,
+  eng: null,
+  med: null,
+  pan: null,
+  obj: -1,
+  sobre: -1,
+  // Diseño: elemento bajo el cursor, arrastre para mover, marco de selección y giro del símbolo a colocar
+  dsSobre: null,
+  arr: null,
+  marco: null,
+  rot: 0
+};
 const plBase = $("plBase"),
   plSobre = $("plSobre"),
   plLienzo = $("plLienzo");
@@ -122,7 +137,9 @@ async function plAbrir(file) {
             .filter(([, c]) => !c.on)
             .map(([n]) => n),
       plantas: sigue ? EPL.plantas : [],
-      tenue: sigue ? EPL.tenue : false
+      tenue: sigue ? EPL.tenue : false,
+      // El diseño eléctrico se conserva aunque cambie el archivo de arquitectura
+      dis: EPL && EPL.dis ? EPL.dis : dsNuevo()
     };
     PLH.obj = -1;
     plPreparar();
@@ -177,6 +194,9 @@ const edSnap = () => JSON.stringify(EPL);
 function edAbrir(conArchivo) {
   ED.abierto = true;
   EPL = PLANO ? clon(PLANO) : null;
+  dsAsegurar();
+  DS_SEL.clear();
+  DS_N = 0;
   ED.base = edSnap();
   ED.hist = [ED.base];
   ED.redo = [];
@@ -225,6 +245,11 @@ function edHist(dir) {
   if (dir < 0) ED.redo.push(ED.hist.pop());
   else ED.hist.push(ED.redo.pop());
   EPL = JSON.parse(ED.hist[ED.hist.length - 1]);
+  dsAsegurar();
+  DS_N = 0;
+  [...DS_SEL].forEach(id => {
+    if (!dsD() || !dsD().els.some(el => el.id === id)) DS_SEL.delete(id);
+  });
   plHerr(null);
   PLH.obj = -1;
   PL_COL.clear();
@@ -276,8 +301,9 @@ function planoAplicado() {
 function edInfo() {
   const P = PLANO,
     n = P ? P.plantas.length : 0;
+  const ne = P && P.dis ? P.dis.els.length : 0;
   $("plInfo").innerHTML = P
-    ? `<b title="${esc(P.nombre)}">${esc(P.nombre)}</b><span>${n ? `${n} planta${n > 1 ? "s" : ""}` : "Sin plantas encuadradas"} · ${plNomUnidad(P.f)}</span>`
+    ? `<b title="${esc(P.nombre)}">${esc(P.nombre)}</b><span>${n ? `${n} planta${n > 1 ? "s" : ""}` : "Sin plantas encuadradas"} · ${ne ? `${ne} elemento${ne > 1 ? "s" : ""} del diseño` : plNomUnidad(P.f)}</span>`
     : `<b>Sin plano de arquitectura</b><span>Ábralo en el editor de diseño</span>`;
 }
 const plNomUnidad = f =>
@@ -499,6 +525,7 @@ function plPintar() {
   g.fillStyle = PL_FONDO;
   g.fillRect(0, 0, W, H);
   if (!PL_GR) return;
+  dsRejilla(g);
   const O = plOrigen(),
     s = PLV.s;
   g.setTransform(s, 0, 0, -s, W / 2 - (PLV.cx - O[0]) * s, H / 2 + (PLV.cy - O[1]) * s);
@@ -550,6 +577,7 @@ function plPintar() {
     ls.forEach((l, i) => g.fillText(l, 0, y0 + i * lh));
     g.restore();
   }
+  dsPintar(g);
 }
 
 /* ---------- Lienzo superior: selección, enganche, mediciones, encuadres y plantas ---------- */
@@ -577,7 +605,7 @@ function plSobreDibujar() {
     plEtiqueta(g, p.n, a + 4 * d, b + 4 * d, azul, "left", "top");
   });
   // Objeto bajo el cursor en Seleccionar: resaltado suave, para saber qué se elegiría con un clic
-  if (PLH.sobre >= 0 && PLH.sobre !== PLH.obj && !PLH.h) {
+  if (PLH.sobre >= 0 && PLH.sobre !== PLH.obj && !PLH.h && !PLH.dsSobre) {
     const t = PL_MOD.trazos[PLH.sobre];
     g.globalAlpha = 0.6;
     g.strokeStyle = selc;
@@ -646,8 +674,9 @@ function plSobreDibujar() {
       plEtiqueta(g, "Total " + plFm(tot) + " m", X + 10 * d, Y + 10 * d, acento, "left", "top");
     }
   }
+  dsSobre(g);
   // Marca de enganche: cuadrado en extremos, triángulo en puntos medios, círculo en centros, cruz en bloques
-  if (PLH.eng && PLH.h) {
+  if (PLH.eng && (PLH.h || PLH.arr)) {
     const [X, Y] = plAPant(PLH.eng[0], PLH.eng[1]),
       r = 6 * d;
     g.strokeStyle = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
@@ -709,6 +738,15 @@ function plEnganche(x, y) {
     sn = PL_MOD.snap;
   let mejor = null,
     md = r;
+  const moviendo = PLH.arr ? new Set(dsSel().map(el => el.id)) : null;
+  const del = dsD() ? dsD().els.filter(el => !(moviendo && moviendo.has(el.id))) : [];
+  for (const q of dsPuntosEnganche(del)) {
+    const dd = Math.hypot(q[0] - x, q[1] - y);
+    if (dd < md) {
+      md = dd;
+      mejor = q;
+    }
+  }
   for (let a = ci - n; a <= ci + n; a++)
     for (let b = cj - n; b <= cj + n; b++) {
       const l = I.pts.get(a + "," + b);
@@ -728,7 +766,8 @@ function plEnganche(x, y) {
 function plPuntoActual() {
   if (!PLH.cur) return null;
   let p = PLH.eng ? [PLH.eng[0], PLH.eng[1]] : PLH.cur.slice();
-  const u = PLH.pts[PLH.pts.length - 1];
+  if (!PLH.eng && DSU.forz) p = dsAlaRejilla(p);
+  const u = PLH.pts[PLH.pts.length - 1] || (PLH.arr && PLH.arr.base);
   if (u && $("plOrto").checked && !PLH.eng) {
     if (Math.abs(p[0] - u[0]) > Math.abs(p[1] - u[1])) p = [p[0], u[1]];
     else p = [u[0], p[1]];
@@ -801,6 +840,7 @@ function plHerr(h) {
   PLH.sel = [];
   PLH.med = null;
   PLH.eng = null;
+  PLH.arr = PLH.marco = null;
   plPedir(null);
   // Sin herramienta, el modo es Seleccionar
   document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
@@ -827,7 +867,9 @@ function plOrden(txt) {
           : "Designe el primer punto de una medida conocida (por ejemplo, los extremos de una cota)",
         planta: n ? "Designe la esquina opuesta" : "Designe una esquina de la planta"
       };
-    c.innerHTML = `<b>${PL_NOMH[PLH.h]}</b> · ${T[PLH.h]} · <span class="pl-k">Esc</span> para salir`;
+    c.innerHTML = dsEsHerr(PLH.h)
+      ? dsOrden(PLH.h, n)
+      : `<b>${PL_NOMH[PLH.h]}</b> · ${T[PLH.h]} · <span class="pl-k">Esc</span> para salir`;
   }
   $("plCmd").hidden = !c.innerHTML;
 }
@@ -982,6 +1024,7 @@ function edProps() {
     c.innerHTML = `<p class="pl-nota">Abra el plano de arquitectura para ver sus propiedades.</p>`;
     return;
   }
+  if (DS_SEL.size && !PLH.h) return dsProps(c);
   if (PLH.obj < 0 || PLH.h) {
     const oc = new Set(EPL.ocultas),
       capas = Object.keys(m.capas).filter(n => m.capas[n].n > 0);
@@ -1023,7 +1066,11 @@ $("edPropC").addEventListener("click", e => {
   edCambio();
 });
 
-/* ---------- Mouse y teclado sobre el plano ---------- */
+/* ---------- Mouse y teclado sobre el plano ----------
+   Como en los programas de dibujo: la rueda acerca y aleja; la rueda presionada (o la barra espaciadora con el botón
+   izquierdo) desplaza la vista; en Seleccionar, un clic elige, arrastrar un elemento del diseño lo mueve y
+   arrastrar sobre un lugar vacío hace un marco de selección (de izquierda a derecha, ventana; al revés, captura). */
+let PL_ESPACIO = false;
 plLienzo.addEventListener(
   "wheel",
   e => {
@@ -1038,10 +1085,9 @@ plLienzo.addEventListener(
 plLienzo.addEventListener("pointerdown", e => {
   if (!PL_MOD || e.target.closest(".pl-cmd")) return;
   const [X, Y] = plMouse(e);
-  // Rueda presionada: desplazar (doble clic con la rueda: ajustar a la pantalla); izquierdo en Seleccionar:
-  // arrastrar desplaza y un clic sin mover selecciona
-  if (e.button === 1 || (e.button === 0 && !PLH.h)) {
+  if (e.button === 1 || (e.button === 0 && PL_ESPACIO)) {
     e.preventDefault();
+    // Doble clic con la rueda: ajustar a la pantalla
     if (e.button === 1) {
       const t = Date.now();
       if (t - (plLienzo.ultRueda || 0) < 350) {
@@ -1050,21 +1096,26 @@ plLienzo.addEventListener("pointerdown", e => {
       }
       plLienzo.ultRueda = t;
     }
-    PLH.pan = { X, Y, cx: PLV.cx, cy: PLV.cy, mov: false, b: e.button };
+    PLH.pan = { X, Y, cx: PLV.cx, cy: PLV.cy, mov: false };
     plLienzo.setPointerCapture(e.pointerId);
-  } else if (e.button === 0 && PLH.h) {
-    PLH.abajo = [X, Y];
+    plLienzo.classList.add("moviendo");
+    return;
   }
+  if (e.button !== 0) return;
+  plLienzo.setPointerCapture(e.pointerId);
+  PLH.abajo = [X, Y];
+  if (PLH.h) return;
+  // Seleccionar: sobre un elemento del diseño, se elige y se prepara para moverlo; si no, marco de selección
+  const p = plADib(X, Y),
+    id = dsD() ? dsHit(p[0], p[1], (6 * plDpr()) / PLV.s) : null;
+  if (id) dsPresionar(id, p, e.shiftKey);
+  else PLH.marco = { X0: X, Y0: Y, X1: X, Y1: Y, mov: false, shift: e.shiftKey };
 });
 plLienzo.addEventListener("pointermove", e => {
   if (!PL_MOD) return;
   const [X, Y] = plMouse(e);
   if (PLH.pan) {
-    if (!PLH.pan.mov && Math.hypot(X - PLH.pan.X, Y - PLH.pan.Y) > 4 * plDpr()) {
-      PLH.pan.mov = true;
-      plLienzo.classList.add("moviendo");
-    }
-    if (!PLH.pan.mov) return;
+    PLH.pan.mov = true;
     PLV.cx = PLH.pan.cx - (X - PLH.pan.X) / PLV.s;
     PLV.cy = PLH.pan.cy + (Y - PLH.pan.Y) / PLV.s;
     plDibujar();
@@ -1072,40 +1123,65 @@ plLienzo.addEventListener("pointermove", e => {
   }
   const p = plADib(X, Y);
   PLH.cur = p;
-  PLH.eng = PLH.h && PLH.h !== "obj" ? plEnganche(p[0], p[1]) : null;
+  const arrastre = PLH.arr && PLH.abajo && Math.hypot(X - PLH.abajo[0], Y - PLH.abajo[1]) > 4 * plDpr();
+  // El enganche actúa con las herramientas y al mover elementos (no con Longitud de objetos)
+  PLH.eng = (PLH.h && PLH.h !== "obj") || arrastre ? plEnganche(p[0], p[1]) : null;
   const q = plPuntoActual() || p;
   $("plXY").textContent = `X ${plFm(q[0])}   Y ${plFm(q[1])} m`;
+  if (arrastre || (PLH.arr && PLH.arr.mov)) return dsMover(q);
+  if (PLH.marco) {
+    Object.assign(PLH.marco, { X1: X, Y1: Y });
+    if (Math.hypot(X - PLH.marco.X0, Y - PLH.marco.Y0) > 4 * plDpr()) PLH.marco.mov = true;
+    return plSobreDibujar();
+  }
   if (PLH.h) return plSobreDibujar();
-  const i = plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
-  if (i !== PLH.sobre) {
+  // Lo que está bajo el cursor en Seleccionar: primero el diseño, después la arquitectura
+  const r = (6 * plDpr()) / PLV.s,
+    id = dsD() ? dsHit(p[0], p[1], r) : null,
+    i = id ? -1 : plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+  plLienzo.classList.toggle("sobre-dis", !!id);
+  if (id !== PLH.dsSobre || i !== PLH.sobre) {
+    PLH.dsSobre = id;
     PLH.sobre = i;
     plSobreDibujar();
   }
 });
 plLienzo.addEventListener("pointerup", e => {
   if (PLH.pan) {
-    const pan = PLH.pan;
     PLH.pan = null;
     plLienzo.classList.remove("moviendo");
-    // Un clic sin arrastrar, en Seleccionar: elige la línea bajo el cursor
-    if (!pan.mov && pan.b === 0 && !PLH.h) plSeleccionar(plADib(pan.X, pan.Y));
     return;
   }
-  if (e.button !== 0 || !PLH.h || !PLH.abajo) return;
-  const [X, Y] = plMouse(e);
-  if (Math.hypot(X - PLH.abajo[0], Y - PLH.abajo[1]) > 6 * plDpr()) return (PLH.abajo = null);
+  if (e.button !== 0 || !PLH.abajo) return;
+  const [X, Y] = plMouse(e),
+    lejos = Math.hypot(X - PLH.abajo[0], Y - PLH.abajo[1]) > 6 * plDpr();
+  const abajo = PLH.abajo;
   PLH.abajo = null;
-  // Un clic en el mismo punto que el anterior (doble clic) termina el recorrido
+  if (PLH.arr) return dsSoltar();
+  if (PLH.marco) {
+    const mc = PLH.marco;
+    PLH.marco = null;
+    if (mc.mov) return dsMarco(mc);
+    // Clic en un lugar vacío: suelta la selección del diseño y elige la línea de la arquitectura bajo el cursor
+    if (!mc.shift) DS_SEL.clear();
+    return plSeleccionar(plADib(abajo[0], abajo[1]));
+  }
+  if (!PLH.h || lejos) return;
+  // Un clic en el mismo punto que el anterior (doble clic) termina el recorrido, la polilínea o la tubería
   const p = plPuntoActual() || plADib(X, Y),
     u = PLH.pts[PLH.pts.length - 1];
-  if (PLH.h === "rec" && u && !PLH.med && Math.hypot(p[0] - u[0], p[1] - u[1]) * PLV.s < 3)
-    return plTerminarRecorrido();
+  if (u && !PLH.med && Math.hypot(p[0] - u[0], p[1] - u[1]) * PLV.s < 3) {
+    if (PLH.h === "rec") return plTerminarRecorrido();
+    if (dsTerminar()) return;
+  }
   if (!$("plCmdIn").hidden) return;
-  plPunto(p);
+  if (dsEsHerr(PLH.h)) dsPunto(p);
+  else plPunto(p);
 });
 plLienzo.addEventListener("pointerleave", () => {
   PLH.cur = PLH.eng = null;
   PLH.sobre = -1;
+  PLH.dsSobre = null;
   $("plXY").textContent = "";
   plSobreDibujar();
 });
@@ -1113,34 +1189,64 @@ plLienzo.addEventListener("dblclick", e => {
   if (PLH.h === "rec") {
     e.preventDefault();
     plTerminarRecorrido();
-  }
+  } else if (dsTerminar()) e.preventDefault();
 });
 addEventListener("keydown", e => {
-  if (!ED.abierto || !$("cfmDlg").hidden) return;
-  const k = e.key.toLowerCase();
+  if (!ED.abierto || document.querySelector(".welcome:not([hidden])")) return;
+  const k = e.key.toLowerCase(),
+    ctrl = e.ctrlKey || e.metaKey,
+    enCampo = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
   // Deshacer y rehacer del editor (el del proyecto no actúa mientras el editor está abierto)
-  if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "y")) {
-    if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (ctrl && (k === "z" || k === "y")) {
+    if (enCampo) return;
     e.preventDefault();
     return edHist(k === "y" || e.shiftKey ? 1 : -1);
   }
-  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  if (e.key === "Escape") {
+  if (enCampo) return;
+  if (ctrl && (k === "a" || k === "c" || k === "v")) {
+    if (!dsD() || !PL_MOD) return;
     e.preventDefault();
-    // En un recorrido sin terminar, Esc lo termina; con otra herramienta, sale de ella; si no, suelta la selección
+    return k === "a" ? dsTodo() : k === "c" ? dsCopiar() : dsPegar();
+  }
+  if (e.key === " " && !PL_ESPACIO) {
+    e.preventDefault();
+    PL_ESPACIO = true;
+    plLienzo.classList.add("mano");
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    // Con un recorrido, polilínea o tubería en curso, Esc la termina; con otra herramienta, sale de ella; si no,
+    // suelta la selección
     if (PLH.h === "rec" && !PLH.med && PLH.pts.length > 1) return plTerminarRecorrido();
+    if (dsTerminar()) return;
     if (PLH.h) return plHerr(null);
-    if (PLH.obj >= 0) {
+    if (DS_SEL.size || PLH.obj >= 0) {
+      DS_SEL.clear();
       PLH.obj = -1;
       edProps();
       plSobreDibujar();
     }
-  } else if (e.key === "Enter" && PLH.h === "rec") {
+  } else if (e.key === "Enter" && (PLH.h === "rec" || dsEsHerr(PLH.h))) {
     e.preventDefault();
-    plTerminarRecorrido();
+    if (PLH.h === "rec") plTerminarRecorrido();
+    else dsTerminar();
+  } else if (e.key === "Delete" || e.key === "Supr") {
+    e.preventDefault();
+    dsBorrar();
+  } else if (k === "r" && !ctrl && dsD()) {
+    e.preventDefault();
+    dsGirar();
   } else if (e.key === "F3" || e.key === "F8") {
     e.preventDefault();
     edAlternar(e.key === "F3" ? "plSnap" : "plOrto");
+  } else if (e.key === "F7" || e.key === "F9") {
+    e.preventDefault();
+    dsAlternarRejilla(e.key === "F7" ? "rej" : "forz", true);
+  }
+});
+addEventListener("keyup", e => {
+  if (e.key === " ") {
+    PL_ESPACIO = false;
+    plLienzo.classList.remove("mano");
   }
 });
 new ResizeObserver(() => {
@@ -1163,7 +1269,7 @@ function edAlternar(id, aviso = true) {
   plSobreDibujar();
 }
 function edBotonesEstado() {
-  document.querySelectorAll("[data-edtg]").forEach(b => b.setAttribute("aria-pressed", $(b.dataset.edtg).checked));
+  if (typeof dsCinta === "function") dsCinta();
 }
 ["plSnap", "plOrto"].forEach(id =>
   $(id).addEventListener("change", () => {
@@ -1172,14 +1278,15 @@ function edBotonesEstado() {
   })
 );
 
-/* ---------- Panel izquierdo: plantas y capas ---------- */
+/* ---------- Panel izquierdo: plantas y resumen del diseño (las capas están en su ventana, js/capas.js) ---------- */
 function plPanel() {
   const m = PL_MOD;
   $("plLado").hidden = plPanel.oculto;
   $("edProp").hidden = edProps.oculto;
+  dsResumen();
   if (!m || !EPL) {
-    $("plNPl").textContent = $("plNCap").textContent = "";
-    $("plPlantas").innerHTML = $("plCapas").innerHTML = "";
+    $("plNPl").textContent = "";
+    $("plPlantas").innerHTML = "";
     return;
   }
   const P = EPL.plantas;
@@ -1189,33 +1296,8 @@ function plPanel() {
         (p, i) =>
           `<div class="pl-fila" data-plp="${i}"><button type="button" class="pl-nom" data-plv="${i}" title="Ver la planta">${esc(p.n)}</button><span class="pl-dim">${plFm(p.x1 - p.x0)} × ${plFm(p.y1 - p.y0)} m</span><button type="button" class="pl-x" data-plq="${i}" title="Quitar la planta (el dibujo no cambia)" aria-label="Quitar la planta">×</button></div>`
       ).join("")
-    : `<p class="pl-nota">Encuadre cada planta del edificio con <b>Encuadrar planta</b>: así se ve con un clic y, en la etapa de diseño, cada piso tendrá la suya.</p>`;
-  const oc = new Set(EPL.ocultas),
-    b = ($("plBusca").value || "").trim().toLowerCase(),
-    // Solo las capas que dibujan algo
-    nombres = Object.keys(m.capas)
-      .filter(n => m.capas[n].n > 0)
-      .sort((x, y) => x.localeCompare(y, "es", { numeric: true }));
-  $("plNCap").textContent = `${nombres.length - nombres.filter(n => oc.has(n)).length} de ${nombres.length}`;
-  $("plCapas").innerHTML = nombres
-    .filter(n => !b || n.toLowerCase().includes(b))
-    .map(n => {
-      const c = m.capas[n];
-      return `<label class="pl-capa${oc.has(n) ? " off" : ""}" title="${esc(n)} · ${c.n} elemento${c.n === 1 ? "" : "s"} dibujado${c.n === 1 ? "" : "s"}"><input type="checkbox" data-plc="${esc(n)}"${oc.has(n) ? "" : " checked"}><i style="background:${plColor(c.col)}"></i><span>${esc(n)}</span><em>${c.n}</em></label>`;
-    })
-    .join("");
+    : `<p class="pl-nota">Encuadre cada planta del edificio con <b>Encuadrar planta</b>: así se ve con un clic.</p>`;
 }
-$("plLado").addEventListener("change", e => {
-  const c = e.target.closest("[data-plc]");
-  if (!c) return;
-  const n = c.dataset.plc,
-    oc = new Set(EPL.ocultas);
-  if (c.checked) oc.delete(n);
-  else oc.add(n);
-  EPL.ocultas = [...oc];
-  plPreparar();
-  edCambio();
-});
 $("plLado").addEventListener("click", e => {
   const v = e.target.closest("[data-plv]"),
     q = e.target.closest("[data-plq]");
@@ -1236,7 +1318,6 @@ $("plLado").addEventListener("click", e => {
     );
   }
 });
-$("plBusca").addEventListener("input", plPanel);
 
 /* ---------- Mostrar el editor ---------- */
 function plMostrar() {
@@ -1268,6 +1349,7 @@ function plMostrar() {
   $("plEstadoA").textContent =
     m && hay ? `${EPL.nombre} · ${Object.keys(m.capas).length} capas · ${m.nEnt.toLocaleString("es-PE")} objetos` : "";
   edBotonesEstado();
+  dsCinta();
   plPanel();
   edProps();
   if (ED.abierto) {
@@ -1315,7 +1397,10 @@ $("editor").addEventListener("click", e => {
       .forEach(r => (r.hidden = r.dataset.ribE !== tab.dataset.tabE));
     return;
   }
-  if (tg) return edAlternar(tg.dataset.edtg, false);
+  if (tg) {
+    const v = tg.dataset.edtg;
+    return v === "rej" || v === "forz" ? dsAlternarRejilla(v, false) : edAlternar(v, false);
+  }
   const b = e.target.closest("[data-pl]");
   if (!b || b.disabled) return;
   const a = b.dataset.pl;
@@ -1328,11 +1413,18 @@ $("editor").addEventListener("click", e => {
     return plDibujar();
   }
   if (a === "sel") return plHerr(null);
+  if (a === "capas") return capasAbrir();
+  if (a === "girar") return dsGirar();
+  if (a === "borrar") return dsBorrar();
+  if (a === "copiar") {
+    dsCopiar();
+    return dsPegar();
+  }
   if (a === "quitar") {
     if (!EPL) return toast("El proyecto no tiene plano de arquitectura");
     return confirmar(
       "¿Quitar el plano de arquitectura?",
-      `<p>El diseño deja de usar <b>${esc(EPL.nombre)}</b> y se pierden su escala, capas ocultas y plantas encuadradas (al aplicar los cambios). El archivo DXF de su computadora no cambia; puede volver a abrirlo.</p>`,
+      `<p>El diseño deja de usar <b>${esc(EPL.nombre)}</b> y se pierden su escala, capas ocultas, plantas encuadradas${EPL.dis && EPL.dis.els.length ? ` y <b>los ${EPL.dis.els.length} elementos del diseño eléctrico</b>` : ""} (al aplicar los cambios). El archivo DXF de su computadora no cambia; puede volver a abrirlo.</p>`,
       "Quitar",
       ok => {
         if (!ok) return;
@@ -1354,7 +1446,10 @@ $("editor").addEventListener("click", e => {
     PLH.obj = -1;
     plPreparar();
     edCambio();
-  } else if (PL_NOMH[a]) plHerr(PLH.h === a ? null : a);
+  } else if (PL_NOMH[a] || a.startsWith("col:")) {
+    if (a.startsWith("col:") || DS_HERR[a]) DS_SEL.clear();
+    plHerr(PLH.h === a ? null : a);
+  }
 });
 $("plArchivo").addEventListener("change", e => {
   plAbrir(e.target.files[0]);

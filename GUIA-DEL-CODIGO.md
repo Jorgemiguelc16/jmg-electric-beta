@@ -12,7 +12,7 @@ servidor propio ni instalación. Se publica en GitHub Pages; el acceso con cuent
 | --- | --- |
 | Estructura de todas las pantallas | `index.html` |
 | Apariencia (colores, tamaños, diseño) | `css/` (10 archivos) |
-| Lógica, cálculo y planos | `js/` (54 archivos) |
+| Lógica, cálculo y planos | `js/` (56 archivos) |
 | Imágenes de la plataforma | `img/`, `logo.png`, `foto.png`, `og.png` |
 | Manual de usuario y referencia técnica | `manual/manual.html` → `manual/JMG-ELECTRIC-Manual-v2.1.pdf` |
 | Pruebas automáticas: casos, referencia del cálculo y huellas de los planos | `pruebas/` |
@@ -74,7 +74,9 @@ está al final de `index.html` y es este:
 | 33 | `panel.js` | Panel del proyecto (resumen, elemento elegido, por revisar) |
 | 34 | `menus-cinta.js` | Menús ▾ de la cinta (sistema eléctrico y agregar cargas) |
 | 34a | `dxf.js` | **Lector DXF**: lee un plano de AutoCAD y lo convierte en trazos, textos, capas y puntos de enganche (sin pantalla) |
-| 34b | `plano.js` | **Editor de diseño** a pantalla completa: plano de arquitectura con zoom, capas, escala, plantas, selección y medición; Aplicar / Aceptar / Cancelar |
+| 34b | `plano.js` | **Editor de diseño** a pantalla completa: plano de arquitectura con zoom, escala, plantas, selección y medición; mouse y teclado; Aplicar / Aceptar / Cancelar |
+| 34c | `diseno.js` | **Diseño eléctrico** en el editor: símbolos de la Norma DGE (catálogo `DS_CAT` con su código), líneas, textos, tuberías, mover, girar, copiar, borrar, rejilla y propiedades |
+| 34d | `capas.js` | Ventana **Administrador de capas** del editor |
 | 35 | `centro.js` | Centro de ingeniería (Inicio) |
 | 36 | `inicio.js` | Arranque y bienvenida |
 | 37 | `tema.js` | Tema, zoom y mano de arrastre |
@@ -99,7 +101,9 @@ termina con su recuadro de notas (`notasSvg()`, `dibujo.js`) y su rótulo (`rotu
    La unidad del dibujo sale de las cotas, porque la cabecera del archivo a veces está mal.
 2. La pestaña Diseño de la cinta abre el **editor a pantalla completa** (`edAbrir()`), que trabaja sobre una copia del
    plano del proyecto (`EPL`) con su propio deshacer; `edAplicar()` la pasa al proyecto (`PLANO`) y Cancelar la descarta.
-   La arquitectura es una referencia bloqueada: se selecciona para ver sus propiedades, pero no se mueve.
+   La arquitectura es una referencia bloqueada: se selecciona para ver sus propiedades, pero no se mueve. Lo que se
+   dibuja encima va en `EPL.dis` (`diseno.js`): capas propias y elementos (símbolos con el mismo dibujo de
+   `simboloDGE()`, líneas, textos y tuberías) en coordenadas del dibujo; `disValido()` (`proyectos.js`) lo valida.
 3. `plano.js` agrupa los trazos por color y tipo de línea (`plPreparar()`) y los dibuja en un lienzo (`canvas`); encima
    hay otro lienzo para lo que sigue al cursor (enganche, mediciones, encuadres). Así el plano se mueve con fluidez
    aunque tenga decenas de miles de objetos.
