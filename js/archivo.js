@@ -54,7 +54,16 @@ document.querySelectorAll("[data-start]").forEach(b =>
 document.querySelectorAll("[data-ej]").forEach(b => b.addEventListener("click", () => cargarEjemplo(b.dataset.ej)));
 if ($("ver")) $("ver").textContent = VERSION;
 if ($("verBadge")) $("verBadge").textContent = " · " + VERSION + " Beta";
-if ($("wsVer")) $("wsVer").textContent = VERSION + " Beta";
+if ($("wsVer")) $("wsVer").textContent = BETA ? "SITIO DE PRUEBAS" : VERSION + " Beta";
+// Sitio de pruebas: marcado en la barra, en el título de la pestaña y fuera de los buscadores
+if (BETA) {
+  document.body.classList.add("sitio-beta");
+  document.title = "PRUEBAS · " + document.title;
+  document.head.insertAdjacentHTML("beforeend", '<meta name="robots" content="noindex, nofollow">');
+  const marca = '<em class="beta-marca" title="Versión de pruebas: no es la oficial">PRUEBAS</em>';
+  document.querySelector(".jtop-tit b")?.insertAdjacentHTML("afterend", marca);
+  document.querySelector("#accT small")?.insertAdjacentHTML("beforebegin", marca);
+}
 
 const draft = loadDraft();
 if (draft && draft.p_nombre === "Vivienda unifamiliar — Urb. Los Álamos") {

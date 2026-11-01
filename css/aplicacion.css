@@ -108,6 +108,23 @@ body.ws-on {
   padding: 1px 7px;
   margin-right: 6px;
 }
+/* Sitio de pruebas (js/archivo.js): la versión en la barra y la marca en la cabecera, en cobre */
+.sitio-beta .ap-ver,
+.beta-marca {
+  background: #c77d2e;
+  color: #fff;
+  opacity: 1;
+  border: 0;
+  border-radius: 4px;
+  padding: 1px 8px;
+  font: 600 11px var(--f-mono);
+  font-style: normal;
+  letter-spacing: 0.06em;
+}
+.beta-marca {
+  margin-left: 10px;
+  vertical-align: middle;
+}
 .ap-tr button {
   background: none;
   border: 0;

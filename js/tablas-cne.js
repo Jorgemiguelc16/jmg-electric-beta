@@ -146,6 +146,9 @@ const RHO_CU = 0.0175,
   IMIN_DPTO = 25;
 const SQ3 = Math.sqrt(3),
   VERSION = "v2.9";
+// Sitio de pruebas (jorgemiguelc16.github.io/jmg-electric-beta/): el mismo código que el oficial, pero guarda sus
+// proyectos aparte (los dos sitios comparten el almacenamiento del navegador porque están en el mismo dominio)
+const BETA = typeof location !== "undefined" && location.pathname.includes("/jmg-electric-beta/");
 const SIST = {
   mono220: { tri: false, V: 220, kI: 1, K: 2, n: 2, txt: "1φ 220 V", nom: "Monofásico 220 V", fases: ["—"] },
   tri220: {

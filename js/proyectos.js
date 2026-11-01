@@ -87,7 +87,7 @@ const KEYS = [
   "esqPisos",
   "Ltd1"
 ];
-const SKEY = "jmg-electric-v1",
+const SKEY = BETA ? "jmg-electric-beta-v1" : "jmg-electric-v1",
   DEFV = {};
 KEYS.forEach(k => (DEFV[k] = $(k).value));
 /* DATOS DEL PROYECTO: fuente única desde la etapa 1 (paso 3). PROY guarda los datos del proyecto (los de KEYS y
@@ -124,7 +124,16 @@ if ($("sot")) $("sot").placeholder = "0 si no hay";
   if ($(k) && !$(k).placeholder) $(k).placeholder = t;
 });
 const clon = o => JSON.parse(JSON.stringify(o));
-const LKEY = "jmg-electric-proyectos";
+const LKEY = BETA ? "jmg-electric-beta-proyectos" : "jmg-electric-proyectos";
+// La primera vez, el sitio de pruebas empieza con una copia de los proyectos del oficial (que no cambian)
+if (BETA)
+  try {
+    if (localStorage.getItem(LKEY) === null) {
+      localStorage.setItem(LKEY, localStorage.getItem("jmg-electric-proyectos") || "{}");
+      const d = localStorage.getItem("jmg-electric-v1");
+      if (d && localStorage.getItem(SKEY) === null) localStorage.setItem(SKEY, d);
+    }
+  } catch (e) {}
 const nuevoId = () => "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function libLoad() {
   try {
