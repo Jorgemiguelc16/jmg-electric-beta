@@ -385,6 +385,19 @@ function disValido(v) {
         return { ...b, t: "txt", x: e.x, y: e.y, ht: e.ht, r: n(e.r) ? e.r : 0, s: txt(e.s, 200) || "Texto" };
       if (e.t === "cir" && n(e.x) && n(e.y) && n(e.rad) && e.rad > 0)
         return { ...b, t: "cir", x: e.x, y: e.y, rad: e.rad };
+      // Cota: dos puntos medidos, desplazamiento de la línea de cota y dirección (alineada, horizontal o vertical)
+      if (e.t === "cot" && [e.a, e.b].every(p => Array.isArray(p) && p.length === 2 && p.every(n)) && n(e.o))
+        return {
+          ...b,
+          t: "cot",
+          a: e.a.slice(),
+          b: e.b.slice(),
+          o: e.o,
+          modo: ["alin", "h", "v"].includes(e.modo) ? e.modo : "alin"
+        };
+      // Directriz: punta y quiebre, con su texto
+      if (e.t === "dir" && Array.isArray(e.pts) && e.pts.length === 4 && e.pts.every(n) && n(e.ht) && e.ht > 0)
+        return { ...b, t: "dir", pts: e.pts.slice(), ht: e.ht, s: txt(e.s, 120) || "Texto" };
       if (
         (e.t === "lin" || e.t === "tub") &&
         Array.isArray(e.pts) &&
@@ -398,6 +411,10 @@ function disValido(v) {
           t: e.t,
           pts: e.pts.slice(),
           c: e.c === true,
+          // Curvatura de cada tramo (como en las polilíneas de AutoCAD), entre −1 y 1 (media circunferencia)
+          ...(Array.isArray(e.b) && e.b.some(k => n(k) && k)
+            ? { b: e.b.slice(0, e.pts.length / 2).map(k => (n(k) ? Math.max(-1, Math.min(1, k)) : 0)) }
+            : {}),
           ...(e.t === "tub" ? { modo: e.modo === "piso" ? "piso" : "techo", ...cir } : {})
         };
       return null;
@@ -412,7 +429,13 @@ function disValido(v) {
     if (!capas.some(c => c.n === e.capa)) capas.push(capa({ n: e.capa }));
   });
   const actual = capas.some(c => c.n === v.actual) ? v.actual : "E-DIBUJO";
-  return { capas, actual, els, escala: [50, 75, 100].includes(v.escala) ? v.escala : 50 };
+  return {
+    capas,
+    actual,
+    els,
+    escala: [10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 500].includes(v.escala) ? v.escala : 50,
+    etq: ["no", "total", "tramo"].includes(v.etq) ? v.etq : "total"
+  };
 }
 /* Proyecto listo para calcular(), con el mismo formato que estado(), a partir de un proyecto guardado o de un
    caso de prueba (lo usan las pruebas sin navegador, herramientas/pruebas.js). Los datos que falten toman el

@@ -38,11 +38,19 @@ const PLH = {
   pan: null,
   obj: -1,
   sobre: -1,
-  // Diseño: elemento bajo el cursor, arrastre para mover, marco de selección y giro del símbolo a colocar
+  // Diseño: elemento bajo el cursor, arrastre para mover, marco de selección, giro del símbolo a colocar,
+  // encaje en el muro, pinzamiento que se arrastra o bajo el cursor, curvatura de los tramos de la tubería en curso
+  // y lado de su curva, y Mayús presionada (sin enganche)
   dsSobre: null,
   arr: null,
   marco: null,
-  rot: 0
+  rot: 0,
+  alin: null,
+  agarre: null,
+  agSobre: null,
+  bul: [],
+  lado: 1,
+  libre: false
 };
 const plBase = $("plBase"),
   plSobre = $("plSobre"),
@@ -675,26 +683,48 @@ function plSobreDibujar() {
     }
   }
   dsSobre(g);
-  // Marca de enganche: cuadrado en extremos, triángulo en puntos medios, círculo en centros, cruz en bloques
-  if (PLH.eng && (PLH.h || PLH.arr)) {
+  // Marca de enganche (como en AutoCAD) y su nombre: cuadrado en extremos, triángulo en puntos medios, círculo en
+  // centros, dos cuadrados en inserciones, reloj de arena en cercano, escuadra en perpendicular y aspa en
+  // intersección
+  if (PLH.eng && (PLH.h || PLH.arr || PLH.agarre)) {
     const [X, Y] = plAPant(PLH.eng[0], PLH.eng[1]),
-      r = 6 * d;
-    g.strokeStyle = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
+      r = 6 * d,
+      k = PLH.eng[2],
+      verde = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
+    g.strokeStyle = verde;
     g.lineWidth = 2 * d;
     g.beginPath();
-    if (PLH.eng[2] === 2) {
+    if (k === 2) {
       g.moveTo(X, Y - r);
       g.lineTo(X + r, Y + r * 0.8);
       g.lineTo(X - r, Y + r * 0.8);
       g.closePath();
-    } else if (PLH.eng[2] === 3) g.arc(X, Y, r, 0, 2 * Math.PI);
-    else if (PLH.eng[2] === 4) {
+    } else if (k === 3) g.arc(X, Y, r, 0, 2 * Math.PI);
+    else if (k === 4) {
+      g.rect(X - r, Y - r, r * 1.2, r * 1.2);
+      g.rect(X - r * 0.2, Y - r * 0.2, r * 1.2, r * 1.2);
+    } else if (k === 5) {
+      g.moveTo(X - r, Y - r);
+      g.lineTo(X + r, Y - r);
+      g.lineTo(X - r, Y + r);
+      g.lineTo(X + r, Y + r);
+      g.closePath();
+    } else if (k === 6) {
+      g.moveTo(X - r, Y - r);
+      g.lineTo(X - r, Y + r);
+      g.lineTo(X + r, Y + r);
+      g.moveTo(X - r, Y);
+      g.lineTo(X, Y);
+      g.lineTo(X, Y + r);
+    } else if (k === 7) {
       g.moveTo(X - r, Y - r);
       g.lineTo(X + r, Y + r);
       g.moveTo(X + r, Y - r);
       g.lineTo(X - r, Y + r);
     } else g.rect(X - r, Y - r, 2 * r, 2 * r);
     g.stroke();
+    g.font = `500 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
+    plEtiqueta(g, PL_ENG[k] || "", X + 12 * d, Y + 10 * d, verde, "left", "top");
   }
 }
 function plTrazo(g, p, cerrado) {
@@ -724,25 +754,118 @@ function plEtiqueta(g, t, X, Y, col, ha, va) {
   g.fillText(t, x + 5 * d, y + h / 2 + 0.5 * d);
 }
 
-/* ---------- Enganche y orto ---------- */
-// Punto de enganche más cercano al cursor (a menos de 12 px), o null
+/* ---------- Enganche y orto ----------
+   Enganches (como la referencia a objetos de AutoCAD), cada uno activable en la barra de estado: extremo, punto
+   medio, centro e inserción (puntos del plano y del diseño), intersección de dos líneas, perpendicular desde el
+   punto anterior y cercano (el punto de una línea más próximo al cursor). Los puntos tienen prioridad; después,
+   la intersección, la perpendicular y el cercano. La sensibilidad es la distancia en píxeles alrededor del cursor.
+   Con Mayús presionada no se engancha nada (para colocar en un punto cercano y no justo en él). */
+const PL_ENG = {
+  1: "Extremo",
+  2: "Punto medio",
+  3: "Centro",
+  4: "Inserción",
+  5: "Cercano",
+  6: "Perpendicular",
+  7: "Intersección"
+};
+const PL_REF = { 1: "fin", 2: "med", 3: "cen", 4: "ins", 5: "cer", 6: "per", 7: "int" };
+const plDistPS = (x, y, ax, ay, bx, by) => {
+  const dx = bx - ax,
+    dy = by - ay,
+    l2 = dx * dx + dy * dy,
+    t = l2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+  return Math.hypot(ax + t * dx - x, ay + t * dy - y);
+};
+// Elementos del diseño que se están moviendo (no se enganchan a sí mismos)
+const plMoviendo = () => (PLH.arr ? new Set(dsSel().map(el => el.id)) : PLH.agarre ? new Set([PLH.agarre.id]) : null);
+// Tramos rectos visibles a menos de r del punto: de la arquitectura (por su índice) y del diseño; con muros, solo
+// las líneas continuas de la arquitectura (los ejes y las proyecciones van con tipo de línea discontinuo)
+function plSegmentos(x, y, r, muros) {
+  const out = [],
+    I = PL_IDX,
+    fuera = plMoviendo();
+  if (I) {
+    const oc = new Set(EPL.ocultas),
+      n = Math.ceil(r / I.tam),
+      ci = Math.floor((x - I.x0) / I.tam),
+      cj = Math.floor((y - I.y0) / I.tam),
+      vistos = new Set();
+    // Hasta 40 celdas alrededor (en planos pequeños, las celdas del índice son pequeñas)
+    if (n <= 40)
+      for (let a = ci - n; a <= ci + n; a++)
+        for (let b = cj - n; b <= cj + n; b++)
+          for (const i of I.trz.get(a + "," + b) || []) {
+            if (vistos.has(i)) continue;
+            vistos.add(i);
+            const t = PL_MOD.trazos[i];
+            if (oc.has(t.capa) || (muros && t.lt)) continue;
+            const p = t.p,
+              m = t.c ? p.length : p.length - 2;
+            for (let j = 0; j < m; j += 2) {
+              const s = [p[j], p[j + 1], p[(j + 2) % p.length], p[(j + 3) % p.length]];
+              if (plDistPS(x, y, ...s) <= r) out.push(s);
+            }
+          }
+  }
+  const D = dsD();
+  if (D)
+    D.els.forEach(el => {
+      if (!dsVis(el) || (fuera && fuera.has(el.id))) return;
+      dsLineas(el).forEach(p => {
+        for (let j = 0; j + 3 < p.length; j += 2) {
+          const s = [p[j], p[j + 1], p[j + 2], p[j + 3]];
+          if (plDistPS(x, y, ...s) <= r) out.push(s);
+        }
+      });
+    });
+  return out.slice(0, 800);
+}
+// Punto de una línea visible más cercano a (x, y), a menos de r (con muros, para encajar símbolos en el muro)
+function plSegCercano(x, y, r, muros) {
+  let mejor = null;
+  for (const [ax, ay, bx, by] of plSegmentos(x, y, r, muros)) {
+    const dx = bx - ax,
+      dy = by - ay,
+      l2 = dx * dx + dy * dy;
+    if (!l2) continue;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)),
+      p = [ax + t * dx, ay + t * dy],
+      d = Math.hypot(p[0] - x, p[1] - y);
+    if (!mejor || d < mejor.d) mejor = { p, d, a: [ax, ay], b: [bx, by] };
+  }
+  return mejor;
+}
+// Intersección de dos tramos, o null
+function plCruce(s, t) {
+  const [x1, y1, x2, y2] = s,
+    [x3, y3, x4, y4] = t,
+    d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+  if (Math.abs(d) < 1e-12) return null;
+  const a = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d,
+    b = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+  return a >= -1e-9 && a <= 1 + 1e-9 && b >= -1e-9 && b <= 1 + 1e-9 ? [x1 + a * (x2 - x1), y1 + a * (y2 - y1)] : null;
+}
+// Punto de enganche más cercano al cursor, o null: [x, y, tipo]
 function plEnganche(x, y) {
-  if (!PL_IDX || !$("plSnap").checked) return null;
+  if (!PL_IDX || !$("plSnap").checked || PLH.libre) return null;
   const I = PL_IDX,
-    r = (12 * plDpr()) / PLV.s,
+    R = DSU.ref,
+    r = (DSU.sens * plDpr()) / PLV.s,
     n = Math.ceil(r / I.tam);
-  if (n > 8) return null;
+  if (n > 40) return null;
   const ci = Math.floor((x - I.x0) / I.tam),
     cj = Math.floor((y - I.y0) / I.tam),
     oc = new Set(EPL.ocultas),
-    sn = PL_MOD.snap;
+    sn = PL_MOD.snap,
+    vale = k => R[PL_REF[k]] !== false;
   let mejor = null,
     md = r;
-  const moviendo = PLH.arr ? new Set(dsSel().map(el => el.id)) : null;
-  const del = dsD() ? dsD().els.filter(el => !(moviendo && moviendo.has(el.id))) : [];
+  const fuera = plMoviendo(),
+    del = dsD() ? dsD().els.filter(el => !(fuera && fuera.has(el.id))) : [];
   for (const q of dsPuntosEnganche(del)) {
     const dd = Math.hypot(q[0] - x, q[1] - y);
-    if (dd < md) {
+    if (dd < md && vale(q[2])) {
       md = dd;
       mejor = q;
     }
@@ -754,20 +877,62 @@ function plEnganche(x, y) {
         for (const i of l) {
           const dd = Math.hypot(sn[i] - x, sn[i + 1] - y);
           // Un extremo gana a un punto medio que esté casi a la misma distancia
-          if (dd < md - (sn[i + 2] === 1 ? -r * 0.15 : 0)) {
+          if (dd < md - (sn[i + 2] === 1 ? -r * 0.15 : 0) && vale(sn[i + 2])) {
             if (oc.has(PL_MOD.snapC[i / 3])) continue;
             md = dd;
             mejor = [sn[i], sn[i + 1], sn[i + 2]];
           }
         }
     }
-  return mejor;
+  if (mejor || !(R.int || R.per || R.cer)) return mejor;
+  const segs = plSegmentos(x, y, r);
+  // Intersección de dos líneas
+  if (R.int !== false && segs.length > 1) {
+    const L = Math.min(segs.length, 160);
+    for (let i = 0; i < L; i++)
+      for (let j = i + 1; j < L; j++) {
+        const c = plCruce(segs[i], segs[j]);
+        if (!c) continue;
+        const dd = Math.hypot(c[0] - x, c[1] - y);
+        if (dd < md) {
+          md = dd;
+          mejor = [c[0], c[1], 7];
+        }
+      }
+    if (mejor) return mejor;
+  }
+  // Perpendicular desde el punto anterior
+  const u = PLH.pts[PLH.pts.length - 1];
+  if (R.per !== false && u)
+    for (const [ax, ay, bx, by] of segs) {
+      const dx = bx - ax,
+        dy = by - ay,
+        l2 = dx * dx + dy * dy,
+        t = l2 ? ((u[0] - ax) * dx + (u[1] - ay) * dy) / l2 : -1;
+      if (t < 0 || t > 1) continue;
+      const f = [ax + t * dx, ay + t * dy],
+        dd = Math.hypot(f[0] - x, f[1] - y);
+      if (dd < md) {
+        md = dd;
+        mejor = [f[0], f[1], 6];
+      }
+    }
+  if (mejor) return mejor;
+  // Cercano: el punto de la línea más próximo al cursor
+  if (R.cer !== false) {
+    const s = plSegCercano(x, y, r);
+    if (s) return [s.p[0], s.p[1], 5];
+  }
+  return null;
 }
 function plPuntoActual() {
   if (!PLH.cur) return null;
   let p = PLH.eng ? [PLH.eng[0], PLH.eng[1]] : PLH.cur.slice();
-  if (!PLH.eng && DSU.forz) p = dsAlaRejilla(p);
-  const u = PLH.pts[PLH.pts.length - 1] || (PLH.arr && PLH.arr.base);
+  if (!PLH.eng && DSU.forz && !PLH.libre) p = dsAlaRejilla(p);
+  const u =
+    PLH.pts[PLH.pts.length - 1] ||
+    (PLH.arr && PLH.arr.base) ||
+    (PLH.agarre && PLH.agarre.t !== "m" && PLH.agarre.t !== "o" ? [PLH.agarre.x, PLH.agarre.y] : null);
   if (u && $("plOrto").checked && !PLH.eng) {
     if (Math.abs(p[0] - u[0]) > Math.abs(p[1] - u[1])) p = [p[0], u[1]];
     else p = [u[0], p[1]];
@@ -840,7 +1005,9 @@ function plHerr(h) {
   PLH.sel = [];
   PLH.med = null;
   PLH.eng = null;
-  PLH.arr = PLH.marco = null;
+  PLH.arr = PLH.marco = PLH.alin = PLH.agarre = null;
+  PLH.bul = [];
+  PLH.lado = 1;
   plPedir(null);
   // Sin herramienta, el modo es Seleccionar
   document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
@@ -873,19 +1040,28 @@ function plOrden(txt) {
   }
   $("plCmd").hidden = !c.innerHTML;
 }
-// Pide un dato en la línea de comandos (medida real, nombre de la planta) y llama a fn con lo escrito
-function plPedir(etq, val, fn) {
+// Pide un dato en la línea de comandos (medida real, nombre de la planta, longitud escrita) y llama a fn con lo
+// escrito; con seguir, el texto ya escrito queda y se sigue escribiendo a continuación
+function plPedir(etq, val, fn, seguir) {
   const box = $("plCmdIn");
   plPedir.fn = fn || null;
+  plPedir.din = !!seguir;
   box.hidden = !etq;
-  if (!etq) return;
+  $("plCmd").hidden = !$("plCmdT").innerHTML && !etq;
+  if (!etq) {
+    if (document.activeElement === $("plCmdV")) $("plCmdV").blur();
+    return;
+  }
   $("plCmdL").textContent = etq;
   $("plCmdV").value = val;
-  $("plCmdV").inputMode = /medida/i.test(etq) ? "decimal" : "text";
-  setTimeout(() => {
+  $("plCmdV").inputMode = /medida|longitud|radio/i.test(etq) ? "decimal" : "text";
+  const foco = () => {
     $("plCmdV").focus();
-    $("plCmdV").select();
-  }, 20);
+    if (seguir) $("plCmdV").setSelectionRange(val.length, val.length);
+    else $("plCmdV").select();
+  };
+  if (seguir) foco();
+  else setTimeout(foco, 20);
 }
 function plAceptarPedido() {
   const fn = plPedir.fn;
@@ -896,7 +1072,11 @@ $("plCmdV").addEventListener("keydown", e => {
   if (e.key === "Enter") {
     e.preventDefault();
     plAceptarPedido();
-  } else if (e.key === "Escape") plHerr(null);
+  } else if (e.key === "Escape") {
+    // Una longitud escrita se descarta; con otro dato, se sale de la herramienta
+    if (plPedir.din) plPedir(null);
+    else plHerr(null);
+  }
   e.stopPropagation();
 });
 function plPunto(p) {
@@ -1068,8 +1248,10 @@ $("edPropC").addEventListener("click", e => {
 
 /* ---------- Mouse y teclado sobre el plano ----------
    Como en los programas de dibujo: la rueda acerca y aleja; la rueda presionada (o la barra espaciadora con el botón
-   izquierdo) desplaza la vista; en Seleccionar, un clic elige, arrastrar un elemento del diseño lo mueve y
-   arrastrar sobre un lugar vacío hace un marco de selección (de izquierda a derecha, ventana; al revés, captura). */
+   izquierdo) desplaza la vista; en Seleccionar, un clic elige, arrastrar un elemento del diseño lo mueve, arrastrar
+   un pinzamiento edita el elemento (vértice, curvatura del tramo, radio, línea de cota) y arrastrar sobre un lugar
+   vacío hace un marco de selección (de izquierda a derecha, ventana; al revés, captura). Mayús presionada coloca y
+   mueve sin enganche. Con una herramienta de dibujo, escribir un número da la longitud del tramo. */
 let PL_ESPACIO = false;
 plLienzo.addEventListener(
   "wheel",
@@ -1084,6 +1266,7 @@ plLienzo.addEventListener(
 );
 plLienzo.addEventListener("pointerdown", e => {
   if (!PL_MOD || e.target.closest(".pl-cmd")) return;
+  $("edRefs").hidden = true;
   const [X, Y] = plMouse(e);
   if (e.button === 1 || (e.button === 0 && PL_ESPACIO)) {
     e.preventDefault();
@@ -1105,7 +1288,13 @@ plLienzo.addEventListener("pointerdown", e => {
   plLienzo.setPointerCapture(e.pointerId);
   PLH.abajo = [X, Y];
   if (PLH.h) return;
-  // Seleccionar: sobre un elemento del diseño, se elige y se prepara para moverlo; si no, marco de selección
+  // Seleccionar: un pinzamiento de lo seleccionado edita; un elemento del diseño se elige y se prepara para moverlo;
+  // si no, marco de selección
+  const ag = dsD() && DS_SEL.size ? dsAgarreEn(X, Y) : null;
+  if (ag) {
+    PLH.agarre = { ...ag, orig: JSON.stringify(dsD().els.find(el => el.id === ag.id)), mov: false };
+    return;
+  }
   const p = plADib(X, Y),
     id = dsD() ? dsHit(p[0], p[1], (6 * plDpr()) / PLV.s) : null;
   if (id) dsPresionar(id, p, e.shiftKey);
@@ -1123,9 +1312,23 @@ plLienzo.addEventListener("pointermove", e => {
   }
   const p = plADib(X, Y);
   PLH.cur = p;
-  const arrastre = PLH.arr && PLH.abajo && Math.hypot(X - PLH.abajo[0], Y - PLH.abajo[1]) > 4 * plDpr();
+  PLH.libre = e.shiftKey;
+  const lejos = PLH.abajo && Math.hypot(X - PLH.abajo[0], Y - PLH.abajo[1]) > 4 * plDpr();
+  // Pinzamiento: la curvatura y la línea de cota siguen al cursor; lo demás se engancha
+  if (PLH.agarre) {
+    if (!lejos && !PLH.agarre.mov) return;
+    PLH.agarre.mov = true;
+    PLH.eng = PLH.agarre.t === "m" || PLH.agarre.t === "o" ? null : plEnganche(p[0], p[1]);
+    const q = plPuntoActual() || p;
+    $("plXY").textContent = `X ${plFm(q[0])}   Y ${plFm(q[1])} m`;
+    return dsAgarreMover(PLH.agarre, q);
+  }
+  const arrastre = PLH.arr && lejos;
   // El enganche actúa con las herramientas y al mover elementos (no con Longitud de objetos)
-  PLH.eng = (PLH.h && PLH.h !== "obj") || arrastre ? plEnganche(p[0], p[1]) : null;
+  PLH.eng = (PLH.h && PLH.h !== "obj") || arrastre || (PLH.arr && PLH.arr.mov) ? plEnganche(p[0], p[1]) : null;
+  // Símbolo de pared: se encaja en el muro más cercano (sin Mayús)
+  PLH.alin = PLH.h && PLH.h.startsWith("col:") && !PLH.libre ? dsAlinear(PLH.h.slice(4), p) : null;
+  if (PLH.alin) PLH.eng = null;
   const q = plPuntoActual() || p;
   $("plXY").textContent = `X ${plFm(q[0])}   Y ${plFm(q[1])} m`;
   if (arrastre || (PLH.arr && PLH.arr.mov)) return dsMover(q);
@@ -1135,14 +1338,19 @@ plLienzo.addEventListener("pointermove", e => {
     return plSobreDibujar();
   }
   if (PLH.h) return plSobreDibujar();
-  // Lo que está bajo el cursor en Seleccionar: primero el diseño, después la arquitectura
-  const r = (6 * plDpr()) / PLV.s,
-    id = dsD() ? dsHit(p[0], p[1], r) : null,
-    i = id ? -1 : plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+  // Lo que está bajo el cursor en Seleccionar: un pinzamiento, el diseño y, si no, la arquitectura
+  const ag = DS_SEL.size ? dsAgarreEn(X, Y) : null,
+    r = (6 * plDpr()) / PLV.s,
+    id = ag ? null : dsD() ? dsHit(p[0], p[1], r) : null,
+    i = id || ag ? -1 : plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
   plLienzo.classList.toggle("sobre-dis", !!id);
-  if (id !== PLH.dsSobre || i !== PLH.sobre) {
+  plLienzo.classList.toggle("sobre-ag", !!ag);
+  const agk = ag ? `${ag.id}|${ag.t}|${ag.i}` : "",
+    agk0 = PLH.agSobre ? `${PLH.agSobre.id}|${PLH.agSobre.t}|${PLH.agSobre.i}` : "";
+  if (id !== PLH.dsSobre || i !== PLH.sobre || agk !== agk0) {
     PLH.dsSobre = id;
     PLH.sobre = i;
+    PLH.agSobre = ag;
     plSobreDibujar();
   }
 });
@@ -1157,6 +1365,12 @@ plLienzo.addEventListener("pointerup", e => {
     lejos = Math.hypot(X - PLH.abajo[0], Y - PLH.abajo[1]) > 6 * plDpr();
   const abajo = PLH.abajo;
   PLH.abajo = null;
+  if (PLH.agarre) {
+    const ag = PLH.agarre;
+    PLH.agarre = null;
+    PLH.eng = null;
+    return ag.mov ? edCambio() : plSobreDibujar();
+  }
   if (PLH.arr) return dsSoltar();
   if (PLH.marco) {
     const mc = PLH.marco;
@@ -1179,7 +1393,7 @@ plLienzo.addEventListener("pointerup", e => {
   else plPunto(p);
 });
 plLienzo.addEventListener("pointerleave", () => {
-  PLH.cur = PLH.eng = null;
+  PLH.cur = PLH.eng = PLH.alin = null;
   PLH.sobre = -1;
   PLH.dsSobre = null;
   $("plXY").textContent = "";
@@ -1191,6 +1405,23 @@ plLienzo.addEventListener("dblclick", e => {
     plTerminarRecorrido();
   } else if (dsTerminar()) e.preventDefault();
 });
+// Herramientas que aceptan una longitud escrita (desde el último punto, en la dirección del cursor)
+const PL_CON_LONG = ["dist", "rec", "lin", "pol", "rect", "cir", "tubT", "tubP"];
+function plLongitudEscrita(tecla) {
+  plPedir(
+    PLH.h === "cir" ? "Radio (m)" : "Longitud del tramo (m)",
+    tecla,
+    v => {
+      const L = parseFloat(String(v).replace(",", ".")),
+        p = dsPuntoAdistancia(L);
+      plPedir(null);
+      if (!p) return toast("Escriba una longitud en metros, mayor que cero");
+      if (dsEsHerr(PLH.h)) dsPunto(p);
+      else plPunto(p);
+    },
+    true
+  );
+}
 addEventListener("keydown", e => {
   if (!ED.abierto || document.querySelector(".welcome:not([hidden])")) return;
   const k = e.key.toLowerCase(),
@@ -1208,12 +1439,25 @@ addEventListener("keydown", e => {
     e.preventDefault();
     return k === "a" ? dsTodo() : k === "c" ? dsCopiar() : dsPegar();
   }
+  // Longitud escrita con el teclado mientras se dibuja o se mide
+  if (
+    /^[0-9.,]$/.test(e.key) &&
+    !ctrl &&
+    PL_CON_LONG.includes(PLH.h) &&
+    PLH.pts.length &&
+    !PLH.med &&
+    $("plCmdIn").hidden
+  ) {
+    e.preventDefault();
+    return plLongitudEscrita(e.key === "," ? "0." : e.key === "." ? "0." : e.key);
+  }
   if (e.key === " " && !PL_ESPACIO) {
     e.preventDefault();
     PL_ESPACIO = true;
     plLienzo.classList.add("mano");
   } else if (e.key === "Escape") {
     e.preventDefault();
+    $("edRefs").hidden = true;
     // Con un recorrido, polilínea o tubería en curso, Esc la termina; con otra herramienta, sale de ella; si no,
     // suelta la selección
     if (PLH.h === "rec" && !PLH.med && PLH.pts.length > 1) return plTerminarRecorrido();
@@ -1235,6 +1479,24 @@ addEventListener("keydown", e => {
   } else if (k === "r" && !ctrl && dsD()) {
     e.preventDefault();
     dsGirar();
+  } else if (k === "f" && !ctrl && dsEsTub(PLH.h)) {
+    // Invierte el lado de la curva del tramo siguiente
+    e.preventDefault();
+    PLH.lado = -(PLH.lado || 1);
+    plSobreDibujar();
+  } else if (k === "c" && !ctrl && dsEsTub(PLH.h)) {
+    e.preventDefault();
+    DSU.curva = !DSU.curva;
+    dsGuardarPref();
+    dsCinta();
+    plOrden();
+    plSobreDibujar();
+    toast(DSU.curva ? "Tramos curvos" : "Tramos rectos");
+  } else if (e.key.startsWith("Arrow") && !PLH.h && DS_SEL.size) {
+    e.preventDefault();
+    const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0,
+      dy = e.key === "ArrowDown" ? -1 : e.key === "ArrowUp" ? 1 : 0;
+    dsEmpujar(dx, dy, e.shiftKey);
   } else if (e.key === "F3" || e.key === "F8") {
     e.preventDefault();
     edAlternar(e.key === "F3" ? "plSnap" : "plOrto");
@@ -1260,6 +1522,14 @@ new ResizeObserver(() => {
     if (t === "drop") plAbrir(e.dataTransfer.files[0]);
   })
 );
+// Ventanita de enganches de la barra de estado: se abre con ▾ y se cierra al hacer clic fuera
+$("editor").addEventListener("click", e => {
+  if (e.target.closest("[data-edrefs]")) {
+    $("edRefs").hidden = !$("edRefs").hidden;
+    return;
+  }
+  if (!e.target.closest("#edRefs")) $("edRefs").hidden = true;
+});
 // Enganche y orto: casilla en la cinta (Medir) y botón en la barra de estado, siempre iguales
 function edAlternar(id, aviso = true) {
   const c = $(id);
@@ -1413,6 +1683,14 @@ $("editor").addEventListener("click", e => {
     return plDibujar();
   }
   if (a === "sel") return plHerr(null);
+  if (a === "flip") {
+    // Con una tubería en curso, invierte su próxima curva; si no, las curvas de lo seleccionado
+    if (dsEsTub(PLH.h)) {
+      PLH.lado = -(PLH.lado || 1);
+      return plSobreDibujar();
+    }
+    return dsCurvar("invertir");
+  }
   if (a === "capas") return capasAbrir();
   if (a === "girar") return dsGirar();
   if (a === "borrar") return dsBorrar();

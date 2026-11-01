@@ -75,7 +75,7 @@ está al final de `index.html` y es este:
 | 34 | `menus-cinta.js` | Menús ▾ de la cinta (sistema eléctrico y agregar cargas) |
 | 34a | `dxf.js` | **Lector DXF**: lee un plano de AutoCAD y lo convierte en trazos, textos, capas y puntos de enganche (sin pantalla) |
 | 34b | `plano.js` | **Editor de diseño** a pantalla completa: plano de arquitectura con zoom, escala, plantas, selección y medición; mouse y teclado; Aplicar / Aceptar / Cancelar |
-| 34c | `diseno.js` | **Diseño eléctrico** en el editor: símbolos de la Norma DGE (catálogo `DS_CAT` con su código), líneas, textos, tuberías, mover, girar, copiar, borrar, rejilla y propiedades |
+| 34c | `diseno.js` | **Diseño eléctrico** en el editor: símbolos de la Norma DGE (catálogo `DS_CAT` con su código) que se encajan en el muro, tuberías con tramos rectos o curvos (longitud del arco), cotas, directrices, líneas y textos; pinzamientos, mover, girar, copiar, borrar, rejilla y propiedades |
 | 34d | `capas.js` | Ventana **Administrador de capas** del editor |
 | 35 | `centro.js` | Centro de ingeniería (Inicio) |
 | 36 | `inicio.js` | Arranque y bienvenida |

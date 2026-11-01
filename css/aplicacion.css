@@ -618,6 +618,8 @@ body.ws-on {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   border-left: 3px solid #9a5a23;
   z-index: 60;
+  /* Solo informa: los clics pasan a lo que está debajo (por ejemplo, el plano en el editor de diseño) */
+  pointer-events: none;
 }
 .toast[hidden] {
   display: none;

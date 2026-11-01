@@ -492,6 +492,13 @@ prueba("Editor de diseño: selección, distancia con enganche, recorrido, objeto
 // Teclas para el editor
 const teclaE = (key, code, vk, mod = 0) =>
   cdp("Input.dispatchKeyEvent", { type: "keyDown", key, code, windowsVirtualKeyCode: vk, modifiers: mod });
+async function moverPlano(x, y) {
+  const [X, Y] = await J(
+    `(() => { const [X, Y] = plAPant(${x}, ${y}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+  );
+  await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: X, y: Y });
+  await esperar(40);
+}
 // Arrastra con el botón izquierdo entre dos puntos del dibujo
 async function arrastrarPlano(a, b) {
   const pant = ([x, y]) =>
@@ -531,8 +538,8 @@ async function arrastrarPlano(a, b) {
 prueba("Editor de diseño: símbolos DGE, enganche, mover, girar, borrar, tuberías, capas y guardado", async ok => {
   await ejemplo("uni");
   await abrirPlano();
-  ok(await ev("EPL.dis && EPL.dis.capas.length === 9 && !EPL.dis.els.length"), "diseño nuevo con sus 9 capas");
-  // Una luminaria en el centro de la sala y un tomacorriente que se engancha al punto medio del muro
+  ok(await ev("EPL.dis && EPL.dis.capas.length === 13 && !EPL.dis.els.length"), "diseño nuevo con sus 13 capas");
+  // Una luminaria en el centro de la sala y un tomacorriente que se encaja en el muro
   await clic('#editor [data-pl="col:luz"]');
   await clicPlano(OX + 1.5, OY + 6, 0);
   await clic('#editor [data-pl="col:toma"]');
@@ -543,10 +550,16 @@ prueba("Editor de diseño: símbolos DGE, enganche, mover, girar, borrar, tuber�
     els.length === 2 && els[0][0] === "luz" && Math.abs(els[0][1] - OX - 1.5) < 0.03 && els[0][3] === "E-ALUMBRADO",
     `luminaria (DGE 09-93-51) en la capa E-ALUMBRADO (${JSON.stringify(els[0])})`
   );
+  // Encajado en el muro: sus líneas de llegada tocan el muro (x = 0) y queda mirando hacia la sala
+  const ext = await ev("-DS_BB.toma[0] * dsU()");
   ok(
-    els[1] && els[1][1] === OX && els[1][2] === OY + 4 && els[1][3] === "E-TOMACORRIENTES",
-    "tomacorriente enganchado al punto medio del muro"
+    els[1] &&
+      Math.abs(els[1][1] - OX - ext) < 1e-6 &&
+      Math.abs(els[1][2] - OY - 4.06) < 0.02 &&
+      els[1][3] === "E-TOMACORRIENTES",
+    `tomacorriente encajado en el muro (${JSON.stringify(els[1] && [els[1][1] - OX, els[1][2] - OY])})`
   );
+  ok((await ev("EPL.dis.els[1].r")) === 0, "girado según el muro");
   ok(/Salida de alumbrado en techo/.test(await ev("$('dsResumen').textContent")), "el resumen cuenta lo colocado");
   // Mover la luminaria arrastrándola, girarla con R, deshacer y borrarla con Supr
   await arrastrarPlano([OX + 1.5, OY + 6], [OX + 2.5, OY + 6.5]);
@@ -561,14 +574,18 @@ prueba("Editor de diseño: símbolos DGE, enganche, mover, girar, borrar, tuber�
   ok((await ev("EPL.dis.els[0].r")) === 0, "Ctrl+Z deshace el giro");
   await teclaE("Delete", "Delete", 46);
   ok((await ev("EPL.dis.els.length")) === 1 && (await ev("EPL.dis.els[0].k")) === "toma", "Supr borra lo seleccionado");
-  // Tubería por piso de dos tramos
+  // Tubería por piso de dos tramos rectos
+  await poner("#dsTrazo", "recto");
   await clic('#editor [data-pl="tubP"]');
   await clicPlano(OX, OY);
   await clicPlano(OX + 10, OY);
   await clicPlano(OX + 10, OY + 8);
   await teclaE("Enter", "Enter", 13);
   const tub = await J("EPL.dis.els.find(e => e.t === 'tub')");
-  ok(tub && tub.modo === "piso" && tub.pts.length === 6 && tub.capa === "E-TUBERIAS", "tubería por piso de dos tramos");
+  ok(
+    tub && tub.modo === "piso" && tub.pts.length === 6 && tub.capa === "E-TUBERIAS-PISO",
+    "tubería por piso de dos tramos"
+  );
   ok(/Tubería en piso\s*18\.00 m/.test(await ev("$('dsResumen').textContent")), "el resumen suma 18.00 m de tubería");
   await teclaE("Escape", "Escape", 27);
   // Marco de selección de derecha a izquierda (captura) sobre todo el dibujo
@@ -596,6 +613,92 @@ prueba("Editor de diseño: símbolos DGE, enganche, mover, girar, borrar, tuber�
   await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
   ok(n === 3 && (await ev("PLANO.dis.els.length")) === 3, "el diseño se guarda y se vuelve a abrir con el proyecto");
   ok(/3 elementos del diseño/.test(await ev("$('plInfo').textContent")), "la pestaña Diseño cuenta los elementos");
+});
+
+prueba("Editor de diseño: tuberías curvas, pinzamientos, cotas, directriz y longitud escrita", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Tubería curva de 2 m de cuerda: arco de 45°, longitud 2 / (2 sen 22.5°) × π/4 = 2.052 m
+  await poner("#dsTrazo", "curvo");
+  await clic('#editor [data-pl="tubT"]');
+  await clicPlano(OX + 1.2, OY + 6, 0);
+  await clicPlano(OX + 3.2, OY + 6, 0);
+  await teclaE("Enter", "Enter", 13);
+  const L = await ev("dsLargo(EPL.dis.els[0])");
+  ok(Math.abs(L - 2.0523) < 0.002, `tramo curvo: longitud del arco 2.052 m (${L.toFixed(4)})`);
+  ok((await ev("EPL.dis.els[0].capa")) === "E-TUBERIAS-TECHO", "en la capa E-TUBERIAS-TECHO");
+  ok(/2\.05 m/.test(await ev("$('dsResumen').textContent")), "el resumen suma la longitud del arco");
+  await teclaE("Escape", "Escape", 27);
+  // Pinzamiento: mover el vértice final 1 m hacia arriba
+  await clicPlano(OX + 2.2, OY + 6 + (await ev("dsTramos(EPL.dis.els[0])[0].m[1] - " + (OY + 6))), 0);
+  ok((await ev("DS_SEL.size")) === 1, "clic en la tubería la selecciona");
+  await arrastrarPlano([OX + 3.2, OY + 6], [OX + 3.2, OY + 7]);
+  const p = await J("EPL.dis.els[0].pts");
+  ok(
+    Math.abs(p[3] - OY - 7) < 0.05 && Math.abs(p[1] - OY - 6) < 1e-6,
+    "arrastrar el vértice lo mueve sin mover el otro"
+  );
+  await poner('#edPropC [data-dsp="modo"]', "piso");
+  ok(
+    await ev("EPL.dis.els[0].modo === 'piso' && EPL.dis.els[0].capa === 'E-TUBERIAS-PISO'"),
+    "pasar a piso cambia su capa"
+  );
+  await clic('#edPropC [data-dsa="recto"]');
+  ok(await ev("!EPL.dis.els[0].b"), "Enderezar deja los tramos rectos");
+  await teclaE("Escape", "Escape", 27);
+  // Cota alineada del muro inferior: 10.00 m
+  await clic('#editor [data-pl="cotA"]');
+  await clicPlano(OX, OY);
+  await clicPlano(OX + 10, OY);
+  await clicPlano(OX + 5, OY - 0.7, 0);
+  const c = await J("EPL.dis.els.find(e => e.t === 'cot')");
+  ok(
+    c &&
+      c.capa === "E-COTAS" &&
+      Math.abs((await ev("dsCotaGeo(EPL.dis.els.find(e => e.t === 'cot')).med")) - 10) < 1e-9,
+    "cota de 10.00 m en E-COTAS"
+  );
+  ok(c && Math.abs(c.o + 0.7) < 0.05, "línea de cota desplazada 0.70 m");
+  // Directriz con texto
+  await clic('#editor [data-pl="dir"]');
+  await clicPlano(OX + 2, OY + 2, 0);
+  await clicPlano(OX + 3, OY + 3, 0);
+  await poner("#plCmdV", "C-1");
+  await clic("#plCmdOk");
+  ok(
+    await ev("EPL.dis.els.some(e => e.t === 'dir' && e.s === 'C-1' && e.capa === 'E-CIRCUITOS')"),
+    "directriz con texto en E-CIRCUITOS"
+  );
+  await teclaE("Escape", "Escape", 27);
+  // Línea con longitud escrita: 3 m hacia la derecha
+  await clic('#editor [data-pl="lin"]');
+  await clicPlano(OX + 1, OY + 1.5, 0);
+  await moverPlano(OX + 2.5, OY + 1.5);
+  await cdp("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "3",
+    code: "Digit3",
+    windowsVirtualKeyCode: 51,
+    text: "3"
+  });
+  await esperar(60);
+  ok(
+    !(await ev("$('plCmdIn').hidden")) && (await ev("$('plCmdV').value")) === "3",
+    "escribir un número pide la longitud"
+  );
+  await teclaE("Enter", "Enter", 13);
+  const l = await J("EPL.dis.els.filter(e => e.t === 'lin').pop()");
+  ok(l && Math.abs(l.pts[2] - l.pts[0] - 3) < 1e-9 && Math.abs(l.pts[3] - l.pts[1]) < 1e-9, "línea de 3.00 m exactos");
+  await teclaE("Escape", "Escape", 27);
+  // Aplicar y volver a abrir: se conservan las curvas, la cota y la directriz
+  await clic('[data-ed="aceptar"]');
+  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+  ok(
+    await ev(
+      "PLANO.dis.els.some(e => e.t === 'cot') && PLANO.dis.els.some(e => e.t === 'dir') && PLANO.dis.etq === 'total'"
+    ),
+    "cota, directriz y longitudes se guardan"
+  );
 });
 
 // Ejecución
