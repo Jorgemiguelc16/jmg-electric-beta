@@ -19,7 +19,9 @@ let MODE = "uni",
   TEQ = { uni: {}, multi: {} },
   SECF = { uni: {}, multi: {} },
   VIEW = "resumen",
-  PID = null;
+  PID = null,
+  // Plano de arquitectura del proyecto (js/plano.js): archivo, unidad, capas ocultas y plantas; null si no tiene
+  PLANO = null;
 try {
   VIEW = localStorage.getItem("jmg-electric-view") || "resumen";
 } catch (e) {}

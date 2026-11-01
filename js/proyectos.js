@@ -162,6 +162,7 @@ function estado() {
     ACEP,
     TEQ,
     SECF,
+    PLANO,
     res: RESUMEN,
     sist: PROY.sist || radio("sist"),
     sistG: PROY.sistG || radio("sistG")
@@ -289,6 +290,7 @@ function normalizar(o) {
       v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, S]) => SECC.includes(S))) : {};
   const sv = v => (["mono220", "tri220", "tri380"].includes(v) ? v : null);
   return {
+    PLANO: planoValido(o.PLANO),
     id: typeof o.id === "string" && /^[\w-]{1,40}$/.test(o.id) ? o.id : null,
     campos,
     listas,
@@ -299,6 +301,32 @@ function normalizar(o) {
     sist: sv(o.sist) || "mono220",
     sistG: sv(o.sistG) || "tri380",
     MODE: o.MODE === "multi" ? "multi" : "uni"
+  };
+}
+/* Plano de arquitectura guardado con el proyecto (js/plano.js), solo con datos válidos: el nombre y la huella del
+   archivo DXF (que está en el navegador), metros por unidad del dibujo y de dónde sale, capas ocultas, plantas
+   encuadradas (rectángulos en coordenadas del dibujo) y modo atenuado. */
+function planoValido(v) {
+  if (!v || typeof v !== "object" || typeof v.sha !== "string" || !/^[0-9a-f]{40}$/.test(v.sha)) return null;
+  const n = x => typeof x === "number" && Number.isFinite(x),
+    txt = (x, m) =>
+      String(x ?? "")
+        .replace(/[<>]/g, "")
+        .slice(0, m);
+  return {
+    nombre: txt(v.nombre, 120) || "plano.dxf",
+    sha: v.sha,
+    kb: n(v.kb) ? Math.round(v.kb) : 0,
+    f: n(v.f) && v.f > 0 ? v.f : 1,
+    de: ["cotas", "cabecera", "tamaño", "manual"].includes(v.de) ? v.de : "manual",
+    ocultas: Array.isArray(v.ocultas) ? v.ocultas.filter(x => typeof x === "string").slice(0, 5000) : [],
+    plantas: Array.isArray(v.plantas)
+      ? v.plantas
+          .filter(p => p && ["x0", "y0", "x1", "y1"].every(k => n(p[k])) && p.x1 > p.x0 && p.y1 > p.y0)
+          .slice(0, 60)
+          .map(p => ({ n: txt(p.n, 60) || "Planta", x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1 }))
+      : [],
+    tenue: v.tenue === true
   };
 }
 /* Proyecto listo para calcular(), con el mismo formato que estado(), a partir de un proyecto guardado o de un
@@ -329,6 +357,7 @@ function aplicar(o) {
   ACEP = n.ACEP;
   TEQ = n.TEQ;
   SECF = n.SECF;
+  PLANO = n.PLANO;
   renderSys("sys_uni", "sist", n.sist);
   renderSys("sys_multi", "sistG", n.sistG);
   PROY.sist = n.sist;
@@ -341,6 +370,7 @@ function aplicar(o) {
   } finally {
     FORZAR = f0;
   }
+  if (typeof planoAplicado === "function") planoAplicado();
 }
 const PKEYS = [
   "p_nombre",

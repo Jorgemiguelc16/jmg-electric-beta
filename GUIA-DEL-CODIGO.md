@@ -11,8 +11,8 @@ servidor propio ni instalación. Se publica en GitHub Pages; el acceso con cuent
 | Pieza | Archivo o carpeta |
 | --- | --- |
 | Estructura de todas las pantallas | `index.html` |
-| Apariencia (colores, tamaños, diseño) | `css/` (9 archivos) |
-| Lógica, cálculo y planos | `js/` (52 archivos) |
+| Apariencia (colores, tamaños, diseño) | `css/` (10 archivos) |
+| Lógica, cálculo y planos | `js/` (54 archivos) |
 | Imágenes de la plataforma | `img/`, `logo.png`, `foto.png`, `og.png` |
 | Manual de usuario y referencia técnica | `manual/manual.html` → `manual/JMG-ELECTRIC-Manual-v2.1.pdf` |
 | Pruebas automáticas: casos, referencia del cálculo y huellas de los planos | `pruebas/` |
@@ -73,6 +73,8 @@ está al final de `index.html` y es este:
 | 32 | `datos-proyecto.js` | Ventana Datos del proyecto (se arma con los formularios del panel) |
 | 33 | `panel.js` | Panel del proyecto (resumen, elemento elegido, por revisar) |
 | 34 | `menus-cinta.js` | Menús ▾ de la cinta (sistema eléctrico y agregar cargas) |
+| 34a | `dxf.js` | **Lector DXF**: lee un plano de AutoCAD y lo convierte en trazos, textos, capas y puntos de enganche (sin pantalla) |
+| 34b | `plano.js` | Pestaña **Diseño**: plano de arquitectura con zoom, capas, escala, plantas y medición |
 | 35 | `centro.js` | Centro de ingeniería (Inicio) |
 | 36 | `inicio.js` | Arranque y bienvenida |
 | 37 | `tema.js` | Tema, zoom y mano de arrastre |
@@ -90,9 +92,21 @@ termina con su recuadro de notas (`notasSvg()`, `dibujo.js`) y su rótulo (`rotu
 **Para un plano nuevo o un cambio de colores:** usar la paleta `PAL`, los colores `COND` y las piezas de
 `dibujo.js`, y no copiarlas. Si una pieza nueva se repite en dos planos, va a `dibujo.js`.
 
+### Cómo funciona la pestaña Diseño (plano de arquitectura)
+
+1. El usuario abre un DXF. `modeloDxf()` (`dxf.js`) lo lee **una vez**: expande los bloques (con giro, escala y
+   espejo), convierte arcos y curvas en tramos cortos, resuelve colores y capas, y arma la lista de puntos de enganche.
+   La unidad del dibujo sale de las cotas, porque la cabecera del archivo a veces está mal.
+2. `plano.js` agrupa los trazos por color y tipo de línea (`plPreparar()`) y los dibuja en un lienzo (`canvas`); encima
+   hay otro lienzo para lo que sigue al cursor (enganche, mediciones, encuadres). Así el plano se mueve con fluidez
+   aunque tenga decenas de miles de objetos.
+3. El archivo se guarda en la base de datos del navegador (IndexedDB) con su huella SHA-1; el proyecto guarda solo
+   `PLANO`: nombre y huella del archivo, unidad, capas ocultas, plantas y modo atenuado (`planoValido()` en
+   `proyectos.js` lo valida al abrir). El plano no entra al cálculo todavía: eso llega con el diseño en planta.
+
 ## 3. Los estilos de `css/`
 
-La apariencia está en 9 archivos que `index.html` carga **en este orden**. El orden importa: si dos reglas dicen
+La apariencia está en 10 archivos que `index.html` carga **en este orden**. El orden importa: si dos reglas dicen
 cosas distintas sobre lo mismo, gana la de más abajo, aunque esté en otro archivo. Los colores y tamaños se
 definen una sola vez como variables (`--bg`, `--panel`, `--acc`…) en `sitio.css` y en `temas.css` /
 `paletas.css`, y las demás reglas las usan.
@@ -108,6 +122,7 @@ definen una sola vez como variables (`--bg`, `--panel`, `--acc`…) en `sitio.cs
 | 7 | `acceso.css` | Pantalla de ingreso, menú de la cuenta y Administración |
 | 8 | `ventanas.css` | Menús de la cinta, cuadro de conductores, ficha del circuito y editor de cargas especiales |
 | 9 | `fichas.css` | Parámetros de diseño, ficha del tablero, datos del proyecto, departamentos y paneles laterales |
+| 10 | `plano.css` | Pestaña Diseño: lienzo del plano, línea de indicaciones, panel de plantas y capas |
 
 Las rutas de imágenes dentro de `css/` empiezan con `../img/`. **Para un estilo nuevo**, va en el archivo de
 su tema; si cambia algo de otro archivo, comprobar con `npm run capturas` que solo cambió lo buscado.
@@ -148,7 +163,8 @@ Están instaladas con Node.js. Si se cambia de computadora, se reinstalan con `n
 | `npm test` | **Pruebas del cálculo**: 34 casos contra `pruebas/referencia.js` (cálculo, metrado, alertas). |
 | `npm run pruebas-planos` | **Pruebas de los planos**: la huella de cada plano (SVG y DXF) de los 34 casos contra `pruebas/huellas.js`. |
 | `npm run pruebas-excel` | **Pruebas del Excel**: la huella de cada hoja de la memoria (celdas, fórmulas, formato) de los 34 casos contra `pruebas/huellas-excel.js`, en Chrome. |
-| `npm run pruebas-ui` | **Pruebas de la interfaz**: 15 escenarios en Chrome (fichas, editores, vista previa, deshacer). |
+| `npm run pruebas-ui` | **Pruebas de la interfaz**: 17 escenarios en Chrome (fichas, editores, vista previa, deshacer, plano de arquitectura). |
+| `npm run pruebas-dxf` | **Pruebas del lector DXF**: el plano de prueba `pruebas/plano-prueba.dxf` (medidas conocidas y casos difíciles; lo genera `herramientas/plano-prueba.js`) y los DXF que exporta la propia plataforma. |
 | `npm run estilos-sin-uso` | Lista estilos de `css/` que ya no usa ninguna pantalla. |
 | `npm run estilos-tapados` | Lista declaraciones de `css/` que nunca se aplican porque otra más abajo las tapa. |
 | `npm run capturas -- antes` y `npm run capturas -- despues antes` | **Capturas de las pantallas** (ingreso, inicio, vistas, cinta, ventanas; claro y oscuro) y su comparación píxel por píxel, para cambios de estilos. |
@@ -166,7 +182,7 @@ cambiar: si cambian, algo se rompió.
 ## 7. Antes de publicar (lista de control)
 
 1. `npm run revisar` sin errores y `npm run revisar-formato` en verde.
-2. `npm test`, `npm run pruebas-planos`, `npm run pruebas-excel` y `npm run pruebas-ui` en verde. Si el cálculo, un
+2. `npm test`, `npm run pruebas-planos`, `npm run pruebas-excel`, `npm run pruebas-dxf` y `npm run pruebas-ui` en verde. Si el cálculo, un
    plano o el Excel cambió a propósito, revisar cada diferencia y regenerar `pruebas/referencia.js`,
    `pruebas/huellas.js` o `pruebas/huellas-excel.js` (con `-- --actualizar`).
 3. Subir el número de versión de los archivos (`?v=X.Y.Z` en `index.html`) para que los navegadores no usen

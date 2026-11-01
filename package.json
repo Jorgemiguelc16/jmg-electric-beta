@@ -8,6 +8,7 @@
     "pruebas-ui": "node herramientas/pruebas-ui.mjs",
     "pruebas-planos": "node herramientas/pruebas-planos.js",
     "pruebas-excel": "node herramientas/pruebas-excel.mjs",
+    "pruebas-dxf": "node herramientas/pruebas-dxf.js",
     "formato": "prettier --write \"js/**/*.js\" \"css/**/*.css\"",
     "revisar-formato": "prettier --check \"js/**/*.js\" \"css/**/*.css\"",
     "revisar": "node herramientas/revisar.js",
