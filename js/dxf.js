@@ -204,7 +204,8 @@ function puntosSpline(gr, kn, cp, w, fit) {
 
 /* Modelo del plano: capas, tipos de línea y bloques, y la lista de trazos del espacio modelo con los bloques ya
    expandidos. Cada trazo: { capa, col (#rrggbb), lt (tipo de línea o ""), lte (escala del tipo de línea), k ("l"
-   línea, "f" relleno, "h" sombreado de trama), p: [x0, y0, x1, y1…], c (cerrado) }. Textos: { capa, col, x, y, h,
+   línea, "f" relleno, "h" sombreado de trama), p: [x0, y0, x1, y1…], c (cerrado), ent (tipo de objeto: LINE, ARC…),
+   bl (bloque que lo contiene, o "") }. Textos: { capa, col, x, y, h,
    rot (rad), s, ha (left|center|right), va (alphabetic|bottom|middle|top) }. */
 function modeloDxf(entrada) {
   const { sec, C, V } = leerDxf(textoDxf(entrada));
@@ -287,7 +288,7 @@ function modeloDxf(entrada) {
       p[i] = q[0];
       p[i + 1] = q[1];
     }
-    trazos.push({ capa: o.capa, col: o.col, lt: o.lt, lte: o.lte * mEsc(m), k, p, c: !!cerrado });
+    trazos.push({ capa: o.capa, col: o.col, lt: o.lt, lte: o.lte * mEsc(m), k, p, c: !!cerrado, ent: o.ent, bl: o.bl });
     if (k !== "l") return;
     if (curva) {
       pS(p[0], p[1], 1, o.capa);
@@ -314,7 +315,10 @@ function modeloDxf(entrada) {
         capa,
         col: color(g, capa, padre && padre.col),
         lt: tipoLinea(g, capa, padre && padre.lt),
-        lte: dxNum(g, 48, 1) * LTS
+        lte: dxNum(g, 48, 1) * LTS,
+        // Tipo de objeto y bloque que lo contiene (para las propiedades en el editor)
+        ent: e.t,
+        bl: padre ? padre.bl : ""
       };
       if (!prof) nEnt++;
       const ocs = mMul(m, mOcs(g));
@@ -505,7 +509,7 @@ function modeloDxf(entrada) {
           if (!bl || bl.papel || prof > 12) break;
           if (e.t !== "INSERT") {
             // Cota o tabla: su bloque anónimo ya está en coordenadas del dibujo
-            dibujar(bl.ents, m, o, prof + 1);
+            dibujar(bl.ents, m, { ...o, bl: e.t === "DIMENSION" ? "Cota" : "Tabla" }, prof + 1);
             break;
           }
           const sx = dxNum(g, 41, 1),
@@ -522,7 +526,7 @@ function modeloDxf(entrada) {
                 mb = mMul(mi, [1, 0, 0, 1, -bl.x, -bl.y]);
               insertos.push({ n: bl.n, capa: o.capa, x: mi[4], y: mi[5], prof });
               pS(mi[4], mi[5], 4, o.capa);
-              dibujar(bl.ents, mb, o, prof + 1);
+              dibujar(bl.ents, mb, { ...o, bl: bl.n }, prof + 1);
             }
           break;
         }

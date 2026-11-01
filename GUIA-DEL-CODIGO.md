@@ -74,7 +74,7 @@ está al final de `index.html` y es este:
 | 33 | `panel.js` | Panel del proyecto (resumen, elemento elegido, por revisar) |
 | 34 | `menus-cinta.js` | Menús ▾ de la cinta (sistema eléctrico y agregar cargas) |
 | 34a | `dxf.js` | **Lector DXF**: lee un plano de AutoCAD y lo convierte en trazos, textos, capas y puntos de enganche (sin pantalla) |
-| 34b | `plano.js` | Pestaña **Diseño**: plano de arquitectura con zoom, capas, escala, plantas y medición |
+| 34b | `plano.js` | **Editor de diseño** a pantalla completa: plano de arquitectura con zoom, capas, escala, plantas, selección y medición; Aplicar / Aceptar / Cancelar |
 | 35 | `centro.js` | Centro de ingeniería (Inicio) |
 | 36 | `inicio.js` | Arranque y bienvenida |
 | 37 | `tema.js` | Tema, zoom y mano de arrastre |
@@ -92,15 +92,18 @@ termina con su recuadro de notas (`notasSvg()`, `dibujo.js`) y su rótulo (`rotu
 **Para un plano nuevo o un cambio de colores:** usar la paleta `PAL`, los colores `COND` y las piezas de
 `dibujo.js`, y no copiarlas. Si una pieza nueva se repite en dos planos, va a `dibujo.js`.
 
-### Cómo funciona la pestaña Diseño (plano de arquitectura)
+### Cómo funciona el editor de diseño (plano de arquitectura)
 
 1. El usuario abre un DXF. `modeloDxf()` (`dxf.js`) lo lee **una vez**: expande los bloques (con giro, escala y
    espejo), convierte arcos y curvas en tramos cortos, resuelve colores y capas, y arma la lista de puntos de enganche.
    La unidad del dibujo sale de las cotas, porque la cabecera del archivo a veces está mal.
-2. `plano.js` agrupa los trazos por color y tipo de línea (`plPreparar()`) y los dibuja en un lienzo (`canvas`); encima
+2. La pestaña Diseño de la cinta abre el **editor a pantalla completa** (`edAbrir()`), que trabaja sobre una copia del
+   plano del proyecto (`EPL`) con su propio deshacer; `edAplicar()` la pasa al proyecto (`PLANO`) y Cancelar la descarta.
+   La arquitectura es una referencia bloqueada: se selecciona para ver sus propiedades, pero no se mueve.
+3. `plano.js` agrupa los trazos por color y tipo de línea (`plPreparar()`) y los dibuja en un lienzo (`canvas`); encima
    hay otro lienzo para lo que sigue al cursor (enganche, mediciones, encuadres). Así el plano se mueve con fluidez
    aunque tenga decenas de miles de objetos.
-3. El archivo se guarda en la base de datos del navegador (IndexedDB) con su huella SHA-1; el proyecto guarda solo
+4. El archivo se guarda en la base de datos del navegador (IndexedDB) con su huella SHA-1; el proyecto guarda solo
    `PLANO`: nombre y huella del archivo, unidad, capas ocultas, plantas y modo atenuado (`planoValido()` en
    `proyectos.js` lo valida al abrir). El plano no entra al cálculo todavía: eso llega con el diseño en planta.
 
@@ -122,7 +125,7 @@ definen una sola vez como variables (`--bg`, `--panel`, `--acc`…) en `sitio.cs
 | 7 | `acceso.css` | Pantalla de ingreso, menú de la cuenta y Administración |
 | 8 | `ventanas.css` | Menús de la cinta, cuadro de conductores, ficha del circuito y editor de cargas especiales |
 | 9 | `fichas.css` | Parámetros de diseño, ficha del tablero, datos del proyecto, departamentos y paneles laterales |
-| 10 | `plano.css` | Pestaña Diseño: lienzo del plano, línea de indicaciones, panel de plantas y capas |
+| 10 | `plano.css` | Editor de diseño: barra de título, paneles, lienzo del plano, línea de indicaciones y barra de estado |
 
 Las rutas de imágenes dentro de `css/` empiezan con `../img/`. **Para un estilo nuevo**, va en el archivo de
 su tema; si cambia algo de otro archivo, comprobar con `npm run capturas` que solo cambió lo buscado.

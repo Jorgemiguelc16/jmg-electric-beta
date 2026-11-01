@@ -1,37 +1,71 @@
-/* DISEÑO: plano de arquitectura en el panel central (js/plano.js): lienzo del plano, línea de indicaciones de la
-   herramienta, panel de plantas y capas, y barra de estado con las coordenadas.
+/* EDITOR DE DISEÑO a pantalla completa (js/plano.js): barra de título con Aplicar, Aceptar y Cancelar, cinta
+   propia, plantas y capas a la izquierda, el plano al centro, propiedades a la derecha y barra de estado con las
+   coordenadas, el enganche y el orto. Está dentro del espacio de trabajo: hereda su escala y queda debajo de los
+   avisos y diálogos.
    Parte de los estilos de la plataforma: index.html carga los archivos de css/ en orden, y el orden importa (si
    dos reglas dicen cosas distintas, gana la de más abajo). */
-#ws.en-diseno #apDoc,
-#ws.en-diseno #zoomC {
-  display: none;
+.ed {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--ws-bg, #e9edf2);
 }
-.pl [hidden] {
+.ed [hidden],
+.ed[hidden] {
   display: none !important;
 }
-.pl {
+.ed-acc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ed-b {
+  padding: 3px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: 600 12px var(--f-body);
+  cursor: pointer;
+}
+.ed-b:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.ed-b.ok {
+  background: #c77d2e;
+  border-color: #c77d2e;
+}
+.ed-b.ok:hover {
+  background: #d68b3a;
+}
+.ed-b:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: rgba(255, 255, 255, 0.08);
+}
+.ed-sucio {
+  margin-right: 4px;
+  font: 500 11.5px var(--f-body);
+  color: #f0c060;
+}
+/* Cuerpo: plantas y capas | plano | propiedades */
+.ed-main {
   flex: 1;
-  min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) auto;
-  background: var(--ws-doc, #fff);
-  border: 1px solid var(--ws-line, #c9d1da);
-  border-radius: 12px;
-  box-shadow: var(--shadow-h, 0 2px 8px rgba(20, 48, 79, 0.12));
-  overflow: hidden;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0;
+  border-top: 1px solid var(--ws-line, #d6dde6);
 }
-.pl[hidden] {
-  display: none;
-}
-/* Lienzo: desplazar arrastrando; con una herramienta, cursor en cruz */
+/* Lienzo: en Seleccionar, flecha (clic elige, arrastrar desplaza); con una herramienta, cursor en cruz */
 .pl-lienzo {
   position: relative;
   min-width: 0;
   min-height: 0;
   background: var(--ws-doc, #fff);
-  cursor: grab;
+  cursor: default;
   touch-action: none;
   user-select: none;
 }
@@ -169,7 +203,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--ws-line, #d6dde6);
+  border-right: 1px solid var(--ws-line, #d6dde6);
   background: var(--ws-pane, #fff);
   font: 12px var(--f-body);
   color: var(--ws-text, #1f2a36);
@@ -323,20 +357,19 @@
   line-height: 1.45;
   color: var(--ws-text2, #66737f);
 }
-/* Barra de estado del plano: coordenadas del cursor, unidad y archivo */
-.pl-estado {
-  grid-column: 1 / -1;
+/* Barra de estado del editor: coordenadas del cursor, unidad, archivo, enganche y orto */
+.ed-estado {
   display: flex;
+  align-items: center;
   gap: 20px;
-  padding: 4px 12px;
+  padding: 0 0 0 12px;
   border-top: 1px solid var(--ws-line, #d6dde6);
   background: var(--ws-pane-h, #f1f4f8);
   font: 11.5px var(--f-mono);
   color: var(--ws-text2, #66737f);
   white-space: nowrap;
   overflow: hidden;
-  min-height: 24px;
-  box-sizing: border-box;
+  height: 26px;
 }
 #plXY {
   min-width: 210px;
@@ -347,14 +380,111 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Cinta de Diseño: herramienta activa marcada; sin plano, los comandos que lo necesitan quedan apagados */
-[data-rib="diseno"] .rb.on,
-[data-rib="diseno"] .rs.on {
+.ed-tg {
+  display: flex;
+  height: 100%;
+}
+.ed-tg button {
+  border: 0;
+  border-left: 1px solid var(--ws-line, #d6dde6);
+  background: none;
+  padding: 0 12px;
+  font: 600 10.5px var(--f-mono);
+  letter-spacing: 0.06em;
+  color: var(--ws-text2, #66737f);
+  cursor: pointer;
+}
+.ed-tg button[aria-pressed="true"] {
+  background: var(--ws-sel, #dde9f6);
+  color: var(--ws-text, #1f2a36);
+  box-shadow: inset 0 -2px 0 #c77d2e;
+}
+/* Panel de propiedades */
+.ed-der {
+  width: 250px;
+  border-right: 0;
+  border-left: 1px solid var(--ws-line, #d6dde6);
+}
+.ed-prop {
+  overflow: auto;
+  padding: 4px 0 10px;
+}
+.ed-pt {
+  padding: 8px 10px 6px;
+  font: 600 13px var(--f-body);
+  color: var(--ws-text, #1f2a36);
+}
+.ed-pt small {
+  display: block;
+  font: 400 11px var(--f-body);
+  color: var(--ws-text2, #66737f);
+}
+.ed-pf {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 10px;
+  border-top: 1px solid var(--ws-line, #d6dde6);
+}
+.ed-pf span {
+  color: var(--ws-text2, #66737f);
+}
+.ed-pf b {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed-pf b small {
+  display: block;
+  font-size: 10.5px;
+  color: var(--ws-text2, #66737f);
+}
+.ed-sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.ed-prop .pl-nota {
+  border-top: 1px solid var(--ws-line, #d6dde6);
+  padding-top: 8px;
+}
+.ed-pb {
+  padding: 2px 10px;
+}
+/* Pestaña Diseño del espacio de trabajo: el plano del proyecto, en dos líneas */
+.pl-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  max-width: 240px;
+  padding: 0 8px;
+  font: 12px var(--f-body);
+  color: var(--ws-text, #1f2a36);
+}
+.pl-info b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-info span {
+  font-size: 11px;
+  color: var(--ws-text2, #66737f);
+}
+/* Cinta del editor: herramienta activa marcada; sin plano, los comandos que lo necesitan quedan apagados */
+.ed-ribbon .rb.on,
+.ed-ribbon .rs.on {
   background: var(--ws-sel, #dde9f6);
   box-shadow: inset 0 0 0 1px var(--ws-hover-b, #cfdbea);
 }
-[data-rib="diseno"] .rb:disabled,
-[data-rib="diseno"] .rs:disabled {
+.ed-ribbon .rb:disabled,
+.ed-ribbon .rs:disabled {
   opacity: 0.42;
   cursor: default;
   pointer-events: none;

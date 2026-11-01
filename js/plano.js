@@ -1,25 +1,34 @@
-/* DISEÑO · PLANO DE ARQUITECTURA (etapa 1 del diseño en planta)
-   Pestaña Diseño de la cinta: abre el plano de arquitectura en DXF (js/dxf.js) y lo muestra en el panel central
-   con zoom (rueda del mouse, centrado en el cursor), desplazamiento (arrastrar), capas que se muestran u ocultan,
-   escala del dibujo comprobada con una medida conocida, plantas encuadradas por el usuario y herramientas de
-   medición (distancia, recorrido y longitud de objetos) con enganche a extremos, puntos medios, centros e
-   inserciones de bloques, y modo orto.
+/* EDITOR DE DISEÑO · PLANO DE ARQUITECTURA (etapa 1 del diseño en planta)
+   El editor ocupa toda la pantalla (se abre desde la pestaña Diseño de la cinta) y trabaja sobre una copia del plano
+   del proyecto: los cambios pasan al proyecto con Aplicar o Aceptar, como en las fichas, y Cancelar los descarta.
+   Tiene su propio deshacer (Ctrl+Z / Ctrl+Y) mientras está abierto.
+   - Plano de arquitectura en DXF (js/dxf.js): zoom con la rueda del mouse (centrado en el cursor), desplazamiento
+     arrastrando, capas que se muestran u ocultan, plano atenuado, escala comprobada con una medida conocida y
+     plantas encuadradas por el usuario.
+   - La arquitectura es una referencia bloqueada (como una referencia externa de AutoCAD): no se mueve; un clic en
+     una línea muestra sus propiedades (tipo, capa, longitud, área). Lo que se mueva será el diseño eléctrico.
+   - Medición: distancia, recorrido y longitud de objetos, con enganche a extremos, puntos medios, centros e
+     inserciones de bloques (F3) y modo orto (F8).
    - El archivo se lee en la computadora del usuario y no se sube a internet. Se guarda en la base de datos del
      navegador (IndexedDB), con su huella SHA-1 como nombre; el proyecto guarda solo PLANO: el nombre y la huella
      del archivo, la unidad, las capas ocultas, las plantas y el modo atenuado.
    - Se dibuja en dos lienzos: el plano (se redibuja al mover o cambiar la vista) y encima lo que sigue al cursor
-     (enganche, mediciones, encuadres). Las coordenadas se guardan respecto del centro del dibujo para no perder
-     precisión en planos georreferenciados. */
+     (enganche, selección, mediciones, encuadres). Las coordenadas se guardan respecto del centro del dibujo para no
+     perder precisión en planos georreferenciados. */
 let PL_MOD = null,
   PL_SHA = null,
-  PL_VIS = false,
   PL_GR = null,
   PL_TX = null,
-  PL_IDX = null;
+  PL_IDX = null,
+  // Copia de trabajo del plano en el editor (PLANO es el del proyecto)
+  EPL = null;
+// Editor: abierto, historial de deshacer de la copia y el plano tal como está en el proyecto (para saber si hay
+// cambios sin aplicar)
+const ED = { abierto: false, hist: [], redo: [], base: "null" };
 // Vista: punto del dibujo en el centro del lienzo y escala en píxeles del lienzo por unidad del dibujo
 const PLV = { cx: 0, cy: 0, s: 1 };
-// Herramienta activa y sus puntos; el cursor (en el dibujo) y el punto enganchado
-const PLH = { h: null, pts: [], sel: [], cur: null, eng: null, med: null, pan: null };
+// Herramienta activa y sus puntos; el cursor (en el dibujo), el punto enganchado y el objeto seleccionado
+const PLH = { h: null, pts: [], sel: [], cur: null, eng: null, med: null, pan: null, obj: -1, sobre: -1 };
 const plBase = $("plBase"),
   plSobre = $("plSobre"),
   plLienzo = $("plLienzo");
@@ -57,19 +66,20 @@ async function plLeerArchivo(sha) {
     r.onerror = () => mal(r.error);
   });
 }
-// Borra del navegador los planos que ya no usa ningún proyecto (ni el abierto, ni los guardados, ni el historial
-// de deshacer)
+// Borra del navegador los planos que ya no usa nadie: ni el proyecto, ni la copia del editor, ni los proyectos
+// guardados, ni los historiales de deshacer
 async function plLimpiarArchivos() {
   try {
-    const usados = new Set(PLANO ? [PLANO.sha] : []);
+    const usados = new Set([PLANO && PLANO.sha, EPL && EPL.sha].filter(Boolean));
     Object.values(libLoad()).forEach(o => o && o.PLANO && usados.add(o.PLANO.sha));
+    const enHist = k => [HIST, REDO, ED.hist, ED.redo].some(h => h.some(s => s.includes(k)));
     const db = await plDb(),
       claves = await new Promise((ok, mal) => {
         const r = db.transaction("planos").objectStore("planos").getAllKeys();
         r.onsuccess = () => ok(r.result);
         r.onerror = () => mal(r.error);
       }),
-      sobran = claves.filter(k => !usados.has(k) && !HIST.some(s => s.includes(k)) && !REDO.some(s => s.includes(k)));
+      sobran = claves.filter(k => !usados.has(k) && !enHist(k));
     if (!sobran.length) return;
     const t = db.transaction("planos", "readwrite");
     sobran.forEach(k => t.objectStore("planos").delete(k));
@@ -78,7 +88,7 @@ async function plLimpiarArchivos() {
 const plHuella = async buf =>
   [...new Uint8Array(await crypto.subtle.digest("SHA-1", buf))].map(b => b.toString(16).padStart(2, "0")).join("");
 
-// Abre un archivo elegido por el usuario: lo lee, lo guarda en el navegador y lo asocia al proyecto
+// Abre un archivo elegido por el usuario: lo lee, lo guarda en el navegador y lo asocia a la copia del editor
 async function plAbrir(file) {
   if (!file) return;
   if (/\.dwg$/i.test(file.name))
@@ -99,25 +109,25 @@ async function plAbrir(file) {
     PL_SHA = sha;
     const nombre = file.name.replace(/[<>]/g, "").slice(0, 120),
       // El mismo archivo (o una versión nueva con el mismo nombre) conserva la escala, las capas y las plantas
-      sigue = PLANO && (PLANO.sha === sha || PLANO.nombre === nombre);
-    PLANO = {
+      sigue = EPL && (EPL.sha === sha || EPL.nombre === nombre);
+    EPL = {
       nombre,
       sha,
       kb: Math.round(buf.byteLength / 1024),
-      f: sigue ? PLANO.f : m.unidad.f,
-      de: sigue ? PLANO.de : m.unidad.de,
+      f: sigue ? EPL.f : m.unidad.f,
+      de: sigue ? EPL.de : m.unidad.de,
       ocultas: sigue
-        ? PLANO.ocultas
+        ? EPL.ocultas
         : Object.entries(m.capas)
             .filter(([, c]) => !c.on)
             .map(([n]) => n),
-      plantas: sigue ? PLANO.plantas : [],
-      tenue: sigue ? PLANO.tenue : false
+      plantas: sigue ? EPL.plantas : [],
+      tenue: sigue ? EPL.tenue : false
     };
+    PLH.obj = -1;
     plPreparar();
     if (!(sigue && plVistaGuardada())) plAjustar();
-    plCambio();
-    plLimpiarArchivos();
+    edCambio();
     toast(
       sigue
         ? "Plano abierto: se conservan la escala, las capas ocultas y las plantas del proyecto"
@@ -138,28 +148,17 @@ const PL_DE = {
 function plCargando(on) {
   $("plCarga").hidden = !on;
 }
-// El proyecto cambió de plano (abrir un proyecto, deshacer): carga el archivo del navegador si hace falta
-async function planoAplicado() {
-  plHerr(null);
-  if (!PLANO) {
-    PL_MOD = PL_SHA = null;
-    plPreparar();
-    return plMostrar();
-  }
-  if (PLANO.sha !== PL_SHA) {
-    PL_MOD = null;
-    PL_SHA = PLANO.sha;
-    if (PL_VIS) await plCargarGuardado();
-  }
+// Lee del navegador el archivo de la copia del editor, si aún no está leído
+async function plCargarGuardado() {
+  if (!EPL || (PL_MOD && PL_SHA === EPL.sha)) return;
+  const sha = (PL_SHA = EPL.sha);
+  PL_MOD = null;
   plPreparar();
   plMostrar();
-}
-async function plCargarGuardado() {
-  if (!PLANO || PL_MOD) return;
   plCargando(true);
   try {
-    const o = await plLeerArchivo(PLANO.sha);
-    if (o && PLANO && o.buf) {
+    const o = await plLeerArchivo(sha);
+    if (o && o.buf && EPL && EPL.sha === sha) {
       await new Promise(r => setTimeout(r, 30));
       PL_MOD = modeloDxf(o.buf);
       plPreparar();
@@ -172,19 +171,125 @@ async function plCargarGuardado() {
     plMostrar();
   }
 }
-// Un cambio en PLANO: se guarda con el proyecto y entra al historial de deshacer
-function plCambio() {
-  saveDraft();
-  histPush();
+
+/* ---------- Editor: abrir, cambios, deshacer, aplicar, aceptar y cancelar ---------- */
+const edSnap = () => JSON.stringify(EPL);
+function edAbrir(conArchivo) {
+  ED.abierto = true;
+  EPL = PLANO ? clon(PLANO) : null;
+  ED.base = edSnap();
+  ED.hist = [ED.base];
+  ED.redo = [];
+  $("editor").hidden = false;
+  document.body.classList.add("ed-on");
+  $("edNom").textContent = $("p_nombre").value.trim() || "Proyecto sin nombre";
+  plTema();
+  PLH.obj = -1;
+  plHerr(null);
+  if (!EPL) {
+    PL_MOD = PL_SHA = null;
+    plPreparar();
+  } else if (PL_SHA !== EPL.sha || !PL_MOD) plCargarGuardado();
+  else plPreparar();
+  edEstado();
+  plMostrar();
+  requestAnimationFrame(() => {
+    plTam();
+    if (PL_MOD && !plVistaGuardada()) plAjustar();
+    plDibujar();
+  });
+  // El cuadro para elegir el archivo necesita el clic del usuario: se abre en el mismo clic
+  if (conArchivo) $("plArchivo").click();
+}
+function edCerrar() {
+  ED.abierto = false;
+  plHerr(null);
+  $("editor").hidden = true;
+  document.body.classList.remove("ed-on");
+  edInfo();
+}
+// Un cambio en la copia del editor: entra a su historial de deshacer
+function edCambio() {
+  const s = edSnap();
+  if (ED.hist[ED.hist.length - 1] !== s) {
+    ED.hist.push(s);
+    if (ED.hist.length > 80) ED.hist.shift();
+    ED.redo = [];
+  }
+  edEstado();
   plMostrar();
 }
+function edHist(dir) {
+  if (dir < 0 && ED.hist.length < 2) return;
+  if (dir > 0 && !ED.redo.length) return;
+  if (dir < 0) ED.redo.push(ED.hist.pop());
+  else ED.hist.push(ED.redo.pop());
+  EPL = JSON.parse(ED.hist[ED.hist.length - 1]);
+  plHerr(null);
+  PLH.obj = -1;
+  PL_COL.clear();
+  if (EPL && (PL_SHA !== EPL.sha || !PL_MOD)) plCargarGuardado();
+  else {
+    if (!EPL) PL_MOD = PL_SHA = null;
+    plPreparar();
+  }
+  edEstado();
+  plMostrar();
+  toast(dir < 0 ? "Cambio deshecho en el editor" : "Cambio rehecho en el editor");
+}
+// Botones del editor: deshacer y rehacer, y Aplicar solo con cambios sin aplicar
+function edEstado() {
+  const sucio = edSnap() !== ED.base;
+  $("edUndo").disabled = ED.hist.length < 2;
+  $("edRedo").disabled = !ED.redo.length;
+  $("edAplicar").disabled = !sucio;
+  $("edSucio").hidden = !sucio;
+}
+// Pasa la copia del editor al proyecto (se guarda y entra al historial de deshacer del proyecto)
+function edAplicar() {
+  if (edSnap() === ED.base) return;
+  PLANO = EPL ? clon(EPL) : null;
+  ED.base = edSnap();
+  saveDraft();
+  histPush();
+  plLimpiarArchivos();
+  edEstado();
+  edInfo();
+  toast("Cambios del diseño aplicados al proyecto");
+}
+function edCancelar() {
+  if (edSnap() === ED.base) return edCerrar();
+  confirmar(
+    "¿Cerrar sin aplicar los cambios?",
+    "<p>Los cambios del editor que no aplicó (plano, escala, capas o plantas) se pierden. El proyecto queda como estaba la última vez que pulsó <b>Aplicar</b>.</p>",
+    "Cerrar sin aplicar",
+    ok => {
+      if (ok) edCerrar();
+    }
+  );
+}
+// El proyecto cambió (abrir un proyecto, deshacer en el espacio de trabajo): se actualiza la pestaña Diseño
+function planoAplicado() {
+  if (!ED.abierto) edInfo();
+}
+// Pestaña Diseño del espacio de trabajo: el plano del proyecto, en dos líneas
+function edInfo() {
+  const P = PLANO,
+    n = P ? P.plantas.length : 0;
+  $("plInfo").innerHTML = P
+    ? `<b title="${esc(P.nombre)}">${esc(P.nombre)}</b><span>${n ? `${n} planta${n > 1 ? "s" : ""}` : "Sin plantas encuadradas"} · ${plNomUnidad(P.f)}</span>`
+    : `<b>Sin plano de arquitectura</b><span>Ábralo en el editor de diseño</span>`;
+}
+const plNomUnidad = f =>
+  f === 1 ? "metros" : f === 0.01 ? "centímetros" : f === 0.001 ? "milímetros" : `1 u = ${fmt(f, f < 0.01 ? 4 : 3)} m`;
 
 /* ---------- Preparación del dibujo: trazos agrupados por estilo, textos e índice de enganche ---------- */
 function plPreparar() {
   PL_GR = PL_TX = PL_IDX = null;
-  if (!PL_MOD) return;
+  PLH.sobre = -1;
+  if (!PL_MOD || !EPL) return;
   const m = PL_MOD,
-    ocultas = new Set(PLANO.ocultas),
+    ocultas = new Set(EPL.ocultas),
     O = plOrigen(),
     grupos = new Map();
   for (let i = 0; i < m.trazos.length; i++) {
@@ -203,6 +308,7 @@ function plPreparar() {
   PL_TX = m.textos.filter(t => !ocultas.has(t.capa));
   if (!m.idx) m.idx = plIndice(m);
   PL_IDX = m.idx;
+  if (PLH.obj >= 0 && ocultas.has(m.trazos[PLH.obj].capa)) PLH.obj = -1;
 }
 const plOrigen = () => {
   const e = PL_MOD.ext;
@@ -219,29 +325,22 @@ function plIndice(m) {
     const k = clave(m.snap[i], m.snap[i + 1]);
     (pts.get(k) || pts.set(k, []).get(k)).push(i);
   }
+  // Cada trazo se anota en las celdas por donde pasa: se recorre cada tramo a pasos de media celda (así un muro
+  // largo o una diagonal ocupan solo las celdas de su recorrido, no todo el rectángulo que los contiene)
   m.trazos.forEach((t, i) => {
     if (t.k !== "l") return;
-    let a = Infinity,
-      b = Infinity,
-      c = -Infinity,
-      d = -Infinity;
-    for (let j = 0; j < t.p.length; j += 2) {
-      a = Math.min(a, t.p[j]);
-      c = Math.max(c, t.p[j]);
-      b = Math.min(b, t.p[j + 1]);
-      d = Math.max(d, t.p[j + 1]);
+    const p = t.p,
+      celdas = new Set(),
+      n = t.c ? p.length : p.length - 2;
+    for (let j = 0; j < n; j += 2) {
+      const ax = p[j],
+        ay = p[j + 1],
+        bx = p[(j + 2) % p.length],
+        by = p[(j + 3) % p.length],
+        pasos = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (tam / 2)));
+      for (let s = 0; s <= pasos; s++) celdas.add(clave(ax + ((bx - ax) * s) / pasos, ay + ((by - ay) * s) / pasos));
     }
-    const i0 = Math.floor((a - e[0]) / tam),
-      i1 = Math.floor((c - e[0]) / tam),
-      j0 = Math.floor((b - e[1]) / tam),
-      j1 = Math.floor((d - e[1]) / tam);
-    // Los trazos muy grandes (marcos, ejes) se indexan en sus celdas hasta un límite
-    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 4000) return;
-    for (let x = i0; x <= i1; x++)
-      for (let y = j0; y <= j1; y++) {
-        const k = x + "," + y;
-        (trz.get(k) || trz.set(k, []).get(k)).push(i);
-      }
+    celdas.forEach(k => (trz.get(k) || trz.set(k, []).get(k)).push(i));
   });
   return { tam, pts, trz, x0: e[0], y0: e[1] };
 }
@@ -303,7 +402,7 @@ function plZoom(f, X = plW() / 2, Y = plH() / 2) {
   PLV.cy = y - (plH() / 2 - Y) / PLV.s;
   plDibujar();
 }
-// La última vista de este plano, para volver a ella al abrir el proyecto
+// La última vista de este plano, para volver a ella al abrir el editor
 const plClaveVista = () => "jmg-electric-plano-vista-" + PL_SHA;
 function plVistaGuardada() {
   try {
@@ -363,7 +462,8 @@ function plTema() {
   PL_COL.clear();
 }
 function plColor(h) {
-  const k = h + (PLANO && PLANO.tenue ? "t" : "");
+  const tenue = !!(EPL && EPL.tenue),
+    k = h + (tenue ? "t" : "");
   let c = PL_COL.get(k);
   if (c) return c;
   let v = plRgb(h);
@@ -372,7 +472,7 @@ function plColor(h) {
   if (!PL_OSCURO && l > 0.8) v = [38, 48, 60];
   else if (!PL_OSCURO && l > 0.55) v = v.map(x => x * 0.62);
   else if (PL_OSCURO && l < 0.18) v = v.map(x => x + (200 - x) * 0.7);
-  if (PLANO && PLANO.tenue) {
+  if (tenue) {
     const f = plRgb(PL_FONDO);
     v = v.map((x, i) => x + (f[i] - x) * 0.62);
   }
@@ -452,20 +552,22 @@ function plPintar() {
   }
 }
 
-/* ---------- Lienzo superior: enganche, mediciones, encuadres y plantas ---------- */
-const plFm = v => fmt(v * (PLANO ? PLANO.f : 1), 2);
+/* ---------- Lienzo superior: selección, enganche, mediciones, encuadres y plantas ---------- */
+const plFm = v => fmt(v * (EPL ? EPL.f : 1), 2);
 function plSobreDibujar() {
   const g = plSobre.getContext("2d"),
     d = plDpr();
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, plW(), plH());
-  if (!PL_MOD) return;
+  if (!PL_MOD || !EPL) return;
   const acento = PL_OSCURO ? "#f0c060" : "#c77d2e",
-    azul = PL_OSCURO ? "#8fc1f0" : "#14304f";
+    azul = PL_OSCURO ? "#8fc1f0" : "#14304f",
+    // Selección en azul vivo, como en los programas de dibujo, para distinguirla de las líneas del plano
+    selc = PL_OSCURO ? "#5fb0ff" : "#1f6fd6";
   g.lineWidth = 1.5 * d;
   g.font = `600 ${11.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
   // Plantas encuadradas
-  (PLANO.plantas || []).forEach(p => {
+  EPL.plantas.forEach(p => {
     const [a, b] = plAPant(p.x0, p.y1),
       [c, e] = plAPant(p.x1, p.y0);
     g.setLineDash([6 * d, 4 * d]);
@@ -474,6 +576,35 @@ function plSobreDibujar() {
     g.setLineDash([]);
     plEtiqueta(g, p.n, a + 4 * d, b + 4 * d, azul, "left", "top");
   });
+  // Objeto bajo el cursor en Seleccionar: resaltado suave, para saber qué se elegiría con un clic
+  if (PLH.sobre >= 0 && PLH.sobre !== PLH.obj && !PLH.h) {
+    const t = PL_MOD.trazos[PLH.sobre];
+    g.globalAlpha = 0.6;
+    g.strokeStyle = selc;
+    g.lineWidth = 2.5 * d;
+    plTrazo(g, t.p, t.c);
+    g.globalAlpha = 1;
+  }
+  // Objeto seleccionado: resaltado con sus vértices (está bloqueado: no se mueve)
+  if (PLH.obj >= 0 && !PLH.h) {
+    const t = PL_MOD.trazos[PLH.obj];
+    g.strokeStyle = selc;
+    g.lineWidth = 3 * d;
+    g.setLineDash([8 * d, 4 * d]);
+    plTrazo(g, t.p, t.c);
+    g.setLineDash([]);
+    // Pinzamientos en los vértices (en las curvas, solo en los extremos)
+    const curva = /ARC|CIRCLE|ELLIPSE|SPLINE/.test(t.ent),
+      paso = curva ? Math.max(2, t.p.length - 2) : 2;
+    g.fillStyle = selc;
+    g.strokeStyle = PL_OSCURO ? "#111922" : "#fff";
+    g.lineWidth = 1.2 * d;
+    for (let i = 0; i < t.p.length; i += paso) {
+      const [X, Y] = plAPant(t.p[i], t.p[i + 1]);
+      g.fillRect(X - 4 * d, Y - 4 * d, 8 * d, 8 * d);
+      g.strokeRect(X - 4 * d, Y - 4 * d, 8 * d, 8 * d);
+    }
+  }
   // Objetos elegidos con Longitud de objetos
   if (PLH.sel.length) {
     g.strokeStyle = acento;
@@ -574,7 +705,7 @@ function plEnganche(x, y) {
   if (n > 8) return null;
   const ci = Math.floor((x - I.x0) / I.tam),
     cj = Math.floor((y - I.y0) / I.tam),
-    oc = new Set(PLANO.ocultas),
+    oc = new Set(EPL.ocultas),
     sn = PL_MOD.snap;
   let mejor = null,
     md = r;
@@ -608,7 +739,7 @@ function plPuntoActual() {
 function plObjeto(x, y, r) {
   const I = PL_IDX;
   if (!I) return -1;
-  const oc = new Set(PLANO.ocultas),
+  const oc = new Set(EPL.ocultas),
     n = Math.ceil(r / I.tam),
     ci = Math.floor((x - I.x0) / I.tam),
     cj = Math.floor((y - I.y0) / I.tam),
@@ -653,6 +784,15 @@ const plLargo = t => {
   if (t.c && t.p.length > 4) l += Math.hypot(t.p[0] - t.p[t.p.length - 2], t.p[1] - t.p[t.p.length - 1]);
   return l;
 };
+// Área encerrada por un trazo cerrado (fórmula del polígono), en unidades del dibujo al cuadrado
+const plArea = t => {
+  let a = 0;
+  for (let j = 0; j < t.p.length; j += 2) {
+    const k = (j + 2) % t.p.length;
+    a += t.p[j] * t.p[k + 1] - t.p[k] * t.p[j + 1];
+  }
+  return Math.abs(a) / 2;
+};
 
 /* ---------- Herramientas: distancia, recorrido, longitud de objetos, escala y plantas ---------- */
 function plHerr(h) {
@@ -662,9 +802,11 @@ function plHerr(h) {
   PLH.med = null;
   PLH.eng = null;
   plPedir(null);
-  document.querySelectorAll("[data-pl]").forEach(b => b.classList.toggle("on", !!h && b.dataset.pl === h));
+  // Sin herramienta, el modo es Seleccionar
+  document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
   plLienzo.classList.toggle("con-herr", !!h);
   plOrden();
+  edProps();
   plSobreDibujar();
 }
 // Indicación de la herramienta, como la línea de comandos de los programas de dibujo
@@ -751,11 +893,11 @@ function plPunto(p) {
     plPedir("Medida real entre los dos puntos (m)", plFm(l), v => {
       const real = parseFloat(v.replace(",", "."));
       if (!(real > 0)) return toast("Escriba la medida real en metros, mayor que cero");
-      PLANO.f = real / l;
-      PLANO.de = "manual";
+      EPL.f = real / l;
+      EPL.de = "manual";
       plHerr(null);
-      plCambio();
-      toast(`Escala comprobada: 1 unidad del dibujo = ${fmt(PLANO.f, PLANO.f < 0.01 ? 4 : 3)} m`);
+      edCambio();
+      toast(`Escala comprobada: 1 unidad del dibujo = ${fmt(EPL.f, EPL.f < 0.01 ? 4 : 3)} m`);
     });
   } else if (h === "planta" && n === 2) {
     const [a, b] = PLH.pts;
@@ -764,11 +906,11 @@ function plPunto(p) {
       return plOrden();
     }
     PLH.med = true;
-    const k = (PLANO.plantas || []).length + 1;
+    const k = EPL.plantas.length + 1;
     plOrden(`<b>Encuadrar planta</b> · ${plFm(Math.abs(a[0] - b[0]))} × ${plFm(Math.abs(a[1] - b[1]))} m`);
     plPedir("Nombre de la planta", `${ORD(k)} piso`, v => {
       if (!v) return toast("Escriba un nombre para la planta");
-      PLANO.plantas.push({
+      EPL.plantas.push({
         n: v.replace(/[<>]/g, "").slice(0, 60),
         x0: Math.min(a[0], b[0]),
         y0: Math.min(a[1], b[1]),
@@ -776,8 +918,8 @@ function plPunto(p) {
         y1: Math.max(a[1], b[1])
       });
       plHerr(null);
-      plCambio();
-      toast("Planta guardada: haga clic en su nombre, en el panel Plantas, para verla");
+      edCambio();
+      toast("Planta encuadrada: haga clic en su nombre, en el panel Plantas, para verla");
     });
   } else plOrden();
   plSobreDibujar();
@@ -803,6 +945,83 @@ function plTerminarRecorrido() {
   );
   plSobreDibujar();
 }
+// Seleccionar: un clic en una línea la elige y muestra sus propiedades; en un lugar vacío, la suelta
+function plSeleccionar(p) {
+  PLH.obj = plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+  edProps();
+  plSobreDibujar();
+}
+
+/* ---------- Panel de propiedades: el objeto seleccionado o, si no hay, el plano ---------- */
+const PL_ENT = {
+  LINE: "Línea",
+  LWPOLYLINE: "Polilínea",
+  POLYLINE: "Polilínea",
+  ARC: "Arco",
+  CIRCLE: "Círculo",
+  ELLIPSE: "Elipse",
+  SPLINE: "Curva spline",
+  LEADER: "Directriz"
+};
+const PL_VER = {
+  AC1009: "R12",
+  AC1012: "R13",
+  AC1014: "R14",
+  AC1015: "2000",
+  AC1018: "2004",
+  AC1021: "2007",
+  AC1024: "2010",
+  AC1027: "2013",
+  AC1032: "2018"
+};
+function edProps() {
+  const c = $("edPropC"),
+    m = PL_MOD;
+  const fila = (k, v) => `<div class="ed-pf"><span>${k}</span><b>${v}</b></div>`;
+  if (!m || !EPL) {
+    c.innerHTML = `<p class="pl-nota">Abra el plano de arquitectura para ver sus propiedades.</p>`;
+    return;
+  }
+  if (PLH.obj < 0 || PLH.h) {
+    const oc = new Set(EPL.ocultas),
+      capas = Object.keys(m.capas).filter(n => m.capas[n].n > 0);
+    c.innerHTML =
+      `<div class="ed-pt">Plano de arquitectura</div>` +
+      fila("Archivo", `<span title="${esc(EPL.nombre)}">${esc(EPL.nombre)}</span>`) +
+      fila("Formato", `DXF · AutoCAD ${PL_VER[m.version] || m.version}`) +
+      fila("Tamaño", `${fmt(EPL.kb / 1024, 1)} MB`) +
+      fila("Unidad", `${plNomUnidad(EPL.f)}<small>${PL_DE[EPL.de] || ""}</small>`) +
+      fila("Capas", `${capas.filter(n => !oc.has(n)).length} visibles de ${capas.length}`) +
+      fila("Objetos", m.nEnt.toLocaleString("es-PE")) +
+      fila("Bloques", m.nBloques) +
+      fila("Plantas", EPL.plantas.length || "—") +
+      `<p class="pl-nota">Haga clic en una línea del plano para ver sus propiedades. La arquitectura es una referencia: se consulta y se mide, pero no se mueve.</p>`;
+    return;
+  }
+  const t = m.trazos[PLH.obj],
+    L = plLargo(t),
+    curva = /ARC|CIRCLE|ELLIPSE|SPLINE/.test(t.ent),
+    totCapa = m.trazos.filter(x => x.capa === t.capa && x.k === "l").reduce((s, x) => s + plLargo(x), 0);
+  c.innerHTML =
+    `<div class="ed-pt">${PL_ENT[t.ent] || t.ent}${t.bl ? `<small>en el bloque ${esc(t.bl)}</small>` : ""}</div>` +
+    fila("Capa", `<i class="ed-sw" style="background:${plColor(t.col)}"></i>${esc(t.capa)}`) +
+    fila("Tipo de línea", t.lt ? esc(t.lt.toLowerCase()) : "continua") +
+    fila(t.ent === "CIRCLE" ? "Perímetro" : "Longitud", `${plFm(L)} m`) +
+    (t.c && t.p.length >= 6 ? fila("Área", `${fmt(plArea(t) * EPL.f * EPL.f, 2)} m²`) : "") +
+    (curva ? "" : fila("Vértices", t.p.length / 2 - (t.c && t.ent !== "LINE" ? 1 : 0))) +
+    fila("Cerrado", t.c ? "sí" : "no") +
+    fila("Toda la capa", `${plFm(totCapa)} m`) +
+    `<p class="pl-nota ed-bloq"><b>Bloqueada:</b> la arquitectura es una referencia del plano del arquitecto y no se mueve.</p>` +
+    `<div class="ed-pb"><button type="button" class="btn sec sm" data-pl-oc="${esc(t.capa)}">Ocultar la capa</button></div>`;
+}
+$("edPropC").addEventListener("click", e => {
+  const b = e.target.closest("[data-pl-oc]");
+  if (!b) return;
+  EPL.ocultas = [...new Set([...EPL.ocultas, b.dataset.plOc])];
+  PLH.obj = -1;
+  plPreparar();
+  edCambio();
+});
 
 /* ---------- Mouse y teclado sobre el plano ---------- */
 plLienzo.addEventListener(
@@ -819,7 +1038,8 @@ plLienzo.addEventListener(
 plLienzo.addEventListener("pointerdown", e => {
   if (!PL_MOD || e.target.closest(".pl-cmd")) return;
   const [X, Y] = plMouse(e);
-  // Rueda presionada: desplazar (doble clic con la rueda: ajustar a la pantalla); izquierdo sin herramienta, también
+  // Rueda presionada: desplazar (doble clic con la rueda: ajustar a la pantalla); izquierdo en Seleccionar:
+  // arrastrar desplaza y un clic sin mover selecciona
   if (e.button === 1 || (e.button === 0 && !PLH.h)) {
     e.preventDefault();
     if (e.button === 1) {
@@ -830,9 +1050,8 @@ plLienzo.addEventListener("pointerdown", e => {
       }
       plLienzo.ultRueda = t;
     }
-    PLH.pan = { X, Y, cx: PLV.cx, cy: PLV.cy, mov: false };
+    PLH.pan = { X, Y, cx: PLV.cx, cy: PLV.cy, mov: false, b: e.button };
     plLienzo.setPointerCapture(e.pointerId);
-    plLienzo.classList.add("moviendo");
   } else if (e.button === 0 && PLH.h) {
     PLH.abajo = [X, Y];
   }
@@ -841,7 +1060,11 @@ plLienzo.addEventListener("pointermove", e => {
   if (!PL_MOD) return;
   const [X, Y] = plMouse(e);
   if (PLH.pan) {
-    if (Math.hypot(X - PLH.pan.X, Y - PLH.pan.Y) > 3) PLH.pan.mov = true;
+    if (!PLH.pan.mov && Math.hypot(X - PLH.pan.X, Y - PLH.pan.Y) > 4 * plDpr()) {
+      PLH.pan.mov = true;
+      plLienzo.classList.add("moviendo");
+    }
+    if (!PLH.pan.mov) return;
     PLV.cx = PLH.pan.cx - (X - PLH.pan.X) / PLV.s;
     PLV.cy = PLH.pan.cy + (Y - PLH.pan.Y) / PLV.s;
     plDibujar();
@@ -852,12 +1075,20 @@ plLienzo.addEventListener("pointermove", e => {
   PLH.eng = PLH.h && PLH.h !== "obj" ? plEnganche(p[0], p[1]) : null;
   const q = plPuntoActual() || p;
   $("plXY").textContent = `X ${plFm(q[0])}   Y ${plFm(q[1])} m`;
-  if (PLH.h) plSobreDibujar();
+  if (PLH.h) return plSobreDibujar();
+  const i = plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+  if (i !== PLH.sobre) {
+    PLH.sobre = i;
+    plSobreDibujar();
+  }
 });
 plLienzo.addEventListener("pointerup", e => {
   if (PLH.pan) {
+    const pan = PLH.pan;
     PLH.pan = null;
     plLienzo.classList.remove("moviendo");
+    // Un clic sin arrastrar, en Seleccionar: elige la línea bajo el cursor
+    if (!pan.mov && pan.b === 0 && !PLH.h) plSeleccionar(plADib(pan.X, pan.Y));
     return;
   }
   if (e.button !== 0 || !PLH.h || !PLH.abajo) return;
@@ -874,6 +1105,7 @@ plLienzo.addEventListener("pointerup", e => {
 });
 plLienzo.addEventListener("pointerleave", () => {
   PLH.cur = PLH.eng = null;
+  PLH.sobre = -1;
   $("plXY").textContent = "";
   plSobreDibujar();
 });
@@ -884,41 +1116,73 @@ plLienzo.addEventListener("dblclick", e => {
   }
 });
 addEventListener("keydown", e => {
-  if (!PL_VIS || $("ws").hidden || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  if (e.key === "Escape" && PLH.h) {
+  if (!ED.abierto || !$("cfmDlg").hidden) return;
+  const k = e.key.toLowerCase();
+  // Deshacer y rehacer del editor (el del proyecto no actúa mientras el editor está abierto)
+  if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "y")) {
+    if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
     e.preventDefault();
-    // En un recorrido sin terminar, Esc lo termina; si no, sale de la herramienta
+    return edHist(k === "y" || e.shiftKey ? 1 : -1);
+  }
+  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    // En un recorrido sin terminar, Esc lo termina; con otra herramienta, sale de ella; si no, suelta la selección
     if (PLH.h === "rec" && !PLH.med && PLH.pts.length > 1) return plTerminarRecorrido();
-    plHerr(null);
+    if (PLH.h) return plHerr(null);
+    if (PLH.obj >= 0) {
+      PLH.obj = -1;
+      edProps();
+      plSobreDibujar();
+    }
   } else if (e.key === "Enter" && PLH.h === "rec") {
     e.preventDefault();
     plTerminarRecorrido();
   } else if (e.key === "F3" || e.key === "F8") {
     e.preventDefault();
-    const c = $(e.key === "F3" ? "plSnap" : "plOrto");
-    c.checked = !c.checked;
-    toast(`${e.key === "F3" ? "Enganche" : "Orto"} ${c.checked ? "activado" : "desactivado"}`);
-    plSobreDibujar();
+    edAlternar(e.key === "F3" ? "plSnap" : "plOrto");
   }
 });
 new ResizeObserver(() => {
-  if (PL_VIS && plTam()) plDibujar();
+  if (ED.abierto && plTam()) plDibujar();
 }).observe(plLienzo);
-// Arrastrar un archivo DXF sobre el panel
+// Arrastrar un archivo DXF sobre el editor
 ["dragover", "drop"].forEach(t =>
-  $("plano").addEventListener(t, e => {
+  $("editor").addEventListener(t, e => {
     if (!e.dataTransfer || ![...e.dataTransfer.types].includes("Files")) return;
     e.preventDefault();
     if (t === "drop") plAbrir(e.dataTransfer.files[0]);
   })
 );
+// Enganche y orto: casilla en la cinta (Medir) y botón en la barra de estado, siempre iguales
+function edAlternar(id, aviso = true) {
+  const c = $(id);
+  c.checked = !c.checked;
+  edBotonesEstado();
+  if (aviso) toast(`${id === "plSnap" ? "Enganche" : "Orto"} ${c.checked ? "activado" : "desactivado"}`);
+  plSobreDibujar();
+}
+function edBotonesEstado() {
+  document.querySelectorAll("[data-edtg]").forEach(b => b.setAttribute("aria-pressed", $(b.dataset.edtg).checked));
+}
+["plSnap", "plOrto"].forEach(id =>
+  $(id).addEventListener("change", () => {
+    edBotonesEstado();
+    plSobreDibujar();
+  })
+);
 
-/* ---------- Panel lateral: plantas y capas ---------- */
+/* ---------- Panel izquierdo: plantas y capas ---------- */
 function plPanel() {
   const m = PL_MOD;
-  $("plLado").hidden = !m || plPanel.oculto;
-  if (!m) return;
-  const P = PLANO.plantas || [];
+  $("plLado").hidden = plPanel.oculto;
+  $("edProp").hidden = edProps.oculto;
+  if (!m || !EPL) {
+    $("plNPl").textContent = $("plNCap").textContent = "";
+    $("plPlantas").innerHTML = $("plCapas").innerHTML = "";
+    return;
+  }
+  const P = EPL.plantas;
   $("plNPl").textContent = P.length || "";
   $("plPlantas").innerHTML = P.length
     ? P.map(
@@ -926,7 +1190,7 @@ function plPanel() {
           `<div class="pl-fila" data-plp="${i}"><button type="button" class="pl-nom" data-plv="${i}" title="Ver la planta">${esc(p.n)}</button><span class="pl-dim">${plFm(p.x1 - p.x0)} × ${plFm(p.y1 - p.y0)} m</span><button type="button" class="pl-x" data-plq="${i}" title="Quitar la planta (el dibujo no cambia)" aria-label="Quitar la planta">×</button></div>`
       ).join("")
     : `<p class="pl-nota">Encuadre cada planta del edificio con <b>Encuadrar planta</b>: así se ve con un clic y, en la etapa de diseño, cada piso tendrá la suya.</p>`;
-  const oc = new Set(PLANO.ocultas),
+  const oc = new Set(EPL.ocultas),
     b = ($("plBusca").value || "").trim().toLowerCase(),
     // Solo las capas que dibujan algo
     nombres = Object.keys(m.capas)
@@ -945,128 +1209,151 @@ $("plLado").addEventListener("change", e => {
   const c = e.target.closest("[data-plc]");
   if (!c) return;
   const n = c.dataset.plc,
-    oc = new Set(PLANO.ocultas);
+    oc = new Set(EPL.ocultas);
   if (c.checked) oc.delete(n);
   else oc.add(n);
-  PLANO.ocultas = [...oc];
+  EPL.ocultas = [...oc];
   plPreparar();
-  plCambio();
+  edCambio();
 });
 $("plLado").addEventListener("click", e => {
   const v = e.target.closest("[data-plv]"),
     q = e.target.closest("[data-plq]");
   if (v) {
-    const p = PLANO.plantas[+v.dataset.plv];
+    const p = EPL.plantas[+v.dataset.plv];
     plVer(p.x0, p.y0, p.x1, p.y1);
   } else if (q) {
     const i = +q.dataset.plq;
     confirmar(
       "¿Quitar la planta?",
-      `<p>Se quita el encuadre <b>${esc(PLANO.plantas[i].n)}</b>. El plano de arquitectura no cambia y puede volver a encuadrarla.</p>`,
+      `<p>Se quita el encuadre <b>${esc(EPL.plantas[i].n)}</b>. El plano de arquitectura no cambia y puede volver a encuadrarla.</p>`,
       "Quitar",
       ok => {
         if (!ok) return;
-        PLANO.plantas.splice(i, 1);
-        plCambio();
+        EPL.plantas.splice(i, 1);
+        edCambio();
       }
     );
   }
 });
 $("plBusca").addEventListener("input", plPanel);
 
-/* ---------- Mostrar la pestaña Diseño ---------- */
+/* ---------- Mostrar el editor ---------- */
 function plMostrar() {
   const m = PL_MOD,
-    hay = !!PLANO;
-  $("plVacio").hidden = !!m;
-  if (!m) {
+    hay = !!EPL;
+  $("plVacio").hidden = !!(m && hay);
+  if (!(m && hay)) {
     $("plVacioT").innerHTML = hay
-      ? `El plano <b>${esc(PLANO.nombre)}</b> no está guardado en este navegador`
+      ? `El plano <b>${esc(EPL.nombre)}</b> no está guardado en este navegador`
       : "Abra el plano de arquitectura en DXF";
     $("plVacioS").innerHTML = hay
       ? "Ábralo de nuevo para continuar: se conservan la escala, las capas ocultas y las plantas del proyecto."
       : "Desde AutoCAD o cualquier programa de dibujo, con sus medidas reales. También puede arrastrar el archivo aquí.";
   }
-  document.querySelectorAll("[data-pl-req]").forEach(b => (b.disabled = !m));
-  $("plTenue").checked = !!(PLANO && PLANO.tenue);
+  document.querySelectorAll("#editor [data-pl-req]").forEach(b => (b.disabled = !(m && hay)));
+  $("plTenue").checked = !!(EPL && EPL.tenue);
   const u = $("plUnidad");
-  u.disabled = !m;
-  if (PLANO) {
-    const o = [...u.options].find(x => Math.abs(+x.value - PLANO.f) < 1e-12);
+  u.disabled = !(m && hay);
+  if (EPL) {
+    const o = [...u.options].find(x => Math.abs(+x.value - EPL.f) < 1e-12);
     if (o) u.value = o.value;
     else {
       u.options[3].hidden = false;
-      u.options[3].textContent = `1 u = ${fmt(PLANO.f, PLANO.f < 0.01 ? 4 : 3)} m`;
+      u.options[3].textContent = `1 u = ${fmt(EPL.f, EPL.f < 0.01 ? 4 : 3)} m`;
       u.value = "x";
     }
   }
-  $("plEstadoU").textContent = PLANO
-    ? `Unidad: ${PLANO.f === 1 ? "metros" : PLANO.f === 0.01 ? "centímetros" : PLANO.f === 0.001 ? "milímetros" : `1 u = ${fmt(PLANO.f, 4)} m`} · ${PL_DE[PLANO.de] || ""}`
-    : "";
-  $("plEstadoA").textContent = m
-    ? `${PLANO.nombre} · ${Object.keys(m.capas).length} capas · ${m.nEnt.toLocaleString("es-PE")} objetos`
-    : "";
+  $("plEstadoU").textContent = EPL ? `Unidad: ${plNomUnidad(EPL.f)} · ${PL_DE[EPL.de] || ""}` : "";
+  $("plEstadoA").textContent =
+    m && hay ? `${EPL.nombre} · ${Object.keys(m.capas).length} capas · ${m.nEnt.toLocaleString("es-PE")} objetos` : "";
+  edBotonesEstado();
   plPanel();
-  if (PL_VIS) {
+  edProps();
+  if (ED.abierto) {
     plTam();
     plDibujar();
   }
 }
-// La pestaña Diseño de la cinta muestra el plano en el panel central; las demás, los resultados
-function plPestana(on) {
-  PL_VIS = on;
-  $("ws").classList.toggle("en-diseno", on);
-  $("plano").hidden = !on;
-  if (!on) return plHerr(null);
-  plTema();
-  if (PLANO && !PL_MOD) plCargarGuardado();
-  plMostrar();
-}
-document.querySelector("#ws .ap-tabs").addEventListener("click", e => {
-  const t = e.target.closest("[data-tab-r]");
-  if (t) plPestana(t.dataset.tabR === "diseno");
-});
 new MutationObserver(() => {
-  if (!PL_VIS) return;
+  if (!ED.abierto) return;
   plTema();
   plPanel();
   plDibujar();
 }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-paleta"] });
 
-/* ---------- Cinta: acciones de la pestaña Diseño ---------- */
+/* ---------- Pestaña Diseño del espacio de trabajo: abre el editor ---------- */
 $("ws").addEventListener("click", e => {
+  const b = e.target.closest("#ws > .ap-ribbon [data-pl]");
+  if (!b) return;
+  if (b.dataset.pl === "editor") edAbrir(false);
+  else if (b.dataset.pl === "abrirEd") edAbrir(true);
+});
+
+/* ---------- Editor: barra de título, pestañas y cinta ---------- */
+$("editor").addEventListener("click", e => {
+  const ed = e.target.closest("[data-ed]"),
+    tab = e.target.closest("[data-tab-e]"),
+    tg = e.target.closest("[data-edtg]");
+  if (ed && !ed.disabled) {
+    const a = ed.dataset.ed;
+    if (a === "undo") edHist(-1);
+    else if (a === "redo") edHist(1);
+    else if (a === "aplicar") edAplicar();
+    else if (a === "aceptar") {
+      edAplicar();
+      edCerrar();
+    } else if (a === "cancelar") edCancelar();
+    return;
+  }
+  if (tab) {
+    $("editor")
+      .querySelectorAll("[data-tab-e]")
+      .forEach(t => t.classList.toggle("on", t === tab));
+    $("editor")
+      .querySelectorAll("[data-rib-e]")
+      .forEach(r => (r.hidden = r.dataset.ribE !== tab.dataset.tabE));
+    return;
+  }
+  if (tg) return edAlternar(tg.dataset.edtg, false);
   const b = e.target.closest("[data-pl]");
   if (!b || b.disabled) return;
   const a = b.dataset.pl;
   if (a === "abrir") return $("plArchivo").click();
-  if (!PL_MOD && a !== "quitar") return toast("Primero abra el plano de arquitectura en DXF");
+  if (a === "panel" || a === "props") {
+    if (a === "panel") plPanel.oculto = !plPanel.oculto;
+    else edProps.oculto = !edProps.oculto;
+    plPanel();
+    plTam();
+    return plDibujar();
+  }
+  if (a === "sel") return plHerr(null);
   if (a === "quitar") {
-    if (!PLANO) return toast("El proyecto no tiene plano de arquitectura");
-    confirmar(
+    if (!EPL) return toast("El proyecto no tiene plano de arquitectura");
+    return confirmar(
       "¿Quitar el plano de arquitectura?",
-      `<p>El proyecto deja de usar <b>${esc(PLANO.nombre)}</b> y se pierden su escala, capas ocultas y plantas encuadradas. El archivo DXF de su computadora no cambia; puede volver a abrirlo.</p>`,
+      `<p>El diseño deja de usar <b>${esc(EPL.nombre)}</b> y se pierden su escala, capas ocultas y plantas encuadradas (al aplicar los cambios). El archivo DXF de su computadora no cambia; puede volver a abrirlo.</p>`,
       "Quitar",
       ok => {
         if (!ok) return;
-        PLANO = null;
+        EPL = null;
         PL_MOD = PL_SHA = null;
+        PLH.obj = -1;
         plHerr(null);
         plPreparar();
-        plCambio();
+        edCambio();
       }
     );
-  } else if (a === "ajustar") plAjustar();
+  }
+  if (!PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
+  if (a === "ajustar") plAjustar();
   else if (a === "acercar") plZoom(1.5);
   else if (a === "alejar") plZoom(1 / 1.5);
-  else if (a === "panel") {
-    plPanel.oculto = !plPanel.oculto;
-    plPanel();
-    plTam();
-    plDibujar();
-  } else if (a === "todas" || a === "ninguna") {
-    PLANO.ocultas = a === "todas" ? [] : Object.keys(PL_MOD.capas);
+  else if (a === "todas" || a === "ninguna") {
+    EPL.ocultas = a === "todas" ? [] : Object.keys(PL_MOD.capas);
+    PLH.obj = -1;
     plPreparar();
-    plCambio();
+    edCambio();
   } else if (PL_NOMH[a]) plHerr(PLH.h === a ? null : a);
 });
 $("plArchivo").addEventListener("change", e => {
@@ -1075,16 +1362,16 @@ $("plArchivo").addEventListener("change", e => {
 });
 $("plVacioB").addEventListener("click", () => $("plArchivo").click());
 $("plTenue").addEventListener("change", e => {
-  if (!PLANO) return;
-  PLANO.tenue = e.target.checked;
+  if (!EPL) return;
+  EPL.tenue = e.target.checked;
   PL_COL.clear();
-  plCambio();
+  edCambio();
 });
 $("plUnidad").addEventListener("change", e => {
-  if (!PLANO || e.target.value === "x") return;
-  PLANO.f = +e.target.value;
-  PLANO.de = "manual";
-  plCambio();
+  if (!EPL || e.target.value === "x") return;
+  EPL.f = +e.target.value;
+  EPL.de = "manual";
+  edCambio();
   toast("Unidad del dibujo cambiada: compruébela midiendo una cota conocida");
 });
-["plSnap", "plOrto"].forEach(id => $(id).addEventListener("change", () => plSobreDibujar()));
+edInfo();

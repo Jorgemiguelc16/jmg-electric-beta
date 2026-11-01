@@ -252,7 +252,8 @@ function histGo(dir) {
   toast(dir < 0 ? "Cambio deshecho" : "Cambio rehecho");
 }
 addEventListener("keydown", e => {
-  if ($("ws").hidden || !(e.ctrlKey || e.metaKey)) return;
+  // Con el editor de diseño abierto, Ctrl+Z deshace en el editor (js/plano.js)
+  if ($("ws").hidden || !(e.ctrlKey || e.metaKey) || document.body.classList.contains("ed-on")) return;
   const k = e.key.toLowerCase();
   if (k === "z" && !e.shiftKey) {
     e.preventDefault();
@@ -289,8 +290,9 @@ $("ws").addEventListener("click", e => {
   const tr = e.target.closest("[data-tab-r]");
   if (tr) {
     RIB = tr.dataset.tabR;
-    document.querySelectorAll(".ap-tabs .tb").forEach(b => b.classList.toggle("on", b === tr));
-    document.querySelectorAll(".rib").forEach(x => (x.hidden = x.dataset.rib !== RIB));
+    // Solo la cinta del espacio de trabajo (el editor de diseño tiene la suya, js/plano.js)
+    document.querySelectorAll("#ws > .ap-tabs .tb").forEach(b => b.classList.toggle("on", b === tr));
+    document.querySelectorAll("#ws > .ap-ribbon > .rib").forEach(x => (x.hidden = x.dataset.rib !== RIB));
     return;
   }
   const nd = e.target.closest("[data-node]");
@@ -595,7 +597,7 @@ document.addEventListener("click", e => {
   }
 });
 addEventListener("keydown", e => {
-  if (e.key === "F9" && !$("ws").hidden) {
+  if (e.key === "F9" && !$("ws").hidden && !document.body.classList.contains("ed-on")) {
     e.preventDefault();
     calcularAhora();
     toast(LAST ? "Cálculo actualizado" : "Complete los datos para calcular");

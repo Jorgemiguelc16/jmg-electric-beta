@@ -57,7 +57,7 @@ const prueba = (nombre, fn) => PRUEBAS.push([nombre, fn]);
 
 prueba("La cinta tiene sus 9 pestañas y solo 6 menús ▾", async ok => {
   await ejemplo("uni");
-  ok((await ev("document.querySelectorAll('.ap-ribbon > .rib').length")) === 9, "9 pestañas");
+  ok((await ev("document.querySelectorAll('#ws > .ap-ribbon > .rib').length")) === 9, "9 pestañas");
   ok((await ev("document.querySelectorAll('.ap-ribbon .mc-caret').length")) === 6, "6 menús ▾");
   ok(await ev("document.querySelector('#ws .ap-right').hidden"), "panel derecho cerrado por defecto");
 });
@@ -366,21 +366,21 @@ prueba("Lo que se escribe en el panel pasa a los datos del proyecto (PROY)", asy
   ok((await ev("PROY.tg_p")) === "250", "al pasar a oficina, 250 VA por tomacorriente también en PROY");
 });
 
-// Ejecución
-/* Diseño: plano de arquitectura (pruebas/plano-prueba.dxf: vivienda de 10 × 8 m en coordenadas UTM, generada por
-   herramientas/plano-prueba.js) */
+/* Editor de diseño: plano de arquitectura (pruebas/plano-prueba.dxf: vivienda de 10 × 8 m en coordenadas UTM,
+   generada por herramientas/plano-prueba.js) */
 const OX = 230000,
   OY = 8180000;
+// Abre el editor desde la pestaña Diseño y elige el plano de prueba, como si el usuario lo eligiera
 async function abrirPlano() {
   await ev("abrirWS(); document.querySelector('[data-tab-r=\"diseno\"]').click()");
+  await clic('#ws > .ap-ribbon [data-pl="editor"]');
   await cdp("DOM.enable");
   const doc = await cdp("DOM.getDocument", {});
   const q = await cdp("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: "#plArchivo" });
   await cdp("DOM.setFileInputFiles", { nodeId: q.result.nodeId, files: [join(raiz, "pruebas", "plano-prueba.dxf")] });
   for (let i = 0; i < 60 && !(await ev("!!PL_MOD && $('plCarga').hidden")); i++) await esperar(100);
   await ev("plAjustar()");
-  // El historial agrupa los cambios de medio segundo: abrir el plano queda como un cambio aparte
-  await esperar(700);
+  await esperar(150);
 }
 // Clic sobre un punto del dibujo (desplazado unos píxeles, para que actúe el enganche)
 async function clicPlano(x, y, d = 4) {
@@ -394,77 +394,100 @@ async function clicPlano(x, y, d = 4) {
   await esperar(60);
 }
 const orden = () => ev("$('plCmdT').textContent");
+const ctrlZ = () =>
+  cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 });
 
-prueba("Diseño: abrir un plano DXF, capas, plantas, pestañas y guardado", async ok => {
+prueba("Editor de diseño: plano, capas, plantas, deshacer, aplicar, cancelar y guardado", async ok => {
   await ejemplo("uni");
   await abrirPlano();
-  ok(
-    await ev("!$('plano').hidden && getComputedStyle($('apDoc')).display === 'none'"),
-    "el plano reemplaza a los resultados"
-  );
-  ok(await ev("PLANO.f === 1 && PLANO.de === 'cotas'"), "unidad: metros según las cotas (la cabecera dice mm)");
-  ok(await ev("['OCULTA', 'CONGELADA'].every(c => PLANO.ocultas.includes(c))"), "capas apagada y congelada ocultas");
+  ok(await ev("!$('editor').hidden && document.body.classList.contains('ed-on')"), "el editor ocupa la pantalla");
+  ok(await ev("EPL.f === 1 && EPL.de === 'cotas'"), "unidad: metros según las cotas (la cabecera dice mm)");
+  ok(await ev("PLANO === null && !$('edSucio').hidden"), "el proyecto no cambia hasta aplicar");
+  ok(await ev("['OCULTA', 'CONGELADA'].every(c => EPL.ocultas.includes(c))"), "capas apagada y congelada ocultas");
   ok(
     (await ev("document.querySelectorAll('#plCapas .pl-capa').length")) === 8,
     "8 capas con algo dibujado en el panel"
   );
+  const hist0 = await ev("HIST.length");
   await clic('#plCapas input[data-plc="EJES"]');
-  ok(await ev("PLANO.ocultas.includes('EJES')"), "ocultar la capa EJES");
-  await deshacer();
+  ok(await ev("EPL.ocultas.includes('EJES')"), "ocultar la capa EJES");
+  await ctrlZ();
   ok(
-    await ev("!PLANO.ocultas.includes('EJES') && document.querySelector('#plCapas input[data-plc=\"EJES\"]').checked"),
-    "deshacer vuelve a mostrar la capa"
+    await ev("!EPL.ocultas.includes('EJES') && document.querySelector('#plCapas input[data-plc=\"EJES\"]').checked"),
+    "Ctrl+Z deshace en el editor"
   );
-  await clic('[data-pl="planta"]');
+  ok((await ev("HIST.length")) === hist0 && (await ev("PLANO === null")), "el deshacer del proyecto no se toca");
+  await clic('#editor [data-pl="planta"]');
   await clicPlano(OX - 0.5, OY - 0.5, 0);
   await clicPlano(OX + 10.5, OY + 8.5, 0);
   ok((await ev("$('plCmdV').value")) === "1er piso", "nombre propuesto para la planta");
   await clic("#plCmdOk");
-  ok(await ev("PLANO.plantas.length === 1 && PLANO.plantas[0].n === '1er piso'"), "planta encuadrada y guardada");
-  ok((await ev("document.querySelectorAll('#plPlantas [data-plv]').length")) === 1, "la planta aparece en el panel");
-  await clic('[data-tab-r="proyecto"]');
+  ok(await ev("EPL.plantas.length === 1 && EPL.plantas[0].n === '1er piso'"), "planta encuadrada");
+  await clic('[data-ed="aplicar"]');
   ok(
-    await ev("$('plano').hidden && getComputedStyle($('apDoc')).display !== 'none'"),
-    "otra pestaña vuelve a los resultados"
+    await ev("PLANO && PLANO.plantas.length === 1 && $('edSucio').hidden && $('edAplicar').disabled"),
+    "Aplicar pasa el plano y la planta al proyecto"
   );
-  await clic('[data-tab-r="diseno"]');
+  // Un cambio sin aplicar y Cancelar: pide confirmación y no llega al proyecto
+  await clic('#plCapas input[data-plc="EJES"]');
+  await clic('[data-ed="cancelar"]');
+  ok(await ev("!$('cfmDlg').hidden"), "Cancelar con cambios pide confirmación");
+  await clic("#cfmSi");
+  ok(
+    await ev("$('editor').hidden && !PLANO.ocultas.includes('EJES')"),
+    "cerrar sin aplicar: el proyecto queda como estaba"
+  );
+  ok(/plano-prueba\.dxf/.test(await ev("$('plInfo').textContent")), "la pestaña Diseño muestra el plano del proyecto");
   // El proyecto guardado vuelve a abrir el plano desde la base de datos del navegador
-  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); PL_MOD = null; PL_SHA = null; aplicar(o); })()");
+  await ev(
+    "(() => { const o = JSON.parse(JSON.stringify(estado())); PL_MOD = null; PL_SHA = null; aplicar(o); edAbrir(false); })()"
+  );
   for (let i = 0; i < 40 && !(await ev("!!PL_MOD")); i++) await esperar(100);
-  ok(await ev("!!PL_MOD && PLANO.plantas.length === 1"), "el plano se vuelve a leer del navegador con sus plantas");
-  await clic('[data-tab-r="proyecto"]');
+  ok(await ev("!!PL_MOD && EPL.plantas.length === 1"), "el plano se vuelve a leer del navegador con sus plantas");
+  await clic('[data-ed="aceptar"]');
+  ok(await ev("$('editor').hidden"), "Aceptar cierra el editor");
 });
 
-prueba("Diseño: distancia con enganche, recorrido, longitud de objetos y escala", async ok => {
+prueba("Editor de diseño: selección, distancia con enganche, recorrido, objetos y escala", async ok => {
   await ejemplo("uni");
   await abrirPlano();
-  await clic('[data-pl="dist"]');
+  // Un clic en el muro (sin herramienta) lo selecciona y muestra sus propiedades
+  await clicPlano(OX + 10, OY + 3, 0);
+  const pr = await ev("$('edPropC').textContent");
+  ok(
+    /Polilínea/.test(pr) && /36\.00 m/.test(pr) && /80\.00 m²/.test(pr),
+    `muro: polilínea de 36.00 m y 80.00 m² (${pr.slice(0, 90)})`
+  );
+  await tecla("Escape", "Escape", 27);
+  ok(/Plano de arquitectura/.test(await ev("$('edPropC').textContent")), "Esc suelta la selección");
+  await clic('#editor [data-pl="dist"]');
   await clicPlano(OX, OY);
   await clicPlano(OX + 10, OY);
-  ok(/^Distancia 10.00 m/.test(await orden()), `distancia entre esquinas enganchadas: 10.00 m (${await orden()})`);
-  await clic('[data-pl="rec"]');
+  ok(/^Distancia 10\.00 m/.test(await orden()), `distancia entre esquinas enganchadas: 10.00 m (${await orden()})`);
+  await clic('#editor [data-pl="rec"]');
   await clicPlano(OX, OY);
   await clicPlano(OX + 10, OY);
   await clicPlano(OX + 10, OY + 8);
   await tecla("Enter", "Enter", 13);
   await esperar(80);
-  ok(/^Recorrido 18.00 m · 2 tramos/.test(await orden()), `recorrido de dos tramos: 18.00 m (${await orden()})`);
-  await clic('[data-pl="obj"]');
+  ok(/^Recorrido 18\.00 m · 2 tramos/.test(await orden()), `recorrido de dos tramos: 18.00 m (${await orden()})`);
+  await clic('#editor [data-pl="obj"]');
   await clicPlano(OX + 2, OY + 1, 0);
-  ok(/^1 objeto · 5.14 m/.test(await orden()), `tubería con curva: 5.14 m (${await orden()})`);
-  await clic('[data-pl="escala"]');
+  ok(/^1 objeto · 5\.14 m/.test(await orden()), `tubería con curva: 5.14 m (${await orden()})`);
+  await clic('#editor [data-pl="escala"]');
   await clicPlano(OX, OY);
   await clicPlano(OX + 10, OY);
   ok((await ev("$('plCmdV').value")) === "10.00", "la medida en el dibujo se propone como medida real");
   await poner("#plCmdV", "20");
   await clic("#plCmdOk");
-  ok(await ev("PLANO.f === 2 && PLANO.de === 'manual'"), "escala comprobada: 1 unidad = 2 m");
-  await deshacer();
-  ok(await ev("PLANO.f === 1"), "deshacer vuelve a la escala anterior");
-  await tecla("Escape", "Escape", 27);
-  await clic('[data-tab-r="proyecto"]');
+  ok(await ev("EPL.f === 2 && EPL.de === 'manual'"), "escala comprobada: 1 unidad = 2 m");
+  await ctrlZ();
+  ok(await ev("EPL.f === 1"), "Ctrl+Z vuelve a la escala anterior");
+  await clic('[data-ed="aceptar"]');
+  ok(await ev("$('editor').hidden && PLANO.f === 1"), "Aceptar pasa el plano al proyecto");
 });
 
+// Ejecución
 let mal = 0;
 const t0 = Date.now();
 for (const [nombre, fn] of PRUEBAS) {
