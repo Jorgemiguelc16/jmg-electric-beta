@@ -701,6 +701,66 @@ prueba("Editor de diseño: tuberías curvas, pinzamientos, cotas, directriz y lo
   );
 });
 
+prueba("Editor de diseño: tablero con circuitos (doble clic) y tubería desde su salida", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Tablero encajado en el muro superior: se llama TG
+  await clic('#editor [data-pl="col:tab"]');
+  await clicPlano(OX + 3, OY + 7.9, 0);
+  await teclaE("Escape", "Escape", 27);
+  const tab = await J("EPL.dis.els.find(e => e.k === 'tab')");
+  ok(tab && tab.nom === "TG" && tab.r === 180, `tablero TG encajado en el muro (${tab && tab.r}°)`);
+  // Doble clic: ventana con nombre y número de circuitos
+  const [X, Y] = await J(
+    `(() => { const [X, Y] = plAPant(${tab.x}, ${tab.y}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+  );
+  for (const n of [1, 2]) {
+    await cdp("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: X,
+      y: Y,
+      button: "left",
+      buttons: 1,
+      clickCount: n
+    });
+    await cdp("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: X,
+      y: Y,
+      button: "left",
+      buttons: 0,
+      clickCount: n
+    });
+  }
+  await esperar(150);
+  ok(await ev("!$('tabDlg').hidden"), "doble clic en el tablero abre su ventana");
+  await poner("#taN", "8");
+  ok((await ev("$('taLista').querySelectorAll('input').length")) === 8, "la lista muestra C-1 a C-8");
+  await poner("#taLista input", "Alumbrado sala");
+  await clic('[data-ta="ok"]');
+  ok(
+    await ev(
+      "EPL.dis.els.find(e => e.k === 'tab').nc === 8 && EPL.dis.els.find(e => e.k === 'tab').cd[0] === 'Alumbrado sala'"
+    ),
+    "8 circuitos y su descripción"
+  );
+  const sal = await J("dsSalidasTab(EPL.dis.els.find(e => e.k === 'tab')).map(o => [o.n, o.p[0], o.p[1]])");
+  ok(sal.length === 8 && sal[0][1] < sal[7][1], "salidas C-1 a C-8 de izquierda a derecha");
+  // Tubería que empieza en la salida C-3: toma ese circuito
+  await clic('#editor [data-pl="tubT"]');
+  await clicPlano(sal[2][1], sal[2][2], 0);
+  await clicPlano(OX + 1.5, OY + 6, 0);
+  await teclaE("Enter", "Enter", 13);
+  const tub = await J("EPL.dis.els.find(e => e.t === 'tub')");
+  ok(tub && tub.cir === "C-3" && tub.tab === tab.id, `la tubería es del circuito C-3 del TG (${tub && tub.cir})`);
+  await clic('[data-ed="aceptar"]');
+  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+  ok(
+    await ev("PLANO.dis.els.find(e => e.k === 'tab').nc === 8 && PLANO.dis.els.find(e => e.t === 'tub').cir === 'C-3'"),
+    "se guarda con el proyecto"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

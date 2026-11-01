@@ -838,3 +838,72 @@
   line-height: 1.4;
   color: var(--ws-text2, #66737f);
 }
+/* Ventana Tablero: nombre, número de circuitos y descripción de cada uno */
+.ta-box {
+  display: flex;
+  flex-direction: column;
+}
+.ta-cab {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dl-grid2, #c9cfd6);
+  font: 12px var(--f-body);
+  color: var(--dl-ink2, #5f6b77);
+}
+.ta-cab label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ta-cab input {
+  padding: 4px 7px;
+  font: 600 13px var(--f-body);
+  color: var(--dl-ink, #1b1b1b);
+}
+.ta-num {
+  display: flex;
+  gap: 4px;
+}
+.ta-num input {
+  width: 64px;
+  text-align: center;
+}
+.ta-num .vw-btn {
+  min-width: 30px;
+  padding: 2px 8px;
+}
+.ta-lista {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 12px;
+  background: #fff;
+}
+.ta-fila {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font: 12px var(--f-body);
+}
+.ta-fila b {
+  font: 600 12px var(--f-mono);
+  color: var(--dl-ink, #1b1b1b);
+}
+.ta-fila input {
+  padding: 3px 6px;
+  font: 12px var(--f-body);
+}
+/* Sin las flechas propias del campo numérico: ya están los botones − y + */
+.ta-num input::-webkit-outer-spin-button,
+.ta-num input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.ta-num input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

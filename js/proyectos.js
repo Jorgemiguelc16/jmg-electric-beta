@@ -354,7 +354,8 @@ function disValido(v) {
       col: color(c.col),
       lt: ["cont", "trazos", "punto"].includes(c.lt) ? c.lt : "cont",
       vis: c.vis !== false,
-      bloq: c.bloq === true
+      bloq: c.bloq === true,
+      ...([0.25, 0.35, 0.5, 0.7, 1].includes(c.gr) ? { gr: c.gr } : {})
     });
   const capas = [];
   (Array.isArray(v.capas) ? v.capas : []).slice(0, 200).forEach(c => {
@@ -379,7 +380,11 @@ function disValido(v) {
           r: n(e.r) ? e.r : 0,
           ...(n(e.h) && e.h >= 0 ? { h: e.h } : {}),
           ...(n(e.p) && e.p >= 0 ? { p: e.p } : {}),
-          ...cir
+          ...cir,
+          // Tablero: nombre, número de circuitos y descripción de cada uno
+          ...(e.k === "tab" && e.nom ? { nom: txt(e.nom, 20) } : {}),
+          ...(e.k === "tab" && n(e.nc) && e.nc >= 1 ? { nc: Math.min(60, Math.round(e.nc)) } : {}),
+          ...(e.k === "tab" && Array.isArray(e.cd) ? { cd: e.cd.slice(0, 60).map(d => txt(d, 60)) } : {})
         };
       if (e.t === "txt" && n(e.x) && n(e.y) && n(e.ht) && e.ht > 0)
         return { ...b, t: "txt", x: e.x, y: e.y, ht: e.ht, r: n(e.r) ? e.r : 0, s: txt(e.s, 200) || "Texto" };
@@ -415,7 +420,13 @@ function disValido(v) {
           ...(Array.isArray(e.b) && e.b.some(k => n(k) && k)
             ? { b: e.b.slice(0, e.pts.length / 2).map(k => (n(k) ? Math.max(-1, Math.min(1, k)) : 0)) }
             : {}),
-          ...(e.t === "tub" ? { modo: e.modo === "piso" ? "piso" : "techo", ...cir } : {})
+          ...(e.t === "tub"
+            ? {
+                modo: e.modo === "piso" ? "piso" : "techo",
+                ...cir,
+                ...(typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {})
+              }
+            : {})
         };
       return null;
     })

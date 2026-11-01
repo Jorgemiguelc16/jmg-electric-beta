@@ -41,6 +41,11 @@ function capasRender() {
       `<select data-caf="lt">${Object.entries(DS_LT)
         .map(([k, t]) => `<option value="${k}"${k === v ? " selected" : ""}>${t}</option>`)
         .join("")}</select>`;
+  // Grosor de línea: fino (una línea normal, el de siempre) o en milímetros
+  const gr = v =>
+    `<select data-caf="gr">${DS_GROSORES.map(
+      g => `<option value="${g}"${g === v ? " selected" : ""}>${g ? fmt(g, 2) + " mm" : "Fino"}</option>`
+    ).join("")}</select>`;
   const filasDis = D.capas
     .filter(c => f !== "arq" && ve(c.n))
     .map(
@@ -50,7 +55,7 @@ function capasRender() {
         `<td class="ca-c"><input type="checkbox" data-caf="vis"${c.vis ? " checked" : ""} aria-label="Visible"></td>` +
         `<td class="ca-c"><input type="checkbox" data-caf="bloq"${c.bloq ? " checked" : ""} aria-label="Bloqueada"></td>` +
         `<td><input type="color" data-caf="col" value="${c.col}" aria-label="Color"></td>` +
-        `<td>${lt(c.lt)}</td><td class="ca-or">Diseño eléctrico</td><td class="ca-n">${cnt[c.n] || 0}</td></tr>`
+        `<td>${lt(c.lt)}</td><td>${gr(c.gr || 0)}</td><td class="ca-or">Diseño eléctrico</td><td class="ca-n">${cnt[c.n] || 0}</td></tr>`
     )
     .join("");
   const filasArq = Object.keys(m.capas)
@@ -63,16 +68,16 @@ function capasRender() {
         `<td class="ca-c"><input type="checkbox" data-caf="vis"${oc.has(n) ? "" : " checked"} aria-label="Visible"></td>` +
         `<td class="ca-c" title="La arquitectura es una referencia: no se mueve"><input type="checkbox" checked disabled aria-label="Bloqueada"></td>` +
         `<td><i class="ca-sw" style="background:${plColor(c.col)}"></i></td><td class="ca-lt">${c.lt === "CONTINUOUS" ? "Continua" : esc(c.lt.toLowerCase())}</td>` +
-        `<td class="ca-or">Arquitectura (DXF)</td><td class="ca-n">${c.n}</td></tr>`
+        `<td class="ca-lt">Fino</td><td class="ca-or">Arquitectura (DXF)</td><td class="ca-n">${c.n}</td></tr>`
       );
     })
     .join("");
   $("caTabla").innerHTML =
-    `<table class="ca-t"><thead><tr><th>Actual</th><th>Nombre</th><th>Visible</th><th>Bloqueada</th><th>Color</th><th>Tipo de línea</th><th>Origen</th><th>Elementos</th></tr></thead><tbody>` +
+    `<table class="ca-t"><thead><tr><th>Actual</th><th>Nombre</th><th>Visible</th><th>Bloqueada</th><th>Color</th><th>Tipo de línea</th><th>Grosor</th><th>Origen</th><th>Elementos</th></tr></thead><tbody>` +
     (filasDis && f !== "arq"
-      ? `<tr class="ca-g"><td colspan="8">Diseño eléctrico · ${D.capas.length} capas</td></tr>` + filasDis
+      ? `<tr class="ca-g"><td colspan="9">Diseño eléctrico · ${D.capas.length} capas</td></tr>` + filasDis
       : "") +
-    (filasArq ? `<tr class="ca-g"><td colspan="8">Plano de arquitectura · ${EPL.nombre}</td></tr>` + filasArq : "") +
+    (filasArq ? `<tr class="ca-g"><td colspan="9">Plano de arquitectura · ${EPL.nombre}</td></tr>` + filasArq : "") +
     `</tbody></table>`;
   const nd = D.capas.length,
     na = Object.keys(m.capas).filter(n => m.capas[n].n > 0).length;
@@ -141,6 +146,11 @@ $("caTabla").addEventListener("change", e => {
     if (!c.vis || c.bloq) D.els.forEach(el => el.capa === c.n && DS_SEL.delete(el.id));
   } else if (k === "col") c.col = /^#[0-9a-f]{6}$/i.test(f.value) ? f.value.toLowerCase() : c.col;
   else if (k === "lt") c.lt = DS_LT[f.value] ? f.value : "cont";
+  else if (k === "gr") {
+    const g = +f.value;
+    if (DS_GROSORES.includes(g) && g) c.gr = g;
+    else delete c.gr;
+  }
   caCambio();
 });
 $("capasDlg").addEventListener("click", e => {

@@ -50,7 +50,9 @@ const PLH = {
   agSobre: null,
   bul: [],
   lado: 1,
-  libre: false
+  libre: false,
+  // Salida del tablero donde empezó la tubería en curso (su circuito)
+  cirIni: null
 };
 const plBase = $("plBase"),
   plSobre = $("plSobre"),
@@ -721,10 +723,23 @@ function plSobreDibujar() {
       g.lineTo(X + r, Y + r);
       g.moveTo(X + r, Y - r);
       g.lineTo(X - r, Y + r);
+    } else if (k === 8) {
+      g.arc(X, Y, r, 0, 2 * Math.PI);
+      g.moveTo(X + r * 0.35, Y);
+      g.arc(X, Y, r * 0.35, 0, 2 * Math.PI);
     } else g.rect(X - r, Y - r, 2 * r, 2 * r);
     g.stroke();
     g.font = `500 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
-    plEtiqueta(g, PL_ENG[k] || "", X + 12 * d, Y + 10 * d, verde, "left", "top");
+    const sal = PLH.eng[3];
+    plEtiqueta(
+      g,
+      k === 8 && sal ? `Salida ${sal.cir}${sal.nom ? " · " + sal.nom : ""}` : PL_ENG[k] || "",
+      X + 12 * d,
+      Y + 10 * d,
+      verde,
+      "left",
+      "top"
+    );
   }
 }
 function plTrazo(g, p, cerrado) {
@@ -767,7 +782,8 @@ const PL_ENG = {
   4: "Inserción",
   5: "Cercano",
   6: "Perpendicular",
-  7: "Intersección"
+  7: "Intersección",
+  8: "Salida de circuito"
 };
 const PL_REF = { 1: "fin", 2: "med", 3: "cen", 4: "ins", 5: "cer", 6: "per", 7: "int" };
 const plDistPS = (x, y, ax, ay, bx, by) => {
@@ -1008,6 +1024,7 @@ function plHerr(h) {
   PLH.arr = PLH.marco = PLH.alin = PLH.agarre = null;
   PLH.bul = [];
   PLH.lado = 1;
+  PLH.cirIni = null;
   plPedir(null);
   // Sin herramienta, el modo es Seleccionar
   document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
@@ -1253,6 +1270,12 @@ $("edPropC").addEventListener("click", e => {
    vacío hace un marco de selección (de izquierda a derecha, ventana; al revés, captura). Mayús presionada coloca y
    mueve sin enganche. Con una herramienta de dibujo, escribir un número da la longitud del tramo. */
 let PL_ESPACIO = false;
+// El lienzo sigue al mouse aunque salga de él mientras se arrastra (si el navegador lo permite)
+const plCapturar = e => {
+  try {
+    plLienzo.setPointerCapture(e.pointerId);
+  } catch (_) {}
+};
 plLienzo.addEventListener(
   "wheel",
   e => {
@@ -1280,12 +1303,12 @@ plLienzo.addEventListener("pointerdown", e => {
       plLienzo.ultRueda = t;
     }
     PLH.pan = { X, Y, cx: PLV.cx, cy: PLV.cy, mov: false };
-    plLienzo.setPointerCapture(e.pointerId);
+    plCapturar(e);
     plLienzo.classList.add("moviendo");
     return;
   }
   if (e.button !== 0) return;
-  plLienzo.setPointerCapture(e.pointerId);
+  plCapturar(e);
   PLH.abajo = [X, Y];
   if (PLH.h) return;
   // Seleccionar: un pinzamiento de lo seleccionado edita; un elemento del diseño se elige y se prepara para moverlo;
@@ -1404,6 +1427,14 @@ plLienzo.addEventListener("dblclick", e => {
     e.preventDefault();
     plTerminarRecorrido();
   } else if (dsTerminar()) e.preventDefault();
+  else if (!PLH.h && dsD()) {
+    // Doble clic en un tablero: su ventana de circuitos
+    const [X, Y] = plMouse(e),
+      p = plADib(X, Y),
+      id = dsHit(p[0], p[1], (6 * plDpr()) / PLV.s),
+      el = id && dsD().els.find(x => x.id === id);
+    if (el && el.k === "tab") tabAbrir(id);
+  }
 });
 // Herramientas que aceptan una longitud escrita (desde el último punto, en la dirección del cursor)
 const PL_CON_LONG = ["dist", "rec", "lin", "pol", "rect", "cir", "tubT", "tubP"];

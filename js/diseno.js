@@ -83,6 +83,10 @@ const DS_CAT = {
   pat: { n: "Pozo de puesta a tierra", c: "03-31-46", s: "tie", h: null }
 };
 const DS_LT = { cont: "Continua", trazos: "Trazos", punto: "Trazo y punto" };
+// Grosores de línea de las capas (mm); 0 es el fino de siempre (una línea normal, sin grosor), como en AutoCAD
+const DS_GROSORES = [0, 0.25, 0.35, 0.5, 0.7, 1];
+// Ancho en pantalla (píxeles del lienzo): no cambia con el zoom
+const dsGrosor = cap => Math.max(1, cap && cap.gr ? cap.gr * 4.5 : 1) * plDpr();
 const DS_ESCALAS = [10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 500];
 const DS_PASOS = [0.01, 0.05, 0.1, 0.2, 0.25, 0.5, 1, 5];
 // Curvatura de los tramos curvos nuevos: un arco de unos 45° (tangente de 45°/4)
@@ -257,7 +261,7 @@ const dsBBs = k => {
   return [b[0] - 1, b[1] - 1, b[2] + 1, b[3] + 1];
 };
 // Dibuja el símbolo k en el lienzo: X, Y en píxeles, giro en radianes (antihorario), u píxeles por unidad
-function dsDibSim(g, k, X, Y, rot, u, col, fondo) {
+function dsDibSim(g, k, X, Y, rot, u, col, fondo, lw = plDpr()) {
   g.save();
   g.translate(X, Y);
   g.rotate(-rot);
@@ -267,7 +271,8 @@ function dsDibSim(g, k, X, Y, rot, u, col, fondo) {
     const a = p.a,
       fi = !p.fi || p.fi === "none" ? null : /^#fff(fff)?$/i.test(p.fi) ? fondo : p.fi === INK_S ? col : p.fi,
       st = p.st && p.st !== "none" ? col : null;
-    g.lineWidth = Math.max(p.w, 1.1 / u);
+    // Líneas del ancho de la capa en pantalla, sin engrosarse con el zoom (las más finas del símbolo, algo menos)
+    g.lineWidth = Math.max((lw * p.w) / 1.2, 0.9 * plDpr()) / u;
     g.setLineDash(p.dash ? p.dash.split(/[\s,]+/).map(Number) : []);
     g.beginPath();
     if (p.t === "l") {
@@ -410,7 +415,7 @@ const dsLegible = a => {
   return r;
 };
 // Dibuja una cota en el lienzo (líneas de referencia, línea de cota con trazos oblicuos y la medida)
-function dsDibCota(g, el, col, s) {
+function dsDibCota(g, el, col, s, lw = plDpr()) {
   const G = dsCotaGeo(el),
     sep = dsMm(1),
     sob = dsMm(1.5),
@@ -422,7 +427,7 @@ function dsDibCota(g, el, col, s) {
       g.lineTo(X2, Y2);
     };
   g.strokeStyle = col;
-  g.lineWidth = Math.max(1, plDpr() * 0.9);
+  g.lineWidth = lw;
   g.beginPath();
   [
     [el.a, G.pa],
@@ -462,14 +467,14 @@ function dsDirGeo(el) {
     lado = ex >= tx ? 1 : -1;
   return { tip: [tx, ty], codo: [ex, ey], fin: [ex + lado * dsMm(3), ey], lado };
 }
-function dsDibDir(g, el, col, s) {
+function dsDibDir(g, el, col, s, lw = plDpr()) {
   const G = dsDirGeo(el),
     [X0, Y0] = plAPant(G.tip[0], G.tip[1]),
     [X1, Y1] = plAPant(G.codo[0], G.codo[1]),
     [X2, Y2] = plAPant(G.fin[0], G.fin[1]);
   g.strokeStyle = col;
   g.fillStyle = col;
-  g.lineWidth = Math.max(1, plDpr());
+  g.lineWidth = lw;
   g.beginPath();
   g.moveTo(X0, Y0);
   g.lineTo(X1, Y1);
@@ -612,8 +617,12 @@ function dsPuntosEnganche(lista) {
   if (!D) return out;
   for (const el of lista || D.els) {
     if (!dsVis(el)) continue;
-    if (el.t === "sim" || el.t === "txt") out.push([el.x, el.y, 4]);
-    else if (el.t === "cir") out.push([el.x, el.y, 3]);
+    if (el.t === "sim" || el.t === "txt") {
+      out.push([el.x, el.y, 4]);
+      // Salidas de circuito del tablero (tipo 8), con su circuito
+      if (el.k === "tab")
+        dsSalidasTab(el).forEach(o => out.push([o.p[0], o.p[1], 8, { cir: o.n, tab: el.id, nom: el.nom || "" }]));
+    } else if (el.t === "cir") out.push([el.x, el.y, 3]);
     else if (el.t === "cot") out.push([...el.a, 1], [...el.b, 1]);
     else if (el.t === "dir") out.push([el.pts[0], el.pts[1], 1], [el.pts[2], el.pts[3], 1]);
     else {
@@ -682,8 +691,7 @@ function dsPintar(g) {
   const s = PLV.s,
     u = dsU() * s,
     W = plW(),
-    H = plH(),
-    d = plDpr();
+    H = plH();
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
   for (const el of D.els) {
@@ -698,7 +706,8 @@ function dsPintar(g) {
         g.fillRect(X - 1, Y - 1, 2, 2);
         continue;
       }
-      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, u, col, PL_FONDO);
+      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, u, col, PL_FONDO, dsGrosor(cap));
+      if (el.k === "tab") dsDibSalidas(g, el, col, u, dsGrosor(cap));
     } else if (el.t === "txt") {
       const hp = el.ht * s;
       if (hp < 2) continue;
@@ -712,11 +721,11 @@ function dsPintar(g) {
       g.textBaseline = "alphabetic";
       g.fillText(el.s, 0, 0);
       g.restore();
-    } else if (el.t === "cot") dsDibCota(g, el, col, s);
-    else if (el.t === "dir") dsDibDir(g, el, col, s);
+    } else if (el.t === "cot") dsDibCota(g, el, col, s, dsGrosor(cap));
+    else if (el.t === "dir") dsDibDir(g, el, col, s, dsGrosor(cap));
     else {
       g.strokeStyle = col;
-      g.lineWidth = (el.t === "tub" ? 2 : 1.4) * d;
+      g.lineWidth = dsGrosor(cap);
       g.setLineDash(dsGuiones(el, cap).map(v => v * s));
       g.beginPath();
       if (el.t === "cir") {
@@ -730,33 +739,116 @@ function dsPintar(g) {
   }
   g.restore();
 }
-// Longitudes de una tubería: la total en su tramo central o la de cada tramo, a lo largo del tramo
+// Longitudes de una tubería: la total en su tramo central o la de cada tramo; texto de 2 mm impreso, a lo largo del
+// tramo y del lado de afuera de la curva (en un tramo recto, a su izquierda), sin tocar la línea
 function dsEtiquetasTub(g, el, col, s) {
-  const hp = dsMm(2.5) * s;
+  const ht = dsMm(2),
+    hp = ht * s;
   if (hp < 5) return;
   const T = dsTramos(el),
     etq = (t, txt) => {
-      const ang = dsLegible(t.ang),
-        // Del lado contrario a la curva, para no tapar el arco
-        lado = t.k > 0 ? 1 : -1,
-        nx = -Math.sin(t.ang) * lado,
-        ny = Math.cos(t.ang) * lado,
-        [X, Y] = plAPant(t.m[0] + nx * dsMm(1.6), t.m[1] + ny * dsMm(1.6));
+      // Normal hacia afuera del arco: la curva positiva va a la derecha del sentido del tramo
+      const nx = t.k > 0 ? Math.sin(t.ang) : -Math.sin(t.ang),
+        ny = t.k > 0 ? -Math.cos(t.ang) : Math.cos(t.ang),
+        sep = ht * 0.5 + dsMm(0.8),
+        [X, Y] = plAPant(t.m[0] + nx * sep, t.m[1] + ny * sep);
       g.save();
       g.translate(X, Y);
-      g.rotate(-ang);
-      g.font = `600 ${hp / 0.72}px Arial, sans-serif`;
+      g.rotate(-dsLegible(t.ang));
+      g.font = `${hp / 0.72}px Arial, sans-serif`;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.lineWidth = 3;
+      g.lineJoin = "round";
+      g.lineWidth = 3 * plDpr();
       g.strokeStyle = PL_FONDO;
       g.strokeText(txt, 0, 0);
       g.fillStyle = col;
       g.fillText(txt, 0, 0);
       g.restore();
     };
-  if (dsD().etq === "tramo") T.forEach(t => etq(t, fmt(t.L * EPL.f, 2)));
-  else if (T.length) etq(T[Math.floor((T.length - 1) / 2)], `L = ${fmt(dsLargo(el) * EPL.f, 2)} m`);
+  if (dsD().etq === "tramo") T.forEach(t => etq(t, `${fmt(t.L * EPL.f, 2)} m`));
+  else if (T.length) etq(T[Math.floor((T.length - 1) / 2)], `${fmt(dsLargo(el) * EPL.f, 2)} m`);
+}
+/* Salidas de circuito del tablero (ventana Tablero, doble clic): un trazo corto desde el frente del tablero (el lado
+   opuesto al muro) hasta el punto de conexión, con su nombre (C-1, C-2…). Hasta 10 por fila; desde la 11, otra fila
+   más adelante y corrida medio paso, para que los trazos no se crucen. En unidades del símbolo y en el dibujo. */
+function dsSalidasTab(el) {
+  const n = el.k === "tab" ? el.nc || 0 : 0,
+    out = [];
+  if (!n) return out;
+  dsPrims("tab");
+  const frente = DS_BB.tab[1],
+    sep = 6,
+    porFila = 10,
+    // C-1 a la izquierda (o arriba, en un muro lateral), como se lee el plano, gire como gire el tablero
+    r = ((el.r || 0) * Math.PI) / 180,
+    lado = Math.cos(r) < -0.5 || (Math.abs(Math.cos(r)) <= 0.5 && Math.sin(r) > 0) ? -1 : 1;
+  for (let i = 0; i < n; i++) {
+    const fila = Math.floor(i / porFila),
+      enFila = Math.min(porFila, n - fila * porFila),
+      a = lado * (((i % porFila) - (enFila - 1) / 2) * sep + (fila % 2 ? sep / 2 : 0)),
+      b = frente - 5 - fila * 9;
+    out.push({ i, n: "C-" + (i + 1), d: (el.cd || [])[i] || "", a, b0: frente, b, p: dsAMundo(el, a, b) });
+  }
+  return out;
+}
+// Dibuja las salidas del tablero y su nombre
+function dsDibSalidas(g, el, col, u, lw) {
+  const S = dsSalidasTab(el),
+    rot = ((el.r || 0) * Math.PI) / 180,
+    [X, Y] = plAPant(el.x, el.y),
+    // Del símbolo (unidades, y hacia abajo) al lienzo
+    aPant = (a, b) => {
+      const c = Math.cos(rot),
+        s = Math.sin(rot);
+      return [X + u * (a * c + b * s), Y - u * (a * s - b * c)];
+    },
+    ht = 3 * u;
+  g.strokeStyle = col;
+  g.lineWidth = lw;
+  S.forEach(o => {
+    const [x0, y0] = aPant(o.a, o.b0),
+      [x1, y1] = aPant(o.a, o.b + 1),
+      [xc, yc] = aPant(o.a, o.b);
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.lineTo(x1, y1);
+    g.stroke();
+    g.beginPath();
+    g.arc(xc, yc, Math.max(1.5 * plDpr(), u), 0, 2 * Math.PI);
+    g.fillStyle = PL_FONDO;
+    g.fill();
+    g.stroke();
+    if (ht < 5) return;
+    // Nombre más allá del punto, en la dirección de la salida, siempre legible
+    const [xt, yt] = aPant(o.a, o.b - 2.2),
+      ang = Math.atan2(yt - yc, xt - xc),
+      // Legible: hacia la derecha o, si es vertical, de abajo hacia arriba
+      der = Math.cos(ang) > 1e-6 || (Math.abs(Math.cos(ang)) <= 1e-6 && Math.sin(ang) < 0);
+    g.save();
+    g.translate(xt, yt);
+    g.rotate(der ? ang : ang + Math.PI);
+    g.font = `600 ${ht / 0.72}px Arial, sans-serif`;
+    g.textAlign = der ? "left" : "right";
+    g.textBaseline = "middle";
+    g.fillStyle = col;
+    g.fillText(o.n, 0, 0);
+    g.restore();
+  });
+  // Nombre del tablero a un costado
+  if (el.nom && 4 * u >= 5) {
+    dsPrims("tab");
+    const [xn, yn] = aPant(DS_BB.tab[2] + 2.5, 0);
+    g.save();
+    g.translate(xn, yn);
+    g.rotate(dsLegible(-rot));
+    g.font = `700 ${(4 * u) / 0.72}px Arial, sans-serif`;
+    g.textAlign = Math.cos(rot) >= 0 ? "left" : "right";
+    g.textBaseline = "middle";
+    g.fillStyle = col;
+    g.fillText(el.nom, 0, 0);
+    g.restore();
+  }
 }
 // Guiones del elemento en unidades del dibujo: la tubería por piso, discontinua; las demás, según su capa
 function dsGuiones(el, cap) {
@@ -968,7 +1060,7 @@ function dsSobre(g) {
       col = plColorDis(dsCapa(capa).col);
     g.strokeStyle = col;
     g.fillStyle = col;
-    g.lineWidth = (dsEsTub(h) ? 2 : 1.4) * d;
+    g.lineWidth = dsGrosor(dsCapa(capa));
     g.setLineDash(h === "tubP" ? [dsMm(3) * PLV.s, dsMm(1.5) * PLV.s] : []);
     g.beginPath();
     if (h === "rect") {
@@ -1097,6 +1189,12 @@ function dsPunto(p) {
       r: al ? al.r : PLH.rot,
       capa: DS_SIS[c.s].capa
     });
+    if (k === "tab") {
+      // TG el primero; TD-1, TD-2… los siguientes
+      const n = dsD().els.filter(e => e.k === "tab").length;
+      el.nom = n === 1 ? "TG" : "TD-" + (n - 1);
+      toast(`Tablero ${el.nom}: doble clic en él para darle sus circuitos (C-1, C-2…)`);
+    }
     DS_SEL.clear();
     DS_SEL.add(el.id);
     edCambio();
@@ -1127,6 +1225,10 @@ function dsPunto(p) {
   const n = PLH.pts.length,
     capa = dsCapaPara(h);
   if (dsEsTub(h) && n > 1) (PLH.bul = PLH.bul || []).push(dsBulNuevo());
+  if (dsEsTub(h) && PLH.eng && PLH.eng[2] === 8 && (n === 1 || !PLH.cirIni)) {
+    PLH.cirIni = PLH.eng[3];
+    toast(`Tubería del circuito ${PLH.cirIni.cir}${PLH.cirIni.nom ? " del tablero " + PLH.cirIni.nom : ""}`);
+  }
   if ((h === "lin" || h === "rect" || h === "cir") && n === 2) {
     const [a, b] = PLH.pts;
     PLH.pts = [];
@@ -1173,6 +1275,7 @@ function dsTerminar() {
     if (h === "pol" || dsEsTub(h)) {
       PLH.pts = [];
       PLH.bul = [];
+      PLH.cirIni = null;
     }
     return false;
   }
@@ -1182,10 +1285,15 @@ function dsTerminar() {
   if (dsEsTub(h)) {
     el.modo = h === "tubP" ? "piso" : "techo";
     if ((PLH.bul || []).some(Boolean)) el.b = PLH.bul.slice(0, PLH.pts.length - 1);
+    if (PLH.cirIni) {
+      el.cir = PLH.cirIni.cir;
+      el.tab = PLH.cirIni.tab;
+    }
   }
   dsAgregar(el);
   PLH.pts = [];
   PLH.bul = [];
+  PLH.cirIni = null;
   edCambio();
   plOrden();
   return true;
@@ -1392,9 +1500,14 @@ function dsProps(c) {
       `<select data-dsp="capa">${v === "" ? '<option value="" selected>(varias)</option>' : ""}${D.capas.map(x => `<option${x.n === v ? " selected" : ""}>${esc(x.n)}</option>`).join("")}</select>`,
     circ = v =>
       `<input type="text" data-dsp="cir" value="${esc(v || "")}" placeholder="ej. C-1" list="dsCircs" maxlength="12">`,
-    lista = LAST
-      ? `<datalist id="dsCircs">${LAST.circ.map(q => `<option value="${esc(q.id)}">${esc(q.desc)}</option>`).join("")}</datalist>`
-      : "",
+    lista = `<datalist id="dsCircs">${D.els
+      .filter(e => e.k === "tab")
+      .flatMap(e =>
+        dsSalidasTab(e).map(
+          o => `<option value="${o.n}">${esc(e.nom || "Tablero")}${o.d ? " · " + esc(o.d) : ""}</option>`
+        )
+      )
+      .join("")}</datalist>`,
     acciones = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="girar">Girar 90°</button><button type="button" class="btn sec sm" data-dsa="copiar">Copiar</button><button type="button" class="btn sec sm ed-del" data-dsa="borrar">Borrar</button></div>`,
     curvas = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="curvo" title="Todos los tramos en arco">Curvar</button><button type="button" class="btn sec sm" data-dsa="recto" title="Todos los tramos rectos">Enderezar</button><button type="button" class="btn sec sm" data-dsa="invertir" title="Los arcos al otro lado">Invertir curvas</button></div>`;
   if (sel.length > 1) {
@@ -1443,7 +1556,13 @@ function dsProps(c) {
             `<input type="number" data-dsp="p" value="${el.p ?? ""}" placeholder="${pd != null ? pd : ""}" step="10" min="0" max="100000"><i>${cat.u}</i>`
           )
         : "") +
-      (cat.s !== "can" && cat.s !== "tie" ? campo("Circuito", circ(el.cir)) + lista : "") +
+      (el.k === "tab"
+        ? fila("Nombre", esc(el.nom || "—")) +
+          fila("Circuitos", el.nc ? `${el.nc} (C-1 a C-${el.nc})` : "sin definir") +
+          `<div class="ed-pb"><button type="button" class="btn sm" data-dsa="tablero">Circuitos del tablero…</button></div>`
+        : cat.s !== "can" && cat.s !== "tie"
+          ? campo("Circuito", circ(el.cir)) + lista
+          : "") +
       fila("Posición X", `${plFm(el.x)} m`) +
       fila("Posición Y", `${plFm(el.y)} m`);
   } else if (el.t === "txt") {
@@ -1557,7 +1676,8 @@ $("edPropC").addEventListener("click", e => {
   else if (a === "copiar") {
     dsCopiar();
     dsPegar();
-  } else dsCurvar(a);
+  } else if (a === "tablero") tabAbrir(dsSel()[0].id);
+  else dsCurvar(a);
 });
 
 /* ---------- Resumen del diseño (panel izquierdo): cuántos hay de cada cosa; un clic los selecciona ---------- */
@@ -1671,4 +1791,93 @@ $("edRefs").addEventListener("change", e => {
   if (c) DSU.ref[c.dataset.ref] = c.checked;
   if (e.target.id === "edSens") DSU.sens = [6, 12, 20].includes(+e.target.value) ? +e.target.value : 12;
   dsGuardarPref();
+});
+
+/* ---------- Ventana Tablero (doble clic en un tablero): nombre y circuitos, que salen del tablero como C-1, C-2… ---------- */
+const TA_VW = ventanaMovil(document.querySelector("#tabDlg .vw"), "jmg-electric-tablero", {
+  w: 460,
+  h: 520,
+  minW: 380,
+  minH: 300
+});
+let TA_ID = null;
+function tabAbrir(id) {
+  const el = dsD() && dsD().els.find(e => e.id === id);
+  if (!el || el.k !== "tab") return;
+  TA_ID = id;
+  $("taNom").value = el.nom || "";
+  $("taN").value = el.nc || 6;
+  tabLista(el.cd || []);
+  $("tabDlg").hidden = false;
+  vwFondo();
+  TA_VW.abrir();
+  setTimeout(() => {
+    $("taN").focus();
+    $("taN").select();
+  }, 30);
+}
+function tabCerrar() {
+  $("tabDlg").hidden = true;
+  TA_ID = null;
+  vwFondo();
+}
+// Lista de circuitos con su descripción (opcional), según el número elegido
+function tabLista(cd) {
+  const n = Math.max(1, Math.min(60, Math.round(+$("taN").value) || 1)),
+    prev = [...$("taLista").querySelectorAll("input")].map(i => i.value),
+    d = cd || prev;
+  $("taLista").innerHTML = Array.from(
+    { length: n },
+    (v, i) =>
+      `<label class="ta-fila"><b>C-${i + 1}</b><input type="text" maxlength="60" value="${esc(d[i] || "")}" placeholder="Descripción (opcional): alumbrado, tomacorrientes…"></label>`
+  ).join("");
+  const el = dsD().els.find(e => e.id === TA_ID),
+    usados = dsD()
+      .els.filter(e => e.t === "tub" && e.tab === TA_ID && e.cir && parseInt(e.cir.slice(2), 10) > n)
+      .map(e => e.cir);
+  $("taNota").textContent = usados.length
+    ? `Atención: hay tuberías conectadas a ${[...new Set(usados)].join(", ")}, que dejarían de existir.`
+    : el && el.nc
+      ? "Las salidas aparecen al frente del tablero; las tuberías que empiezan en una salida toman su circuito."
+      : "Al aceptar, el tablero muestra sus salidas C-1, C-2…: empiece cada tubería en la suya.";
+}
+function tabAceptar() {
+  const el = dsD() && dsD().els.find(e => e.id === TA_ID);
+  if (!el) return tabCerrar();
+  const n = Math.max(1, Math.min(60, Math.round(+$("taN").value) || 1)),
+    cd = [...$("taLista").querySelectorAll("input")]
+      .slice(0, n)
+      .map(i => i.value.replace(/[<>]/g, "").trim().slice(0, 60));
+  while (cd.length && !cd[cd.length - 1]) cd.pop();
+  el.nom = $("taNom").value.replace(/[<>]/g, "").trim().slice(0, 20) || el.nom || "TG";
+  el.nc = n;
+  if (cd.length) el.cd = cd;
+  else delete el.cd;
+  tabCerrar();
+  edCambio();
+  toast(`${el.nom}: ${n} circuito${n > 1 ? "s" : ""} (C-1 a C-${n}). Empiece cada tubería en su salida`);
+}
+$("taN").addEventListener("input", () => tabLista());
+$("tabDlg").addEventListener("click", e => {
+  if (e.target.id === "tabDlg") return tabCerrar();
+  const b = e.target.closest("[data-ta]");
+  if (!b) return;
+  const a = b.dataset.ta;
+  if (a === "ok") tabAceptar();
+  else if (a === "cerrar") tabCerrar();
+  else if (a === "max") TA_VW.maximizar();
+  else if (a === "mas" || a === "menos") {
+    $("taN").value = Math.max(1, Math.min(60, (+$("taN").value || 0) + (a === "mas" ? 1 : -1)));
+    tabLista();
+  }
+});
+$("tabDlg").addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    tabAceptar();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    tabCerrar();
+  }
+  e.stopPropagation();
 });
