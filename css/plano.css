@@ -93,6 +93,124 @@
   pointer-events: none;
 }
 /* Línea de indicaciones, como la línea de comandos de los programas de dibujo */
+/* Barra de navegación sobre el plano: mano, acercar, alejar, zoom ventana, ajustar, vista anterior */
+.pl-nav {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  transform: translateY(-50%);
+  background: var(--ws-pane, #fff);
+  border: 1px solid var(--ws-line, #d6dde6);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(20, 48, 79, 0.14);
+}
+.pl-nav button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ws-text, #14304f);
+  cursor: pointer;
+}
+.pl-nav button svg {
+  width: 18px;
+  height: 18px;
+}
+.pl-nav button:hover:not(:disabled) {
+  background: var(--ws-sel, #dde9f6);
+}
+.pl-nav button.on {
+  background: var(--ws-sel, #dde9f6);
+  box-shadow: inset 0 0 0 1px #c77d2e;
+}
+.pl-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pl-lienzo.con-herr.herr-mano {
+  cursor: grab;
+}
+.pl-lienzo.con-herr.herr-mano.moviendo {
+  cursor: grabbing;
+}
+/* Ventana de propiedades (doble clic) */
+.el-box {
+  display: flex;
+  flex-direction: column;
+}
+.el-cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--ws-pane, #fff);
+}
+/* Revisión del diseño */
+.rev-box {
+  display: flex;
+  flex-direction: column;
+}
+.rev-crit label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dl-ink2, #5f6b77);
+}
+.rev-crit label input {
+  width: 64px;
+  flex: none;
+}
+.rev-ct {
+  font: 600 11px var(--f-body);
+  color: var(--dl-ink2, #5f6b77);
+}
+.rev-lista {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 10px;
+  background: #fff;
+}
+.rev-it {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 6px;
+  border-bottom: 1px solid #eef1f4;
+  font: 12.5px/1.4 var(--f-body);
+  color: #1b1b1b;
+}
+.rev-it i {
+  font-style: normal;
+  text-align: center;
+}
+.rev-it.aviso i {
+  color: #c25e00;
+}
+.rev-it.info i {
+  color: #1f6fd6;
+}
+.rev-it small {
+  display: block;
+  color: #66737f;
+}
+.rev-ok {
+  padding: 30px 10px;
+  text-align: center;
+  font: 13px var(--f-body);
+  color: #1f6b33;
+}
 .pl-cmd {
   position: absolute;
   top: 10px;
@@ -940,6 +1058,25 @@
 .ed-menu button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+.ed-menu .ed-mc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+}
+.ed-menu .ed-mc select {
+  width: auto;
+  padding: 2px 4px;
+  font: 12px var(--f-body);
+}
+.ed-menu .ed-mc label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: inherit;
 }
 .ed-menu kbd {
   font: 10.5px var(--f-mono);

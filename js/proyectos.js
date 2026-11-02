@@ -445,12 +445,15 @@ function disValido(v) {
                 // Artefactos a los que está conectada en su inicio (c0) y en su final (c1)
                 ...(typeof e.c0 === "string" && /^d[0-9]{1,7}$/.test(e.c0) ? { c0: e.c0 } : {}),
                 ...(typeof e.c1 === "string" && /^d[0-9]{1,7}$/.test(e.c1) ? { c1: e.c1 } : {}),
+                // Diámetro nominal de la tubería (mm)
+                ...([15, 20, 25, 35, 40, 50, 65, 80].includes(e.dia) ? { dia: e.dia } : {}),
                 // Conductores que lleva (marcas de la norma): fases, neutro y tierra
                 ...(e.cond && typeof e.cond === "object"
                   ? {
                       cond: {
-                        f: Number.isInteger(e.cond.f) ? Math.max(0, Math.min(3, e.cond.f)) : 0,
-                        n: e.cond.n === true,
+                        f: Number.isInteger(e.cond.f) ? Math.max(0, Math.min(6, e.cond.f)) : 0,
+                        // Neutros: 0 a 2 (antes era sí o no)
+                        n: Number.isInteger(e.cond.n) ? Math.max(0, Math.min(2, e.cond.n)) : e.cond.n === true ? 1 : 0,
                         t: e.cond.t === true
                       }
                     }
@@ -475,7 +478,18 @@ function disValido(v) {
     actual,
     els,
     escala: [10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 500].includes(v.escala) ? v.escala : 50,
-    etq: ["no", "total", "tramo"].includes(v.etq) ? v.etq : "total"
+    etq: ["no", "total", "tramo"].includes(v.etq) ? v.etq : "total",
+    // Circuito y diámetro escritos sobre cada tubería
+    ...(v.cirt === true ? { cirt: true } : {}),
+    // Criterios de la revisión del diseño (editables)
+    ...(v.crit && typeof v.crit === "object"
+      ? {
+          crit: {
+            sal: Number.isInteger(v.crit.sal) ? Math.max(1, Math.min(100, v.crit.sal)) : 12,
+            cur: Number.isFinite(v.crit.cur) ? Math.max(90, Math.min(720, v.crit.cur)) : 360
+          }
+        }
+      : {})
   };
 }
 /* Proyecto listo para calcular(), con el mismo formato que estado(), a partir de un proyecto guardado o de un

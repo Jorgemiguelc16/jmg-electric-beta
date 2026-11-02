@@ -241,17 +241,46 @@ DS_GRUPOS.forEach(g =>
     .forEach((k, i) => (DS_COLT[k] = DS_PAL[i % DS_PAL.length]))
 );
 // Color con que se dibuja un elemento: el suyo, el de su tipo (si está activado) o el de su capa
-// Color de un circuito: C-1, C-2… con los colores de la paleta, en orden
-const dsColCir = cir => {
+// Colores de los circuitos (vista de trabajo, criterio de la plataforma): sobrios y bien distintos entre sí
+const DS_PALC = [
+  "#1565c0",
+  "#c62828",
+  "#2e7d32",
+  "#ef6c00",
+  "#6a1b9a",
+  "#00838f",
+  "#ad1457",
+  "#5d4037",
+  "#283593",
+  "#827717",
+  "#00695c",
+  "#d84315"
+];
+// Aclara (f > 0) u oscurece (f < 0) un color
+const dsTono = (hex, f) => {
+  const n = parseInt(hex.slice(1), 16),
+    c = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f)));
+  return "#" + c.map(v => v.toString(16).padStart(2, "0")).join("");
+};
+// Color de un circuito: C-1, C-2… con la paleta en orden; desde el C-13, en otro tono; cada tablero (el segundo, el
+// tercero…) con su propio tono, para no confundir el C-1 del TG con el C-1 de un TD
+const DS_TONOS = [0, -0.32, 0.3, -0.5, 0.48];
+function dsColCir(cir, tab) {
   const m = /(\d+)/.exec(cir || "");
   let i = m ? +m[1] - 1 : 0;
   if (!m) for (const ch of String(cir)) i += ch.charCodeAt(0);
-  return DS_PAL[((i % DS_PAL.length) + DS_PAL.length) % DS_PAL.length];
-};
+  const tbs = dsD() ? dsD().els.filter(e => e.k === "tab") : [],
+    it = Math.max(
+      0,
+      tbs.findIndex(e => e.id === tab)
+    ),
+    v = (Math.floor(Math.max(0, i) / DS_PALC.length) + it) % DS_TONOS.length;
+  return dsTono(DS_PALC[((i % DS_PALC.length) + DS_PALC.length) % DS_PALC.length], DS_TONOS[v]);
+}
 const dsColorEl = (el, cap) =>
   el.col ||
   (DSU.color === "tipo" && el.t === "sim" && DS_COLT[el.k]) ||
-  (DSU.color === "cir" && el.cir && (el.t === "sim" || el.t === "tub") && dsColCir(el.cir)) ||
+  (DSU.color === "cir" && el.cir && (el.t === "sim" || el.t === "tub") && dsColCir(el.cir, el.tab)) ||
   cap.col;
 const DS_LT = { cont: "Continua", trazos: "Trazos", punto: "Trazo y punto" };
 // Grosores de línea de las capas (mm); 0 es el fino de siempre (una línea normal, sin grosor), como en AutoCAD
@@ -343,6 +372,7 @@ const DSU = {
   sueltos: true,
   // Marcas de conductores en las tuberías; rastreo polar y su ángulo
   marcas: true,
+  marcaEst: "incl",
   polar: true,
   polarInc: 45
 };
@@ -1364,7 +1394,7 @@ function dsPintar(g) {
       } else plRuta(g, dsCurva(el), false);
       g.stroke();
       g.setLineDash([]);
-      if (el.t === "tub" && D.etq !== "no") dsEtiquetasTub(g, el, col, s);
+      if (el.t === "tub" && (D.etq !== "no" || D.cirt)) dsEtiquetasTub(g, el, col, s);
       if (el.t === "tub" && el.cond && DSU.marcas) dsMarcas(g, el, col, s, dsGrosor(cap));
     }
   }
@@ -1382,7 +1412,7 @@ function dsEtiquetasTub(g, el, col, s) {
       // Normal hacia afuera del arco: la curva positiva va a la derecha del sentido del tramo
       const nx = t.k > 0 ? Math.sin(t.ang) : -Math.sin(t.ang),
         ny = t.k > 0 ? -Math.cos(t.ang) : Math.cos(t.ang),
-        sep = ht * 0.5 + dsMm(0.8),
+        sep = ht * 0.5 + dsMm(el.cond && DSU.marcas ? 2 : 0.8),
         [X, Y] = plAPant(t.m[0] + nx * sep, t.m[1] + ny * sep);
       g.save();
       g.translate(X, Y);
@@ -1399,16 +1429,18 @@ function dsEtiquetasTub(g, el, col, s) {
       g.restore();
     };
   if (dsD().etq === "tramo") T.forEach(t => etq(t, `${fmt(t.L * EPL.f, 2)} m`));
-  else if (T.length) etq(T[Math.floor((T.length - 1) / 2)], `${fmt(dsLargo(el) * EPL.f, 2)} m`);
+  else if (T.length && dsD().etq !== "no") etq(T[Math.floor((T.length - 1) / 2)], `${fmt(dsLargo(el) * EPL.f, 2)} m`);
+  // Circuito y diámetro, al otro lado de la tubería, en el medio de su recorrido
+  if (dsD().cirt && (el.cir || el.dia) && T.length) {
+    const t = T[Math.floor((T.length - 1) / 2)];
+    etq({ ...t, k: -(t.k || -1e-9) }, [el.cir, el.dia ? `Ø${el.dia} mm` : ""].filter(Boolean).join(" · "));
+  }
 }
 /* Marcas de conductores sobre la tubería (Norma DGE): una raya oblicua por fase; el neutro con un punto en su
    extremo (09-93-01) y la tierra con un tope (09-93-02). Van juntas, a un tercio del recorrido (en el medio está
    la longitud). Medidas en el papel (mm), como los textos. */
-function dsMarcas(g, el, col, s, lw, frac = 0.33) {
-  const c = el.cond,
-    tipos = [...Array(c.f || 0).fill("f"), ...(c.n ? ["n"] : []), ...(c.t ? ["t"] : [])];
-  if (!tipos.length || dsMm(1) * s < 1.2) return;
-  // Punto a un tercio del largo y dirección de la tubería allí
+// Punto a una fracción del largo de la línea y la dirección allí
+function dsPuntoA(el, frac) {
   const P = dsCurva(el);
   let tot = 0;
   for (let i = 2; i < P.length; i += 2) tot += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]);
@@ -1424,7 +1456,17 @@ function dsMarcas(g, el, col, s, lw, frac = 0.33) {
     }
     falta -= l;
   }
-  const m = dsMm(1),
+  return { pt, ang };
+}
+// Neutros de una tubería (antes, sí o no)
+const dsNeutros = c => (c.n === true ? 1 : c.n || 0);
+function dsMarcas(g, el, col, s, lw, frac = 0.5) {
+  const c = el.cond,
+    tipos = [...Array(c.f || 0).fill("f"), ...Array(dsNeutros(c)).fill("n"), ...(c.t ? ["t"] : [])];
+  if (!tipos.length || dsMm(1) * s < 1.2) return;
+  const { pt, ang } = dsPuntoA(el, frac),
+    recta = DSU.marcaEst === "recta",
+    m = dsMm(1),
     ux = Math.cos(ang),
     uy = Math.sin(ang),
     // Del papel (a lo largo, a través) al lienzo
@@ -1437,13 +1479,14 @@ function dsMarcas(g, el, col, s, lw, frac = 0.33) {
   g.setLineDash([]);
   tipos.forEach((t, k) => {
     const a = (k - (tipos.length - 1) / 2) * sep,
-      [x0, y0] = aP(a - 0.5, -1.3),
-      [x1, y1] = aP(a + 0.5, 1.3);
+      i = recta ? 0 : 0.5,
+      [x0, y0] = aP(a - i, -1.3),
+      [x1, y1] = aP(a + i, 1.3);
     g.beginPath();
     g.moveTo(x0, y0);
     g.lineTo(x1, y1);
     if (t === "t") {
-      const [x2, y2] = aP(a + 1.3, 1.3);
+      const [x2, y2] = aP(a + i + 0.8, 1.3);
       g.lineTo(x2, y2);
     }
     g.stroke();
@@ -1454,6 +1497,53 @@ function dsMarcas(g, el, col, s, lw, frac = 0.33) {
     }
   });
   g.restore();
+}
+// Tubería cuyas marcas (o el medio de su recorrido, si aún no tiene) están bajo el punto
+function dsMarcasEn(x, y) {
+  const r = dsMm(2.5);
+  return (
+    (dsD() ? dsD().els : []).find(el => {
+      if (el.t !== "tub" || !dsEditable(el)) return false;
+      const { pt } = dsPuntoA(el, 0.5);
+      return Math.hypot(pt[0] - x, pt[1] - y) < r;
+    }) || null
+  );
+}
+// Ventanita con los conductores de la tubería, junto a sus marcas
+function dsVentanaCond(el) {
+  const c = el.cond || {},
+    { pt } = dsPuntoA(el, 0.5),
+    op = (k, n, v, suf) =>
+      `<select data-edc="${k}">${Array.from({ length: n + 1 }, (x, i) => `<option value="${i}"${i === v ? " selected" : ""}>${i} ${suf}</option>`).join("")}</select>`;
+  edMenuLista(
+    pt,
+    `<div class="ed-mt">Conductores de la tubería${el.cir ? " · " + esc(el.cir) : ""}</div>` +
+      `<div class="ed-mc">${op("f", 6, c.f || 0, "F")}${op("n", 2, dsNeutros(c), "N")}<label><input type="checkbox" data-edc="t"${c.t ? " checked" : ""}>T</label></div>` +
+      `<div class="ed-mc"><select data-edc="dia"><option value="">Diámetro —</option>${DS_DIAS.map(d => `<option value="${d}"${d === el.dia ? " selected" : ""}>Ø ${d} mm</option>`).join("")}</select></div>` +
+      (el.cir
+        ? `<hr><button type="button" data-edm="sal:1" role="menuitem"><span>Igual en todo el circuito ${esc(el.cir)}</span></button>`
+        : ""),
+    () => {
+      DS_SEL.clear();
+      DS_SEL.add(el.id);
+      edProps();
+      $("edPropC").querySelector('[data-dsa="condcir"]')?.click();
+    },
+    e => {
+      const k = e.target.dataset.edc,
+        v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+      if (k === "dia") el.dia = DS_DIAS.includes(+v) ? +v : undefined;
+      else {
+        const n = { f: 0, n: 0, t: false, ...(el.cond || {}) };
+        n.n = dsNeutros(n);
+        if (k === "t") n.t = !!v;
+        else n[k] = parseInt(v, 10) || 0;
+        if (n.f || n.n || n.t) el.cond = n;
+        else delete el.cond;
+      }
+      edCambio();
+    }
+  );
 }
 // Letra de encendido (a, b, c…) junto al artefacto, arriba a la izquierda, siempre derecha
 function dsDibEnc(g, el, col, s) {
@@ -1513,7 +1603,7 @@ function dsDibSalidas(g, el, col, u, lw) {
   g.strokeStyle = col;
   g.lineWidth = lw;
   S.forEach(o => {
-    const co = DSU.color === "cir" && !el.col ? plColorDis(dsColCir(o.n)) : col;
+    const co = DSU.color === "cir" && !el.col ? plColorDis(dsColCir(o.n, el.id)) : col;
     g.strokeStyle = co;
     const [x0, y0] = aPant(o.a, o.b0),
       [x1, y1] = aPant(o.a, o.b + 1),
@@ -1543,18 +1633,23 @@ function dsDibSalidas(g, el, col, u, lw) {
     g.fillText(o.n, 0, 0);
     g.restore();
   });
-  // Nombre del tablero a un costado
+  // Nombre del tablero encima, centrado y derecho; debajo si sus salidas van hacia arriba
   if (el.nom && 4 * u >= 5) {
-    dsPrims("tab");
-    const [xn, yn] = aPant(DS_BB.tab[2] + 2.5, 0);
+    const b = dsBBox(el),
+      sal = dsAMundo(el, 0, -1),
+      arriba = sal[1] - el.y > 0.5 * dsU(),
+      [xn, yn] = plAPant((b[0] + b[2]) / 2, arriba ? b[1] : b[3]);
     g.save();
-    g.translate(xn, yn);
-    g.rotate(dsLegible(-rot));
     g.font = `700 ${(4 * u) / 0.72}px Arial, sans-serif`;
-    g.textAlign = Math.cos(rot) >= 0 ? "left" : "right";
-    g.textBaseline = "middle";
+    g.textAlign = "center";
+    g.textBaseline = arriba ? "top" : "bottom";
+    g.lineJoin = "round";
+    g.lineWidth = 3 * plDpr();
+    g.strokeStyle = PL_FONDO;
+    const yy = yn + (arriba ? 1 : -1) * 1.5 * u;
+    g.strokeText(el.nom, xn, yy);
     g.fillStyle = col;
-    g.fillText(el.nom, 0, 0);
+    g.fillText(el.nom, xn, yy);
     g.restore();
   }
 }
@@ -2226,7 +2321,7 @@ function dsElegirSalida(tb, p, fn) {
     `<div class="ed-mt">Salidas de ${esc(tb.nom || "tablero")}</div>` +
       S.map(
         o =>
-          `<button type="button" data-edm="sal:${o.i}" role="menuitem"><span><b style="color:${plColorDis(dsColCir(o.n))}">${o.n}</b>${o.d ? " · " + esc(o.d) : ""}</span>${usada.has(o.n) ? "<kbd>en uso</kbd>" : ""}</button>`
+          `<button type="button" data-edm="sal:${o.i}" role="menuitem"><span><b style="color:${plColorDis(dsColCir(o.n, tb.id))}">${o.n}</b>${o.d ? " · " + esc(o.d) : ""}</span>${usada.has(o.n) ? "<kbd>en uso</kbd>" : ""}</button>`
       ).join("") +
       `<hr><button type="button" data-edm="tablero:${tb.id}" role="menuitem"><span>Circuitos del tablero…</span></button>`,
     i => fn(S[i])
@@ -2461,6 +2556,8 @@ function dsSoltar() {
   }
   edProps();
   plSobreDibujar();
+  const t = !a.suma && dsMarcasEn(a.base[0], a.base[1]);
+  if (t && t.id === a.id) dsVentanaCond(t);
 }
 // Mueve lo seleccionado con las flechas del teclado: 1 cm, o 10 cm con Mayús
 function dsEmpujar(dx, dy, grande) {
@@ -2755,9 +2852,21 @@ function dsProps(c) {
       ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="letra0">Letra a su lugar</button></div>`
       : "";
   c.innerHTML = h + color + letra + (cap.bloq ? `<p class="pl-nota">La capa está bloqueada.</p>` : "") + acciones;
+  if (c.id === "edPropC") elRender();
 }
-// Campo de conductores de las tuberías (fases, neutro, tierra) y botón para todo el circuito
+// Diámetros nominales de las tuberías (mm)
+const DS_DIAS = [15, 20, 25, 35, 40, 50, 65, 80];
+// Campo de conductores de las tuberías (fases, neutro, tierra), su diámetro y botón para todo el circuito
 function dsCampoCond(campo, ts) {
+  const d0 = ts.every(t => (t.dia || 0) === (ts[0].dia || 0)) ? ts[0].dia || 0 : -1;
+  return (
+    campo(
+      "Diámetro",
+      `<select data-dsp="dia">${d0 < 0 ? '<option value="" selected>(varios)</option>' : ""}<option value=""${d0 === 0 ? " selected" : ""}>—</option>${DS_DIAS.map(d => `<option value="${d}"${d === d0 ? " selected" : ""}>Ø ${d} mm</option>`).join("")}</select>`
+    ) + dsCampoCond1(campo, ts)
+  );
+}
+function dsCampoCond1(campo, ts) {
   const c0 = JSON.stringify(ts[0].cond || {}),
     igual = ts.every(t => JSON.stringify(t.cond || {}) === c0),
     c = igual ? ts[0].cond || {} : {},
@@ -2765,11 +2874,13 @@ function dsCampoCond(campo, ts) {
   return (
     campo(
       "Conductores",
-      `<span class="ds-cond"><select data-dsp="condF" title="Número de fases">${[0, 1, 2, 3]
+      `<span class="ds-cond"><select data-dsp="condF" title="Fases o conductores activos (también los retornos)">${[
+        0, 1, 2, 3, 4, 5, 6
+      ]
         .map(n => `<option value="${n}"${igual && (c.f || 0) === n ? " selected" : ""}>${n} F</option>`)
-        .join(
-          ""
-        )}</select><label><input type="checkbox" data-dsp="condN"${c.n ? " checked" : ""}>N</label><label><input type="checkbox" data-dsp="condT"${c.t ? " checked" : ""}>T</label></span>`
+        .join("")}</select><select data-dsp="condN" title="Neutros">${[0, 1, 2]
+        .map(n => `<option value="${n}"${igual && dsNeutros(c) === n ? " selected" : ""}>${n} N</option>`)
+        .join("")}</select><label><input type="checkbox" data-dsp="condT"${c.t ? " checked" : ""}>T</label></span>`
     ) +
     `<p class="ds-crit">Marcas de la norma sobre la tubería: una raya por fase, el neutro (N) con punto y la tierra (T) con tope.</p>` +
     (cir
@@ -2790,7 +2901,7 @@ const dsNomTipo = t =>
         dir: "Directriz",
         ley: "Leyenda"
       }[t] || t;
-$("edPropC").addEventListener("change", e => {
+function dsPropCambio(e) {
   const f = e.target.closest("[data-dsp]");
   if (!f || !DS_SEL.size) return;
   const k = f.dataset.dsp,
@@ -2799,10 +2910,16 @@ $("edPropC").addEventListener("change", e => {
     if (k === "condF" || k === "condN" || k === "condT") {
       if (el.t !== "tub") return;
       const c = { f: 0, n: false, t: false, ...(el.cond || {}) };
-      if (k === "condF") c.f = Math.max(0, Math.min(3, parseInt(v, 10) || 0));
-      else c[k === "condN" ? "n" : "t"] = !!v;
+      if (k === "condF") c.f = Math.max(0, Math.min(6, parseInt(v, 10) || 0));
+      else if (k === "condN") c.n = Math.max(0, Math.min(2, parseInt(v, 10) || 0));
+      else c.t = !!v;
+      c.n = dsNeutros(c);
       if (c.f || c.n || c.t) el.cond = c;
       else delete el.cond;
+      return;
+    }
+    if (k === "dia") {
+      if (el.t === "tub") el.dia = DS_DIAS.includes(+v) ? +v : undefined;
       return;
     }
     if (k === "enc") {
@@ -2835,8 +2952,8 @@ $("edPropC").addEventListener("change", e => {
     }
   });
   edCambio();
-});
-$("edPropC").addEventListener("click", e => {
+}
+function dsPropClic(e) {
   const b = e.target.closest("[data-dsa]");
   if (!b) return;
   const a = b.dataset.dsa;
@@ -2848,6 +2965,7 @@ $("edPropC").addEventListener("click", e => {
       if (o.t === "tub" && o !== t && o.cir === t.cir && (o.tab || "") === (t.tab || "")) {
         if (t.cond) o.cond = { ...t.cond };
         else delete o.cond;
+        if (t.dia) o.dia = t.dia;
         n++;
       }
     });
@@ -2862,6 +2980,10 @@ $("edPropC").addEventListener("click", e => {
     dsPegar();
   } else if (a === "tablero") tabAbrir(dsSel()[0].id);
   else dsCurvar(a);
+}
+["edPropC", "elC"].forEach(id => {
+  $(id).addEventListener("change", dsPropCambio);
+  $(id).addEventListener("click", dsPropClic);
 });
 
 /* ---------- Resumen del diseño (panel izquierdo): cuántos hay de cada cosa; un clic los selecciona ---------- */
@@ -2890,11 +3012,16 @@ function dsResumen() {
         : hayTub
           ? '<div class="ds-aviso ok">✓ Todas las tuberías y artefactos están conectados</div>'
           : "";
+  const rv = D.els.length ? dsVerificar().filter(o => o.nivel === "aviso").length : 0;
+  const revision = D.els.length
+    ? `<div class="ds-aviso${rv ? "" : " ok"}"><b>Revisión:</b> ${rv ? `${rv} aviso${rv > 1 ? "s" : ""}` : "sin avisos"}<div><button type="button" data-dsx="rev">Revisar diseño</button></div></div>`
+    : "";
   const orden = [...Object.keys(DS_CAT), "tub-techo", "tub-piso", "lin", "cir", "txt", "cot", "dir", "ley"].filter(
     t => cuenta[t]
   );
   box.innerHTML = orden.length
     ? aviso +
+      revision +
       orden
         .map(
           t =>
@@ -2907,6 +3034,7 @@ $("dsResumen").addEventListener("click", e => {
   const b = e.target.closest("[data-dst]"),
     x = e.target.closest("[data-dsx]");
   if (b) dsSelTipo(b.dataset.dst);
+  else if (x && x.dataset.dsx === "rev") revAbrir();
   else if (x && x.dataset.dsx === "auto") {
     const k = dsConectarAuto();
     if (k) edCambio();
@@ -2950,6 +3078,9 @@ function dsCinta() {
   $("dsGiro").value = String(DSU.giro || 0);
   $("dsColor").value = DSU.color;
   $("dsMarcas").checked = DSU.marcas;
+  $("dsMarcaEst").value = DSU.marcaEst === "recta" ? "recta" : "incl";
+  $("dsCirT").checked = !!(D && D.cirt);
+  $("dsCirT").disabled = sin;
   $("edPolar").value = String(DSU.polarInc);
   $("dsSueltos").checked = DSU.sueltos;
   $("dsTrazo").value = DSU.curva ? "curvo" : "recto";
@@ -3017,6 +3148,18 @@ $("dsColor").addEventListener("change", e => {
   dsResumen();
   plDibujar();
 });
+$("dsMarcaEst").addEventListener("change", e => {
+  DSU.marcaEst = e.target.value === "recta" ? "recta" : "incl";
+  e.target.blur();
+  dsGuardarPref();
+  plDibujar();
+});
+$("dsCirT").addEventListener("change", e => {
+  if (!dsD()) return;
+  if (e.target.checked) dsD().cirt = true;
+  else delete dsD().cirt;
+  edCambio();
+});
 $("dsMarcas").addEventListener("change", e => {
   DSU.marcas = e.target.checked;
   dsGuardarPref();
@@ -3043,6 +3186,291 @@ $("edRefs").addEventListener("change", e => {
   if (c) DSU.ref[c.dataset.ref] = c.checked;
   if (e.target.id === "edSens") DSU.sens = [6, 12, 20].includes(+e.target.value) ? +e.target.value : 12;
   dsGuardarPref();
+});
+
+/* ---------- Ventana de propiedades (doble clic en un elemento) ---------- */
+const EL_VW = ventanaMovil(document.querySelector("#elDlg .vw"), "jmg-electric-propiedades", {
+  w: 380,
+  h: 560,
+  minW: 320,
+  minH: 260
+});
+let EL_ID = null;
+function elAbrir(id) {
+  const el = dsD() && dsD().els.find(e => e.id === id);
+  if (!el) return;
+  EL_ID = id;
+  DS_SEL.clear();
+  PL_ASEL.clear();
+  DS_SEL.add(id);
+  $("elDlg").hidden = false;
+  vwFondo();
+  EL_VW.abrir();
+  edProps();
+  plSobreDibujar();
+  elRender();
+}
+function elCerrar() {
+  $("elDlg").hidden = true;
+  EL_ID = null;
+  vwFondo();
+}
+function elRender() {
+  if ($("elDlg").hidden) return;
+  const sel = dsSel();
+  if (sel.length !== 1 || sel[0].id !== EL_ID) return elCerrar();
+  $("elT").textContent = dsNomEl(sel[0]);
+  dsProps($("elC"));
+}
+$("elDlg").addEventListener("click", e => {
+  if (e.target.id === "elDlg") return elCerrar();
+  const b = e.target.closest("[data-el]");
+  if (b && b.dataset.el === "cerrar") elCerrar();
+  else if (b && b.dataset.el === "max") EL_VW.maximizar();
+});
+$("elDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    elCerrar();
+  }
+  e.stopPropagation();
+});
+
+/* ---------- Revisión del diseño ----------
+   Avisos para un diseño profesional: lo que no está conectado, artefactos y tuberías sin circuito, circuitos con
+   más salidas que el criterio, tuberías con más curvas que el criterio entre dos cajas o artefactos, tomacorrientes
+   sin conductor de protección marcado, letras de encendido sin interruptor (o sin luminarias) y tableros sin
+   circuitos. Los límites son criterios de la plataforma, editables en la ventana; verifíquelos con el CNE. */
+const dsCrit = () => ({ sal: 12, cur: 360, ...((dsD() && dsD().crit) || {}) });
+// Curvas de una tubería: suma de los cambios de dirección (en los vértices y en los arcos), en grados
+function dsGiroTotal(el) {
+  const P = dsCurva(el);
+  let tot = 0,
+    a0 = null;
+  for (let i = 2; i < P.length; i += 2) {
+    const dx = P[i] - P[i - 2],
+      dy = P[i + 1] - P[i - 1];
+    if (Math.hypot(dx, dy) < 1e-9) continue;
+    const a = Math.atan2(dy, dx);
+    if (a0 !== null) {
+      let d = Math.abs(a - a0);
+      if (d > Math.PI) d = 2 * Math.PI - d;
+      tot += d;
+    }
+    a0 = a;
+  }
+  return (tot * 180) / Math.PI;
+}
+function dsVerificar() {
+  const D = dsD(),
+    out = [];
+  if (!D) return out;
+  const C = dsCrit(),
+    por = new Map(D.els.map(e => [e.id, e])),
+    sims = D.els.filter(dsConecta),
+    tubs = D.els.filter(e => e.t === "tub" && dsVis(e)),
+    s = (n, a, b) => `${n} ${n === 1 ? a : b}`,
+    add = (nivel, t, ids, d) => ids.length && out.push({ nivel, t, ids, d });
+  const sl = dsSueltos();
+  add(
+    "aviso",
+    s(sl.sims.length, "artefacto sin tubería", "artefactos sin tubería"),
+    sl.sims.map(e => e.id),
+    "Conéctelos con una tubería a su circuito."
+  );
+  add(
+    "aviso",
+    s(sl.puntas.length, "punta de tubería suelta", "puntas de tubería sueltas"),
+    [...new Set(sl.puntas.map(o => o.el.id))],
+    "Llévelas a un artefacto, a una caja o a la salida del tablero."
+  );
+  const sinCir = [...sims.filter(e => !e.cir && !["can", "tie"].includes(DS_CAT[e.k].s)), ...tubs.filter(e => !e.cir)];
+  add(
+    "aviso",
+    s(sinCir.length, "elemento sin circuito", "elementos sin circuito"),
+    sinCir.map(e => e.id),
+    "Empiece las tuberías en una salida del tablero: el circuito pasa solo a lo conectado."
+  );
+  // Salidas por circuito
+  const grupos = new Map();
+  sims.forEach(e => {
+    if (!e.cir || ["can", "tie"].includes(DS_CAT[e.k].s)) return;
+    const k = (e.tab || "") + "|" + e.cir;
+    (grupos.get(k) || grupos.set(k, []).get(k)).push(e);
+  });
+  grupos.forEach((l, k) => {
+    if (l.length <= C.sal) return;
+    const tb = por.get(k.split("|")[0]);
+    add(
+      "aviso",
+      `${l[0].cir}${tb && tb.nom ? " de " + tb.nom : ""}: ${l.length} salidas`,
+      l.map(e => e.id),
+      `Más de ${C.sal} salidas en un circuito (criterio): considere dividirlo.`
+    );
+  });
+  // Curvas entre cajas
+  tubs.forEach(t => {
+    const g = dsGiroTotal(t);
+    if (g > C.cur + 0.5)
+      add(
+        "aviso",
+        `Tubería${t.cir ? " de " + t.cir : ""} con ${Math.round(g)}° de curvas`,
+        [t.id],
+        `Más de ${C.cur}° entre dos cajas o artefactos (criterio; verifique la regla del CNE): ponga una caja de paso.`
+      );
+  });
+  // Tomacorrientes sin conductor de protección marcado
+  const sinT = tubs.filter(
+    t =>
+      t.cond &&
+      !t.cond.t &&
+      [t.c0, t.c1].some(id => por.get(id) && DS_CAT[por.get(id).k] && DS_CAT[por.get(id).k].g === "Tomacorrientes")
+  );
+  add(
+    "aviso",
+    s(
+      sinT.length,
+      "tubería de tomacorrientes sin conductor de protección",
+      "tuberías de tomacorrientes sin conductor de protección"
+    ),
+    sinT.map(e => e.id),
+    "Marque la tierra (T) en sus conductores."
+  );
+  // Encendidos
+  const luz = new Map(),
+    intr = new Map();
+  D.els.forEach(e => {
+    if (!e.enc || !dsConEnc(e)) return;
+    const m = DS_CAT[e.k].g === "Interruptores" ? intr : luz;
+    (m.get(e.enc) || m.set(e.enc, []).get(e.enc)).push(e);
+  });
+  luz.forEach((l, k) => {
+    if (!intr.has(k))
+      add(
+        "aviso",
+        `Encendido «${k}» sin interruptor`,
+        l.map(e => e.id),
+        `Ponga la letra «${k}» al interruptor que enciende estas luminarias.`
+      );
+  });
+  intr.forEach((l, k) => {
+    if (!luz.has(k))
+      add(
+        "info",
+        `Interruptor «${k}» sin luminarias`,
+        l.map(e => e.id),
+        `Ninguna luminaria tiene la letra «${k}».`
+      );
+  });
+  // Tableros
+  D.els.forEach(tb => {
+    if (tb.k !== "tab" || !dsVis(tb)) return;
+    if (!tb.nc)
+      return add(
+        "aviso",
+        `${tb.nom || "Tablero"} sin circuitos`,
+        [tb.id],
+        "Doble clic en el tablero para definir sus circuitos."
+      );
+    const usados = new Set(tubs.filter(t => t.c0 === tb.id).map(t => t.cir)),
+      libres = dsSalidasTab(tb)
+        .filter(o => !usados.has(o.n))
+        .map(o => o.n);
+    if (libres.length)
+      add(
+        "info",
+        `${tb.nom || "Tablero"}: ${libres.join(", ")} sin tubería`,
+        [tb.id],
+        "Salidas del tablero que aún no tienen tubería (o reservas)."
+      );
+  });
+  // Tuberías sin conductores indicados
+  const sinCond = tubs.filter(t => !t.cond);
+  add(
+    "info",
+    s(sinCond.length, "tubería sin conductores indicados", "tuberías sin conductores indicados"),
+    sinCond.map(e => e.id),
+    "Clic en el medio de la tubería para elegir sus conductores."
+  );
+  return out;
+}
+const REV_VW = ventanaMovil(document.querySelector("#revDlg .vw"), "jmg-electric-revision", {
+  w: 620,
+  h: 520,
+  minW: 420,
+  minH: 280
+});
+let REV_L = [];
+function revAbrir() {
+  if (!dsD()) return;
+  $("revDlg").hidden = false;
+  vwFondo();
+  REV_VW.abrir();
+  revRender();
+}
+function revCerrar() {
+  $("revDlg").hidden = true;
+  vwFondo();
+}
+function revRender() {
+  if ($("revDlg").hidden) return;
+  const C = dsCrit();
+  $("revSal").value = C.sal;
+  $("revCur").value = C.cur;
+  REV_L = dsVerificar();
+  const av = REV_L.filter(o => o.nivel === "aviso").length;
+  $("revLista").innerHTML = REV_L.length
+    ? REV_L.map(
+        (o, i) =>
+          `<div class="rev-it ${o.nivel}"><i>${o.nivel === "aviso" ? "⚠" : "ℹ"}</i><span>${esc(o.t)}<small>${esc(o.d)}</small></span><button type="button" class="vw-btn" data-revi="${i}" title="Elige y muestra estos elementos">Ver</button></div>`
+      ).join("")
+    : '<p class="rev-ok">✓ Sin observaciones: el diseño está conectado y completo.</p>';
+  $("revNota").textContent = REV_L.length
+    ? `${av} aviso${av === 1 ? "" : "s"} · ${REV_L.length - av} nota${REV_L.length - av === 1 ? "" : "s"}`
+    : "";
+}
+$("revDlg").addEventListener("click", e => {
+  if (e.target.id === "revDlg") return revCerrar();
+  const b = e.target.closest("[data-rev]"),
+    v = e.target.closest("[data-revi]");
+  if (b && b.dataset.rev === "cerrar") return revCerrar();
+  if (b && b.dataset.rev === "max") return REV_VW.maximizar();
+  if (v) {
+    const o = REV_L[+v.dataset.revi];
+    revCerrar();
+    DS_SEL.clear();
+    PL_ASEL.clear();
+    o.ids.forEach(id => DS_SEL.add(id));
+    const bb = dsSel().map(dsBBox);
+    if (bb.length) {
+      const x0 = Math.min(...bb.map(q => q[0])),
+        y0 = Math.min(...bb.map(q => q[1])),
+        x1 = Math.max(...bb.map(q => q[2])),
+        y1 = Math.max(...bb.map(q => q[3])),
+        m = Math.max(x1 - x0, y1 - y0, 2 / EPL.f) * 0.35;
+      plVer(x0 - m, y0 - m, x1 + m, y1 + m);
+    }
+    edProps();
+    plSobreDibujar();
+  }
+});
+$("revDlg").addEventListener("change", e => {
+  if (e.target.id !== "revSal" && e.target.id !== "revCur") return;
+  const D = dsD(),
+    C = dsCrit();
+  D.crit = {
+    sal: Math.max(1, Math.min(100, Math.round(+$("revSal").value) || C.sal)),
+    cur: Math.max(90, Math.min(720, +$("revCur").value || C.cur))
+  };
+  edCambio();
+  revRender();
+});
+$("revDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    revCerrar();
+  }
+  e.stopPropagation();
 });
 
 /* ---------- Biblioteca de símbolos: todos los de la Norma DGE, por grupos, con buscador y los usados hace poco ---------- */

@@ -1028,9 +1028,7 @@ prueba(
       "(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector('#edPropC [data-dsp=\"condT\"]'))"
     );
     ok(
-      await ev(
-        "JSON.stringify(dsD().els.find(e => e.t === 'tub').cond) === JSON.stringify({ f: 2, n: false, t: true })"
-      ),
+      await ev("JSON.stringify(dsD().els.find(e => e.t === 'tub').cond) === JSON.stringify({ f: 2, n: 0, t: true })"),
       "conductores: 2 fases y tierra"
     );
     // Encendido
@@ -1084,6 +1082,120 @@ prueba(
       ),
       "leyenda, conductores y encendido se guardan"
     );
+  }
+);
+
+prueba(
+  "Editor de diseño: mano, zoom ventana, doble clic, clic derecho, comandos, marcas, revisión y autoguardado",
+  async ok => {
+    await ejemplo("uni");
+    await abrirPlano();
+    // Mano: arrastrar desplaza la vista
+    await clic('#plNav [data-pl="mano"]');
+    ok((await ev("PLH.h")) === "mano", "la mano queda activa");
+    const cx0 = await ev("PLV.cx");
+    await arrastrarPlano([OX + 3, OY + 3], [OX + 5, OY + 3]);
+    ok((await ev("PLV.cx")) < cx0 - 1, "arrastrar con la mano desplaza el plano");
+    await clic('#plNav [data-pl="zprev"]');
+    ok(Math.abs((await ev("PLV.cx")) - cx0) < 1e-6, "Vista anterior vuelve a la vista de antes");
+    // Zoom ventana
+    await clic('#plNav [data-pl="zventana"]');
+    await clicPlano(OX + 1, OY + 1, 0);
+    await clicPlano(OX + 3, OY + 2, 0);
+    ok((await ev("PLH.h")) === null && Math.abs((await ev("PLV.cx")) - (OX + 2)) < 1e-6, "zoom ventana al rectángulo");
+    await ev("plAjustar(); 1");
+    // Comando por teclado: T + Intro = tubería; clic derecho la termina
+    await teclaE("t", "KeyT", 84);
+    await teclaE("Enter", "Enter", 13);
+    await ev("plAceptarPedido(); 1");
+    ok((await ev("PLH.h")) === "tubT", "comando T: tubería en techo");
+    await clicPlano(OX + 1, OY + 2, 0);
+    await clicPlano(OX + 4, OY + 2, 0);
+    const [X, Y] = await J(
+      `(() => { const [X, Y] = plAPant(${OX + 4}, ${OY + 2}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+    );
+    await cdp("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: X,
+      y: Y,
+      button: "right",
+      buttons: 2,
+      clickCount: 1
+    });
+    await cdp("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: X,
+      y: Y,
+      button: "right",
+      buttons: 0,
+      clickCount: 1
+    });
+    await esperar(80);
+    ok(
+      (await ev("dsD().els.filter(e => e.t === 'tub').length")) === 1 && (await ev("$('edMenu').hidden")),
+      "clic derecho termina la tubería, sin menú"
+    );
+    await teclaE("Escape", "Escape", 27);
+    // Intro sin herramienta repite el último comando
+    await teclaE("Enter", "Enter", 13);
+    ok((await ev("PLH.h")) === "tubT", "Intro repite el último comando");
+    await teclaE("Escape", "Escape", 27);
+    // Clic en el medio de la tubería: ventanita de conductores
+    const pm = await J("dsPuntoA(dsD().els.find(e => e.t === 'tub'), 0.5).pt");
+    await clicPlano(pm[0], pm[1], 0);
+    await esperar(60);
+    ok(
+      await ev("!$('edMenu').hidden && !!$('edMenu').querySelector('[data-edc=\"f\"]')"),
+      "clic en el medio de la tubería: sus conductores"
+    );
+    await poner('#edMenu [data-edc="f"]', "4");
+    ok((await ev("dsD().els.find(e => e.t === 'tub').cond.f")) === 4, "4 fases desde la ventanita");
+    await ev("edMenuCerrar(); 1");
+    // Doble clic en un artefacto: su ventana de propiedades
+    await ev(`dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 6, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' }); edCambio(); 1`);
+    const [Xl, Yl] = await J(
+      `(() => { const [X, Y] = plAPant(${OX + 6}, ${OY + 5}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+    );
+    for (const n of [1, 2]) {
+      await cdp("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        x: Xl,
+        y: Yl,
+        button: "left",
+        buttons: 1,
+        clickCount: n
+      });
+      await cdp("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x: Xl,
+        y: Yl,
+        button: "left",
+        buttons: 0,
+        clickCount: n
+      });
+    }
+    await esperar(120);
+    ok(
+      await ev("!$('elDlg').hidden && /alumbrado/i.test($('elT').textContent)"),
+      "doble clic abre la ventana de la luminaria"
+    );
+    await poner('#elC [data-dsp="enc"]', "c");
+    ok((await ev("dsD().els.find(e => e.k === 'luz').enc")) === "c", "la ventana cambia sus datos");
+    await clic('[data-el="cerrar"]');
+    // Revisión del diseño
+    await clic('#editor [data-pl="revisar"]');
+    ok(
+      await ev("!$('revDlg').hidden && /sin tubería/.test($('revLista').textContent)"),
+      "la revisión avisa del artefacto sin tubería"
+    );
+    await poner("#revSal", "5");
+    ok((await ev("dsD().crit.sal")) === 5, "criterio editable de salidas por circuito");
+    await clic('[data-rev="cerrar"]');
+    // Autoguardado: se guarda la copia de lo no aplicado
+    await ev("edAutoguardar(true); 1");
+    ok(/"s"/.test(await ev("localStorage.getItem(ED_REC) || ''")), "autoguardado de los cambios sin aplicar");
+    await clic('[data-ed="aceptar"]');
+    ok((await ev("localStorage.getItem(ED_REC)")) === null, "al aplicar, la copia de recuperación se borra");
   }
 );
 

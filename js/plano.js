@@ -212,6 +212,8 @@ async function plCargarGuardado() {
 const edSnap = () => JSON.stringify(EPL);
 function edAbrir(conArchivo) {
   ED.abierto = true;
+  // Inicio de esta sesión del editor: solo se ofrece recuperar lo guardado antes
+  ED.t0 = Date.now();
   EPL = PLANO ? clon(PLANO) : null;
   dsAsegurar();
   DS_SEL.clear();
@@ -239,6 +241,7 @@ function edAbrir(conArchivo) {
   });
   // El cuadro para elegir el archivo necesita el clic del usuario: se abre en el mismo clic
   if (conArchivo) $("plArchivo").click();
+  else setTimeout(edRecuperar, 400);
 }
 function edCerrar() {
   ED.abierto = false;
@@ -261,6 +264,8 @@ function edCambio() {
   }
   edEstado();
   plMostrar();
+  elRender();
+  edAutoguardar();
 }
 function edHist(dir) {
   if (dir < 0 && ED.hist.length < 2) return;
@@ -303,6 +308,7 @@ function edAplicar() {
   plLimpiarArchivos();
   edEstado();
   edInfo();
+  edAutoguardar(true);
   toast("Cambios del diseño aplicados al proyecto");
 }
 function edCancelar() {
@@ -312,7 +318,11 @@ function edCancelar() {
     "<p>Los cambios del editor que no aplicó (plano, escala, capas o plantas) se pierden. El proyecto queda como estaba la última vez que pulsó <b>Aplicar</b>.</p>",
     "Cerrar sin aplicar",
     ok => {
-      if (ok) edCerrar();
+      if (!ok) return;
+      try {
+        localStorage.removeItem(ED_REC);
+      } catch (e) {}
+      edCerrar();
     }
   );
 }
@@ -463,6 +473,27 @@ function plIndice(m) {
 }
 
 /* ---------- Vista: conversión de coordenadas, zoom y desplazamiento ---------- */
+PL_NOMH.mano = "Mano";
+PL_NOMH.zventana = "Zoom ventana";
+// Vistas anteriores (Vista anterior en la barra de navegación)
+const PL_VHIST = [];
+let PL_VHT = 0;
+function plVistaPush(forzar) {
+  const t = Date.now();
+  if (!forzar && t - PL_VHT < 900) return;
+  PL_VHT = t;
+  const u = PL_VHIST[PL_VHIST.length - 1];
+  if (u && u.cx === PLV.cx && u.cy === PLV.cy && u.s === PLV.s) return;
+  PL_VHIST.push({ cx: PLV.cx, cy: PLV.cy, s: PLV.s });
+  if (PL_VHIST.length > 40) PL_VHIST.shift();
+}
+function plVistaAnterior() {
+  const v = PL_VHIST.pop();
+  if (!v) return toast("No hay una vista anterior");
+  Object.assign(PLV, v);
+  PL_VHT = Date.now();
+  plDibujar();
+}
 const plDpr = () => window.devicePixelRatio || 1;
 const plW = () => plBase.width,
   plH = () => plBase.height;
@@ -498,6 +529,7 @@ function plExtUtil() {
   return (m.extU = [q(xs, 0.002), q(ys, 0.002), q(xs, 0.998), q(ys, 0.998)]);
 }
 function plVer(x0, y0, x1, y1) {
+  if (PLV.s !== 1 || PLV.cx || PLV.cy) plVistaPush(true);
   const w = Math.max(x1 - x0, 1e-9),
     h = Math.max(y1 - y0, 1e-9);
   PLV.cx = (x0 + x1) / 2;
@@ -512,6 +544,7 @@ function plAjustar() {
   plVer(e[0], e[1], e[2], e[3]);
 }
 function plZoom(f, X = plW() / 2, Y = plH() / 2) {
+  plVistaPush();
   const [x, y] = plADib(X, Y);
   PLV.s = Math.min(1e7, Math.max(1e-6, PLV.s * f));
   // El punto bajo el cursor queda en su lugar
@@ -747,14 +780,14 @@ function plSobreDibujar() {
   // Medición o encuadre en curso, con el punto actual del cursor
   const pts = PLH.pts.slice(),
     q = plPuntoActual();
-  if (PLH.h === "planta" && pts.length === 1 && q) {
+  if ((PLH.h === "planta" || PLH.h === "zventana") && pts.length === 1 && q) {
     const [a, b] = plAPant(pts[0][0], pts[0][1]),
       [c, e] = plAPant(q[0], q[1]);
     g.fillStyle = PL_OSCURO ? "rgba(143,193,240,.12)" : "rgba(20,48,79,.08)";
     g.fillRect(a, b, c - a, e - b);
     g.strokeStyle = azul;
     g.strokeRect(a, b, c - a, e - b);
-  } else if (pts.length && PLH.h !== "planta") {
+  } else if (pts.length && PLH.h !== "planta" && PLH.h !== "zventana") {
     const todo = PLH.med ? pts : q ? [...pts, q] : pts;
     g.strokeStyle = acento;
     g.lineWidth = 2 * d;
@@ -1168,6 +1201,7 @@ function plHerr(h) {
   // Sin herramienta, el modo es Seleccionar
   document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
   plLienzo.classList.toggle("con-herr", !!h);
+  plLienzo.classList.toggle("herr-mano", h === "mano");
   plOrden();
   edProps();
   plSobreDibujar();
@@ -1188,7 +1222,9 @@ function plOrden(txt) {
         escala: n
           ? "Designe el segundo punto de la medida conocida"
           : "Designe el primer punto de una medida conocida (por ejemplo, los extremos de una cota)",
-        planta: n ? "Designe la esquina opuesta" : "Designe una esquina de la planta"
+        planta: n ? "Designe la esquina opuesta" : "Designe una esquina de la planta",
+        mano: "Arrastre para desplazar el plano · rueda para acercar o alejar",
+        zventana: n ? "Designe la esquina opuesta" : "Designe una esquina del rectángulo que quiere ver"
       };
     c.innerHTML = dsEsHerr(PLH.h)
       ? dsOrden(PLH.h, n)
@@ -1251,6 +1287,14 @@ function plPunto(p) {
   }
   PLH.pts.push(p);
   const n = PLH.pts.length;
+  if (h === "zventana") {
+    if (n < 2) return plOrden();
+    const [a, b] = PLH.pts;
+    plHerr(null);
+    if (Math.abs(a[0] - b[0]) * PLV.s > 6 && Math.abs(a[1] - b[1]) * PLV.s > 6)
+      plVer(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1]));
+    return;
+  }
   if (h === "dist" && n === 2) {
     const [a, b] = PLH.pts,
       l = Math.hypot(b[0] - a[0], b[1] - a[1]),
@@ -1475,10 +1519,11 @@ plLienzo.addEventListener(
   { passive: false }
 );
 plLienzo.addEventListener("pointerdown", e => {
-  if (!PL_MOD || e.target.closest(".pl-cmd")) return;
+  if (!PL_MOD || e.target.closest(".pl-cmd, .pl-nav")) return;
   $("edRefs").hidden = true;
   const [X, Y] = plMouse(e);
-  if (e.button === 1 || (e.button === 0 && PL_ESPACIO)) {
+  if (e.button === 1 || (e.button === 0 && (PL_ESPACIO || PLH.h === "mano"))) {
+    plVistaPush(true);
     e.preventDefault();
     // Doble clic con la rueda: ajustar a la pantalla
     if (e.button === 1) {
@@ -1623,7 +1668,7 @@ plLienzo.addEventListener("dblclick", e => {
       p = plADib(X, Y),
       id = dsHit(p[0], p[1], (6 * plDpr()) / PLV.s),
       el = id && dsD().els.find(x => x.id === id);
-    if (el && el.k === "tab") tabAbrir(id);
+    if (el) el.k === "tab" ? tabAbrir(id) : elAbrir(id);
   }
 });
 // Herramientas que aceptan una longitud escrita (desde el último punto, en la dirección del cursor)
@@ -1664,6 +1709,25 @@ addEventListener("keydown", e => {
     if (!dsD() || !PL_MOD) return;
     e.preventDefault();
     return k === "a" ? dsTodo() : k === "c" ? dsCopiar() : dsPegar();
+  }
+  // Comandos escritos: una letra (sin herramienta) abre la línea de comandos; R con selección gira y B abre la
+  // biblioteca, como siempre
+  if (
+    /^[a-zA-Z]$/.test(e.key) &&
+    !ctrl &&
+    !e.altKey &&
+    !PLH.h &&
+    PL_MOD &&
+    $("plCmdIn").hidden &&
+    !(k === "r" && DS_SEL.size) &&
+    k !== "b"
+  ) {
+    e.preventDefault();
+    return edComando(e.key);
+  }
+  if (e.key === "Enter" && !PLH.h && ED.ultCmd && PL_MOD && $("plCmdIn").hidden) {
+    e.preventDefault();
+    return edEjecutar(ED.ultCmd);
   }
   // Longitud escrita con el teclado mientras se dibuja o se mide
   if (
@@ -1882,6 +1946,128 @@ function plMostrar() {
     plDibujar();
   }
 }
+/* ---------- Comandos por teclado ----------
+   Como la línea de comandos de AutoCAD: se escribe el comando y se pulsa Intro; Intro sin herramienta repite el
+   último. Los nombres van en español (y algunos como en AutoCAD). */
+const ED_CMD = {
+  L: ["lin", "Línea"],
+  LINEA: ["lin", "Línea"],
+  PL: ["pol", "Polilínea"],
+  REC: ["rect", "Rectángulo"],
+  CI: ["cir", "Círculo"],
+  T: ["tubT", "Tubería en techo o pared"],
+  TT: ["tubT", "Tubería en techo o pared"],
+  TP: ["tubP", "Tubería en piso"],
+  TX: ["txt", "Texto"],
+  CA: ["cotA", "Cota alineada"],
+  CL: ["cotL", "Cota lineal"],
+  D: ["dir", "Directriz"],
+  LE: ["ley", "Leyenda"],
+  CO: ["duplicar", "Duplicar lo elegido"],
+  GI: ["girar", "Girar lo elegido"],
+  ES: ["espejo", "Espejo"],
+  MI: ["espejo", "Espejo"],
+  FI: ["fila", "Copiar en fila"],
+  AR: ["fila", "Copiar en fila"],
+  E: ["borrar", "Borrar lo elegido"],
+  SU: ["borrar", "Borrar lo elegido"],
+  Z: ["ajustar", "Ajustar a la pantalla"],
+  ZV: ["zventana", "Zoom ventana"],
+  ZA: ["zprev", "Vista anterior"],
+  M: ["mano", "Mano"],
+  P: ["mano", "Mano"],
+  CAP: ["capas", "Capas"],
+  DI: ["dist", "Distancia"],
+  ME: ["rec", "Medir recorrido"],
+  REV: ["revisar", "Revisar diseño"],
+  RE: ["revisar", "Revisar diseño"],
+  TA: ["col:tab", "Tablero"],
+  LU: ["col:luz", "Salida de alumbrado"],
+  TO: ["col:toma", "Tomacorriente"],
+  IN: ["col:int", "Interruptor"]
+};
+function edComando(letra) {
+  plPedir(
+    "Comando",
+    letra,
+    v => {
+      plPedir(null);
+      edEjecutar(String(v).trim().toUpperCase());
+    },
+    true
+  );
+  plOrden(
+    `<b>Comandos</b> · L línea · T tubería · TP en piso · TX texto · CA cota · LE leyenda · CO duplicar · GI girar · ES espejo · FI en fila · E borrar · Z ajustar · ZV zoom ventana · M mano · REV revisar · Intro repite el último`
+  );
+}
+function edEjecutar(c) {
+  const x = ED_CMD[c];
+  if (!x) {
+    plOrden();
+    return toast(`Comando «${c}» desconocido · pruebe: ${Object.keys(ED_CMD).slice(0, 14).join(", ")}…`);
+  }
+  ED.ultCmd = c;
+  const a = x[0];
+  if (a === "duplicar") {
+    if (!DS_SEL.size) return toast("Elija primero lo que quiere duplicar");
+    dsCopiar();
+    return dsPegar();
+  }
+  if (a === "girar") return dsGirar();
+  if (a === "borrar") return edBorrar(false);
+  if (a === "fila" || a === "espejo") return dsIniciarCopia(a);
+  if (a === "ajustar") return plAjustar();
+  if (a === "zprev") return plVistaAnterior();
+  if (a === "capas") return capasAbrir();
+  if (a === "revisar") return revAbrir();
+  if (a.startsWith("col:") || DS_HERR[a]) DS_SEL.clear();
+  plHerr(a);
+  toast(x[1]);
+}
+
+/* ---------- Autoguardado del editor ----------
+   Cada 30 s, si hay cambios sin aplicar, se guarda una copia en este navegador; al volver a abrir el editor del
+   mismo proyecto (por ejemplo, después de cerrarse el navegador), se ofrece recuperarla. */
+const ED_REC = (BETA ? "jmg-electric-beta" : "jmg-electric") + "-editor-recuperacion";
+function edAutoguardar(forzar) {
+  if (!ED.abierto || !EPL) return;
+  const t = Date.now();
+  if (!forzar && t - (ED.recT || 0) < 30000) return;
+  ED.recT = t;
+  const s = edSnap();
+  try {
+    if (s === ED.base) localStorage.removeItem(ED_REC);
+    else localStorage.setItem(ED_REC, JSON.stringify({ f: t, p: $("p_nombre").value.trim(), s }));
+  } catch (e) {}
+}
+setInterval(() => edAutoguardar(true), 30000);
+addEventListener("pagehide", () => edAutoguardar(true));
+function edRecuperar() {
+  let r = null;
+  try {
+    r = JSON.parse(localStorage.getItem(ED_REC) || "null");
+  } catch (e) {}
+  if (!r || r.f >= (ED.t0 || 0) || r.p !== $("p_nombre").value.trim() || r.s === ED.base) return;
+  const f = new Date(r.f);
+  confirmar(
+    "¿Recuperar el diseño sin aplicar?",
+    `<p>Hay cambios del editor de este proyecto del <b>${f.toLocaleDateString("es-PE")} a las ${f.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}</b> que no se aplicaron (por ejemplo, porque se cerró el navegador).</p><p>¿Quiere recuperarlos? Luego pulse <b>Aplicar</b> para pasarlos al proyecto.</p>`,
+    "Recuperar",
+    ok => {
+      try {
+        localStorage.removeItem(ED_REC);
+      } catch (e) {}
+      if (!ok) return;
+      EPL = JSON.parse(r.s);
+      dsAsegurar();
+      if (EPL && (PL_SHA !== EPL.sha || !PL_MOD)) plCargarGuardado();
+      else plPreparar();
+      edCambio();
+      toast("Diseño recuperado · pulse Aplicar para pasarlo al proyecto");
+    }
+  );
+}
+
 /* ---------- Menú del clic derecho sobre el plano ----------
    Sobre un elemento del diseño lo elige (si no estaba elegido) y muestra lo que se puede hacer con lo elegido;
    sobre la arquitectura, borrar, ocultar o aislar su capa; en un lugar vacío, pegar, seleccionar todo y la vista.
@@ -1946,7 +2132,7 @@ function edMenuAbrir(e) {
     b("similares", "Seleccionar todos los de este tipo");
     b("encuadrar", "Acercar a lo elegido");
     if (sel.length === 1 && sel[0].k === "tab") b("tablero", "Circuitos del tablero…");
-    if (edProps.oculto) b("props", "Mostrar propiedades");
+    if (sel.length === 1) b("ventana", "Propiedades…", "doble clic");
     if (na) {
       sep();
       b("borrarArq", `Borrar también ${na} objeto${na > 1 ? "s" : ""} de la arquitectura`);
@@ -2002,7 +2188,8 @@ function edMenuPos(cx, cy) {
   ED_MENU.style.top = Math.max(2, y + h > ed.height / S - 4 ? y - h : y) + "px";
 }
 // Menú con opciones propias junto a un punto del dibujo; fn recibe el número de la opción elegida (data-edm="sal:n")
-function edMenuLista(p, html, fn) {
+function edMenuLista(p, html, fn, fnCambio) {
+  ED_MENU.fnCambio = fnCambio || null;
   ED_MENU.innerHTML = html;
   ED_MENU.hidden = false;
   const [X, Y] = plAPant(p[0], p[1]),
@@ -2080,6 +2267,7 @@ function edMenuAccion(a) {
     return plVer(x0 - m, y0 - m, x1 + m, y1 + m);
   }
   if (a === "tablero") return tabAbrir(sel[0].id);
+  if (a === "ventana") return elAbrir(sel[0].id);
   if (a === "props") {
     edProps.oculto = false;
     edPanGuardar();
@@ -2126,6 +2314,12 @@ plLienzo.addEventListener("contextmenu", e => {
   e.preventDefault();
   if (!PL_MOD || !EPL || PLH.pan) return;
   $("edRefs").hidden = true;
+  if (PLH.h) {
+    edMenuCerrar();
+    if (PLH.h === "rec" && !PLH.med && PLH.pts.length > 1) return plTerminarRecorrido();
+    if (PLH.pts.length && dsTerminar()) return;
+    return plHerr(null);
+  }
   edMenuAbrir(e);
 });
 ED_MENU.addEventListener("click", e => {
@@ -2133,6 +2327,7 @@ ED_MENU.addEventListener("click", e => {
   if (b && !b.disabled) edMenuAccion(b.dataset.edm);
 });
 ED_MENU.addEventListener("contextmenu", e => e.preventDefault());
+ED_MENU.addEventListener("change", e => ED_MENU.fnCambio && ED_MENU.fnCambio(e));
 // Se cierra al hacer clic fuera, con Esc, con la rueda o al salir del editor
 addEventListener(
   "pointerdown",
@@ -2293,6 +2488,7 @@ $("editor").addEventListener("click", e => {
     return dsCurvar("invertir");
   }
   if (a === "capas") return capasAbrir();
+  if (a === "revisar") return revAbrir();
   if (a === "biblio") return bibAbrir();
   if (a === "fila" || a === "espejo") return dsIniciarCopia(a);
   if (a === "girar") return dsGirar();
@@ -2320,6 +2516,7 @@ $("editor").addEventListener("click", e => {
   }
   if (!PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
   if (a === "ajustar") plAjustar();
+  else if (a === "zprev") plVistaAnterior();
   else if (a === "acercar") plZoom(1.5);
   else if (a === "alejar") plZoom(1 / 1.5);
   else if (a === "todas" || a === "ninguna") {
