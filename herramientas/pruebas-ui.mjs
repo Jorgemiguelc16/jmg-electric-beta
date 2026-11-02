@@ -1221,12 +1221,17 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
   await poner("#laTam", "A4");
   await poner("#laEsc", "25");
   ok(
-    /no entra/.test(await ev("$('laAviso').textContent")) && (await ev("dsD().escala")) === 25,
+    /no entra/.test(await ev("$('laAviso').textContent")) &&
+      (await ev("dsD().escala")) === 50 &&
+      (await ev("dsD().lams[0].esc")) === 25,
     "en A4 a 1:25 avisa que no entra"
   );
   await poner("#laEsc", "50");
   await poner("#laNum", "IE-04");
-  ok((await ev("dsD().lam.num")) === "IE-04" && /IE-04/.test(await ev("$('laPrev').innerHTML")), "número de lámina");
+  ok(
+    (await ev("dsD().lams[0].num")) === "IE-04" && /IE-04/.test(await ev("$('laPrev').innerHTML")),
+    "número de lámina"
+  );
   await clic('[data-la="cerrar"]');
   // DXF: se vuelve a leer con el lector de la plataforma, en las mismas coordenadas
   const r = await J(
@@ -1248,10 +1253,75 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
   await clic('[data-ed="aceptar"]');
   await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
   ok(
-    await ev("PLANO.dis.lam.num === 'IE-04' && PLANO.dis.nsal === true"),
+    await ev("PLANO.dis.lams[0].num === 'IE-04' && PLANO.dis.nsal === true"),
     "la lámina y la opción se guardan con el proyecto"
   );
 });
+
+prueba(
+  "Editor de diseño: cinta fija y plegable, fondo, varias láminas, zona marcada y editor de símbolos",
+  async ok => {
+    await ejemplo("uni");
+    await abrirPlano();
+    // La cinta mide lo mismo en todas las pestañas
+    const altos = await J(
+      "[...document.querySelectorAll('#editor [data-tab-e]')].map(t => { t.click(); return document.querySelector('#editor .ed-ribbon').offsetHeight; })"
+    );
+    ok(new Set(altos).size === 1, `la cinta mide igual en todas las pestañas (${altos.join(", ")})`);
+    await clic('#editor [data-tab-e="inicio"]');
+    const h0 = await ev("plLienzo.offsetHeight");
+    await clic("#editor [data-edplegar]");
+    ok((await ev("plLienzo.offsetHeight")) > h0 + 50, "plegar la cinta da más espacio al plano");
+    await clic('#editor [data-tab-e="vista"]');
+    ok(!(await ev("DSU.cintaMin")), "un clic en una pestaña vuelve a mostrar la cinta");
+    // Fondo cálido
+    await poner("#dsCalido", "60");
+    ok((await ev("PL_FONDO")) !== "#ffffff" && (await ev("DSU.calido")) === 60, "fondo cálido regulable");
+    await clic('#editor [data-pl="fondo0"]');
+    ok((await ev("PL_FONDO")) === "#ffffff", "Fondo blanco lo devuelve");
+    // Varias láminas, zona marcada y capas por lámina
+    await ev(
+      `(() => { dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 3, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' }); dsAgregar({ t: 'sim', k: 'toma', x: ${OX} + 2, y: ${OY} + 4, r: 0, capa: 'E-TOMACORRIENTES' }); edCambio(); })()`
+    );
+    await ev("lamAbrir(); 1");
+    await clic('[data-la="nueva"]');
+    ok((await ev("dsD().lams.length")) === 2 && (await ev("$('laNum').value")) === "IE-02", "nueva lámina IE-02");
+    await ev(
+      "(c => { c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector('#laCapas [data-lac=\"E-TOMACORRIENTES\"]'))"
+    );
+    ok(JSON.stringify(await J("dsD().lams[1].ocl")) === '["E-TOMACORRIENTES"]', "la IE-02 oculta los tomacorrientes");
+    await clic('[data-la="marcar"]');
+    ok((await ev("PLH.h")) === "lamzona" && (await ev("$('lamDlg').hidden")), "marcar la zona en el plano");
+    await clicPlano(OX + 1, OY + 1, 0);
+    await clicPlano(OX + 6, OY + 7, 0);
+    await esperar(100);
+    ok(
+      (await ev("!$('lamDlg').hidden && $('laZona').value === 'rect'")) &&
+        (await ev("dsD().lams[1].rect.length")) === 4,
+      "la lámina vuelve con la zona marcada"
+    );
+    await clic('[data-la="cerrar"]');
+    // Editor de símbolos: tomacorriente achurado y más grande (criterio del proyectista)
+    await ev("siAbrir('toma'); 1");
+    await poner("#siRel", "achurado");
+    await poner("#siTam", "130");
+    ok(
+      JSON.stringify(await J("dsD().simb.toma")) === JSON.stringify({ rel: "achurado", tam: 1.3 }),
+      "criterio: achurado al 130 %"
+    );
+    ok(/09-93-17 \*/.test(JSON.stringify(await J("dsFilasLey()"))), "la leyenda marca el símbolo con asterisco");
+    await clic('[data-si="norma"]');
+    ok(!(await ev("dsD().simb && dsD().simb.toma")), "Volver a la Norma DGE");
+    await poner("#siRel", "solido");
+    await clic('[data-si="cerrar"]');
+    await clic('[data-ed="aceptar"]');
+    await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+    ok(
+      await ev("PLANO.dis.simb.toma.rel === 'solido' && PLANO.dis.lams.length === 2"),
+      "criterio y láminas se guardan"
+    );
+  }
+);
 
 // Ejecución
 let mal = 0;

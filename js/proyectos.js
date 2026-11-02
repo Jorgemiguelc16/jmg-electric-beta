@@ -483,20 +483,54 @@ function disValido(v) {
     ...(v.cirt === true ? { cirt: true } : {}),
     // Circuito escrito junto a cada salida
     ...(v.nsal === true ? { nsal: true } : {}),
-    // Lámina: papel, zona, colores, leyenda, título, número y notas
-    ...(v.lam && typeof v.lam === "object"
+    // Láminas: papel, escala, zona (planta, todo, la pantalla o un rectángulo), capas, colores, leyenda, título,
+    // número y notas (la v3.0.0-b10 guardaba una sola, en lam)
+    ...(() => {
+      const L = (Array.isArray(v.lams) ? v.lams : v.lam && typeof v.lam === "object" ? [v.lam] : [])
+        .filter(l => l && typeof l === "object")
+        .slice(0, 40)
+        .map(l => ({
+          tam: ["A4", "A3", "A2", "A1"].includes(l.tam) ? l.tam : "A3",
+          ...([10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 500].includes(l.esc) ? { esc: l.esc } : {}),
+          zona: typeof l.zona === "string" && /^(|todo|vista|rect|planta:\d{1,3})$/.test(l.zona) ? l.zona : "",
+          ...(Array.isArray(l.rect) && l.rect.length === 4 && l.rect.every(n) ? { rect: l.rect.slice() } : {}),
+          ...(Array.isArray(l.ocl)
+            ? {
+                ocl: l.ocl
+                  .filter(x => typeof x === "string")
+                  .slice(0, 200)
+                  .map(x => txt(x, 60))
+              }
+            : {}),
+          arq: ["gris", "negro", "color"].includes(l.arq) ? l.arq : "gris",
+          color: l.color === "bn" ? "bn" : "color",
+          ley: l.ley !== false,
+          tit: txt(l.tit, 120),
+          num: txt(l.num, 20),
+          notas: txt(l.notas, 2000)
+        }));
+      return L.length
+        ? { lams: L, lamI: Number.isInteger(v.lamI) && v.lamI >= 0 && v.lamI < L.length ? v.lamI : 0 }
+        : {};
+    })(),
+    // Símbolos con criterio del proyectista: relleno, tamaño, letra y grosor por tipo
+    ...(v.simb && typeof v.simb === "object"
       ? {
-          lam: {
-            tam: ["A4", "A3", "A2", "A1"].includes(v.lam.tam) ? v.lam.tam : "A3",
-            zona:
-              typeof v.lam.zona === "string" && /^(todo|vista|planta:\d{1,3})$/.test(v.lam.zona) ? v.lam.zona : "todo",
-            arq: ["gris", "negro", "color"].includes(v.lam.arq) ? v.lam.arq : "gris",
-            color: v.lam.color === "bn" ? "bn" : "color",
-            ley: v.lam.ley !== false,
-            tit: txt(v.lam.tit, 120),
-            num: txt(v.lam.num, 20),
-            notas: txt(v.lam.notas, 2000)
-          }
+          simb: Object.fromEntries(
+            Object.entries(v.simb)
+              .filter(([k, o]) => /^[a-zA-Z0-9]{1,12}$/.test(k) && o && typeof o === "object")
+              .slice(0, 200)
+              .map(([k, o]) => [
+                k,
+                {
+                  ...(["solido", "achurado", "mitad", "ninguno"].includes(o.rel) ? { rel: o.rel } : {}),
+                  ...(n(o.tam) && o.tam >= 0.5 && o.tam <= 2 && o.tam !== 1 ? { tam: o.tam } : {}),
+                  ...(typeof o.let === "string" ? { let: txt(o.let, 4) } : {}),
+                  ...(o.gr === 1.6 ? { gr: 1.6 } : {})
+                }
+              ])
+              .filter(([, o]) => Object.keys(o).length)
+          )
         }
       : {}),
     // Criterios de la revisión del diseño (editables)

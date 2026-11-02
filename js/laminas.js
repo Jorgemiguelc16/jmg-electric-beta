@@ -215,7 +215,13 @@ function laHex(c) {
 
 /* ---------- Grabar el plano: arquitectura de la zona y diseño eléctrico ---------- */
 // Dibuja con el grabador y devuelve sus elementos. cx, cy: centro de la zona; s: píxeles por unidad del dibujo
-function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda }) {
+function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda, ocl }) {
+  // Capas del diseño que esta lámina no muestra
+  const vis = dsD().capas.map(c => [c, c.vis]);
+  (ocl || []).forEach(n => {
+    const c = dsD().capas.find(x => x.n === n);
+    if (c) c.vis = false;
+  });
   const g = laGrabador(),
     vPLV = { ...PLV },
     vSuel = DSU.sueltos,
@@ -243,6 +249,7 @@ function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda }) {
     PL_COL.clear();
     vCol.forEach((v, k) => PL_COL.set(k, v));
     DS_EXPORT = false;
+    vis.forEach(([c, v]) => (c.vis = v));
   }
   return g.items;
 }
@@ -318,11 +325,21 @@ const LA_DEF = {
   notas:
     "Diseño según el Código Nacional de Electricidad – Utilización y los símbolos de la Norma DGE.\nTuberías de PVC empotradas; las medidas se verifican en obra."
 };
-const laOp = () => ({ ...LA_DEF, ...((dsD() && dsD().lam) || {}) });
+// Láminas del proyecto (la v3.0.0-b10 guardaba una sola en lam) y la elegida en la ventana
+function laLista() {
+  const D = dsD();
+  if (!D.lams) D.lams = D.lam ? [D.lam] : [{}];
+  delete D.lam;
+  if (!D.lams.length) D.lams.push({});
+  if (!(D.lamI >= 0 && D.lamI < D.lams.length)) D.lamI = 0;
+  return D.lams;
+}
+const laOp = (i = dsD().lamI || 0) => ({ ...LA_DEF, ...(laLista()[i] || {}) });
 // Zona del dibujo que va en la lámina: una planta encuadrada, lo que se ve en pantalla o todo el diseño
 function laZona(op) {
   // Sin zona elegida: la primera planta encuadrada
   const zona = op.zona || (EPL.plantas.length ? "planta:0" : "todo");
+  if (zona === "rect" && op.rect) return op.rect.slice();
   if (zona.startsWith("planta:")) {
     const p = EPL.plantas[+zona.slice(7)];
     if (p) return [p.x0, p.y0, p.x1, p.y1];
@@ -347,7 +364,7 @@ function laZona(op) {
 function laSvg(op = laOp()) {
   const [W, H] = LAMINAS[op.tam] || LAMINAS.A3,
     D = dsD(),
-    escD = D.escala,
+    escD = op.esc || D.escala,
     mmU = (EPL.f * 1000) / escD,
     P = {
       nombre: $("p_nombre").value,
@@ -382,15 +399,28 @@ function laSvg(op = laOp()) {
     cx = (z[0] + z[2]) / 2,
     cy = (z[1] + z[3]) / 2,
     s = mmU * LA_K;
-  const aviso =
-    zw > ax1 - ax0 + 0.5 || zh > ay1 - ay0 + 0.5
-      ? `La zona (${fmt(zw, 0)} × ${fmt(zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${op.tam} (${fmt(ax1 - ax0, 0)} × ${fmt(ay1 - ay0, 0)} mm): elija un papel más grande, una escala menor o encuadre una planta.`
+  const avEsc =
+    escD !== D.escala
+      ? ` Los símbolos y textos se ven al ${Math.round((D.escala / escD) * 100)} % de su tamaño: el diseño está dibujado para 1:${D.escala}.`
       : "";
+  const aviso =
+    (zw > ax1 - ax0 + 0.5 || zh > ay1 - ay0 + 0.5
+      ? `La zona (${fmt(zw, 0)} × ${fmt(zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${op.tam} (${fmt(ax1 - ax0, 0)} × ${fmt(ay1 - ay0, 0)} mm): elija un papel más grande, otra escala o marque una zona menor.`
+      : "") + avEsc;
   // Leyenda arriba a la derecha (en coordenadas del dibujo, para dibujarla con el mismo código)
   const ley = conLey
     ? { t: "ley", tit: "LEYENDA", x: cx + (mx1 - 4 - lw - acx) / mmU, y: cy - (ay0 - acy) / mmU }
     : null;
-  const items = laGrabar({ cx, cy, s, zona: [z[0], z[1], z[2], z[3]], arq: true, colorArq: op.arq, leyenda: ley });
+  const items = laGrabar({
+    cx,
+    cy,
+    s,
+    zona: [z[0], z[1], z[2], z[3]],
+    arq: true,
+    colorArq: op.arq,
+    leyenda: ley,
+    ocl: op.ocl
+  });
   // Del lienzo de grabación al papel (mm), con el centro de la zona en el centro del área
   const Wc = plW() / 2,
     Hc = plH() / 2,
@@ -722,47 +752,76 @@ const LA_VW = ventanaMovil(document.querySelector("#lamDlg .vw"), "jmg-electric-
 function lamAbrir() {
   if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
   dsAsegurar();
-  const op = laOp();
+  laLista();
+  $("lamDlg").hidden = false;
+  vwFondo();
+  LA_VW.abrir();
+  lamCargar();
+}
+function lamCerrar() {
+  $("lamDlg").hidden = true;
+  vwFondo();
+}
+// Pone en la ventana los datos de la lámina elegida
+function lamCargar() {
+  const D = dsD(),
+    L = laLista(),
+    op = laOp();
+  $("laSel").innerHTML = L.map(
+    (l, i) =>
+      `<option value="${i}">${esc(l.num || "IE-0" + (i + 1))} · ${esc((l.tit || LA_DEF.tit).slice(0, 40))}</option>`
+  ).join("");
+  $("laSel").value = String(D.lamI || 0);
   $("laZona").innerHTML =
     EPL.plantas.map((p, i) => `<option value="planta:${i}">Planta: ${esc(p.n)}</option>`).join("") +
-    `<option value="todo">Todo el diseño eléctrico</option><option value="vista">Lo que se ve en la pantalla</option>`;
+    `<option value="todo">Todo el diseño eléctrico</option><option value="vista">Lo que se ve en la pantalla</option>` +
+    (op.rect ? `<option value="rect">La zona marcada en el plano</option>` : "");
   // Sin zona elegida: la primera planta encuadrada o, si no hay, todo el diseño
-  if (!op.zona || (op.zona.startsWith("planta:") && !EPL.plantas[+op.zona.slice(7)]))
-    op.zona = EPL.plantas.length ? "planta:0" : "todo";
+  let z = op.zona;
+  if (!z || (z.startsWith("planta:") && !EPL.plantas[+z.slice(7)]) || (z === "rect" && !op.rect))
+    z = EPL.plantas.length ? "planta:0" : "todo";
+  $("laZona").value = z;
   $("laTam").value = op.tam;
-  $("laZona").value = op.zona;
-  if (!$("laZona").value) $("laZona").value = EPL.plantas.length ? "planta:0" : "todo";
+  $("laEsc").value = String(op.esc || D.escala);
   $("laArq").value = op.arq;
   $("laColor").value = op.color;
   $("laLey").checked = op.ley;
   $("laTit").value = op.tit;
   $("laNum").value = op.num;
   $("laNotas").value = op.notas;
-  $("laEsc").value = String(dsD().escala);
-  $("lamDlg").hidden = false;
-  vwFondo();
-  LA_VW.abrir();
+  const ocl = new Set(op.ocl || []);
+  $("laCapas").innerHTML = D.capas
+    .map(
+      c =>
+        `<label><input type="checkbox" data-lac="${esc(c.n)}"${ocl.has(c.n) ? "" : " checked"}><i class="ca-sw" style="background:${c.col}"></i>${esc(c.n)}</label>`
+    )
+    .join("");
+  $("laNotas").closest("label").hidden = false;
   lamVista();
 }
-function lamCerrar() {
-  $("lamDlg").hidden = true;
-  vwFondo();
-}
-// Opciones de la ventana al diseño (con deshacer) y vista previa
+// Datos de la ventana a la lámina elegida (con deshacer) y vista previa
 function lamLeer() {
-  const D = dsD();
-  D.lam = {
+  const D = dsD(),
+    L = laLista(),
+    i = D.lamI || 0,
+    e = +$("laEsc").value,
+    ocl = [...$("laCapas").querySelectorAll("[data-lac]")].filter(c => !c.checked).map(c => c.dataset.lac);
+  L[i] = {
+    ...L[i],
     tam: LAMINAS[$("laTam").value] ? $("laTam").value : "A3",
-    zona: $("laZona").value || "todo",
+    zona: $("laZona").value || "",
     arq: ["gris", "negro", "color"].includes($("laArq").value) ? $("laArq").value : "gris",
     color: $("laColor").value === "bn" ? "bn" : "color",
     ley: $("laLey").checked,
     tit: $("laTit").value.replace(/[<>]/g, "").slice(0, 120) || LA_DEF.tit,
-    num: $("laNum").value.replace(/[<>]/g, "").slice(0, 20) || "IE-01",
+    num: $("laNum").value.replace(/[<>]/g, "").slice(0, 20) || "IE-0" + (i + 1),
     notas: $("laNotas").value.replace(/[<>]/g, "").slice(0, 2000)
   };
-  const e = +$("laEsc").value;
-  if (DS_ESCALAS.includes(e) && e !== D.escala) D.escala = e;
+  // La escala de la lámina es suya: no cambia la del diseño
+  if (DS_ESCALAS.includes(e) && e !== D.escala) L[i].esc = e;
+  else delete L[i].esc;
+  if (ocl.length) L[i].ocl = ocl;
+  else delete L[i].ocl;
   edCambio();
 }
 function lamVista() {
@@ -772,21 +831,35 @@ function lamVista() {
   $("laAviso").textContent = r.aviso;
   $("laAviso").hidden = !r.aviso;
 }
-function lamImprimir() {
-  const r = laSvg();
+// La zona marcada en el plano (herramienta Zona de la lámina): vuelve a la ventana con esa zona
+function lamZonaMarcada(z) {
+  const D = dsD(),
+    L = laLista(),
+    i = D.lamI || 0;
+  if (Math.abs(z[2] - z[0]) * PLV.s < 8 || Math.abs(z[3] - z[1]) * PLV.s < 8) return lamAbrir();
+  L[i] = { ...L[i], zona: "rect", rect: z };
+  edCambio();
+  lamAbrir();
+  toast("Zona marcada: la lámina muestra ese rectángulo");
+}
+function lamImprimir(todas) {
+  const L = laLista(),
+    idx = todas ? L.map((l, i) => i) : [dsD().lamI || 0],
+    hojas = idx.map(i => ({ i, ...laSvg(laOp(i)) }));
   let pa = $("printArea");
   if (!pa) {
     pa = document.createElement("div");
     pa.id = "printArea";
     document.body.appendChild(pa);
   }
+  // Cada lámina en su página, con el tamaño de su papel
   pa.innerHTML =
-    `<style>@page{size:${r.W}mm ${r.H}mm;margin:0}#printArea .la-hoja{width:${r.W}mm;height:${r.H}mm;overflow:hidden}#printArea .la-hoja svg{display:block;width:${r.W}mm;height:${r.H}mm}</style>` +
-    `<div class="la-hoja">${r.svg}</div>`;
+    `<style>${hojas.map((h, j) => `@page la${j}{size:${h.W}mm ${h.H}mm;margin:0}#printArea .la-h${j}{page:la${j};width:${h.W}mm;height:${h.H}mm}`).join("")}#printArea .la-hoja{overflow:hidden;break-after:page}#printArea .la-hoja:last-child{break-after:auto}#printArea .la-hoja svg{display:block;width:100%;height:100%}@page{margin:0}</style>` +
+    hojas.map((h, j) => `<div class="la-hoja la-h${j}">${h.svg}</div>`).join("");
   document.body.classList.add("printing");
   printTitulo = document.title;
-  const op = laOp();
-  document.title = `${op.num} - ${($("p_nombre").value.trim() || "Proyecto").replace(/[\\/:*?"<>|]/g, "").slice(0, 70)}`;
+  const nom = ($("p_nombre").value.trim() || "Proyecto").replace(/[\\/:*?"<>|]/g, "").slice(0, 70);
+  document.title = todas ? `Láminas - ${nom}` : `${laOp().num} - ${nom}`;
   setTimeout(() => window.print(), 80);
 }
 function lamDxf(conArq) {
@@ -805,9 +878,14 @@ function lamDxf(conArq) {
   );
 }
 $("laEsc").innerHTML = DS_ESCALAS.map(e => `<option value="${e}">1:${e}</option>`).join("");
-$("lamDlg").addEventListener("change", () => {
+$("lamDlg").addEventListener("change", e => {
+  if (e.target.id === "laSel") {
+    dsD().lamI = +e.target.value || 0;
+    edCambio();
+    return lamCargar();
+  }
   lamLeer();
-  lamVista();
+  lamCargar();
 });
 $("lamDlg").addEventListener("click", e => {
   if (e.target.id === "lamDlg") return lamCerrar();
@@ -818,8 +896,31 @@ $("lamDlg").addEventListener("click", e => {
   else if (a === "max") {
     LA_VW.maximizar();
     lamVista();
-  } else if (a === "pdf") lamImprimir();
+  } else if (a === "pdf") lamImprimir(false);
+  else if (a === "pdftodas") lamImprimir(true);
   else if (a === "dxf") lamDxf(false);
+  else if (a === "nueva") {
+    const D = dsD(),
+      L = laLista(),
+      u = L[D.lamI || 0];
+    L.push({ ...u, num: "IE-" + String(L.length + 1).padStart(2, "0"), tit: LA_DEF.tit });
+    D.lamI = L.length - 1;
+    edCambio();
+    lamCargar();
+    toast(`Lámina ${L[D.lamI].num} creada: elija su zona, sus capas y su título`);
+  } else if (a === "quitar") {
+    const D = dsD(),
+      L = laLista();
+    if (L.length < 2) return toast("El proyecto necesita al menos una lámina");
+    L.splice(D.lamI || 0, 1);
+    D.lamI = Math.max(0, (D.lamI || 0) - 1);
+    edCambio();
+    lamCargar();
+  } else if (a === "marcar") {
+    lamCerrar();
+    plHerr("lamzona");
+    toast("Designe en el plano las dos esquinas de lo que va en la lámina");
+  }
 });
 $("lamDlg").addEventListener("keydown", e => {
   if (e.key === "Escape") {

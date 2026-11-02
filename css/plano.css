@@ -224,6 +224,135 @@
   background: #fff;
   box-shadow: 0 4px 18px rgba(20, 48, 79, 0.22);
 }
+/* Varias láminas, zona marcada y capas por lámina */
+.la-lista {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--dl-grid2, #c9cfd6);
+}
+.la-lista label {
+  margin: 0 !important;
+}
+.la-marcar {
+  width: 100%;
+  margin: -2px 0 8px;
+}
+.la-capas {
+  margin-bottom: 8px;
+  font: 11.5px var(--f-body);
+  color: var(--dl-ink2, #5f6b77);
+}
+.la-capas div {
+  display: grid;
+  gap: 2px;
+  margin-top: 3px;
+  max-height: 120px;
+  overflow: auto;
+  padding: 4px 6px;
+  border: 1px solid var(--dl-grid2, #c9cfd6);
+  border-radius: 3px;
+  background: #fff;
+}
+.la-capas label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+  margin: 0 !important;
+  color: var(--dl-ink, #1b1b1b) !important;
+}
+.la-capas input {
+  width: auto;
+  margin: 0;
+}
+/* Editor de símbolos */
+.si-box {
+  display: flex;
+  flex-direction: column;
+}
+.si-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px 14px;
+  background: #fff;
+  overflow: auto;
+}
+.si-cuerpo canvas {
+  width: 260px;
+  height: 260px;
+  border: 1px solid #dfe4ea;
+  border-radius: 4px;
+  background: #fff;
+}
+.si-op label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 9px;
+  font: 11.5px var(--f-body);
+  color: var(--dl-ink2, #5f6b77);
+}
+.si-op select,
+.si-op input[type="text"] {
+  padding: 4px 6px;
+  border: 1px solid var(--dl-grid2, #c9cfd6);
+  border-radius: 3px;
+  font: 12px var(--f-body);
+}
+.si-r {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.si-r input {
+  flex: 1;
+  accent-color: #c77d2e;
+}
+.si-cod {
+  margin: 0 0 10px;
+  font: 600 12.5px var(--f-body);
+  color: #14304f;
+}
+.si-nota {
+  margin: 6px 0 0;
+  font: 11px/1.45 var(--f-body);
+  color: #66737f;
+}
+.bi-s {
+  position: relative;
+}
+.bi-ed {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: #66737f;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.bi-s:hover .bi-ed {
+  border-color: #cfd7e1;
+  background: #fff;
+}
+.bi-crit {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  font: 600 9px var(--f-body);
+  color: #c77d2e;
+}
 /* Revisión del diseño */
 .rev-box {
   display: flex;
@@ -673,6 +802,62 @@
 .pl-info span {
   font-size: 11px;
   color: var(--ws-text2, #66737f);
+}
+/* Cinta del editor: siempre del mismo alto (el plano no salta al cambiar de pestaña); las columnas pasan a otra
+   columna desde el cuarto elemento. Se puede plegar para tener más espacio de trabajo. */
+.ed-ribbon {
+  height: 96px;
+  min-height: 96px;
+  overflow-y: hidden;
+}
+.ed-ribbon .col {
+  display: grid;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-flow: column;
+  column-gap: 4px;
+  align-content: start;
+}
+.ed-ribbon .chk,
+.ed-ribbon .rs {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.ed.ed-min .ed-ribbon {
+  display: none;
+}
+.ed-tabs {
+  position: relative;
+}
+.ed-plegar {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--ws-text2, #66737f);
+  cursor: pointer;
+}
+.ed-plegar svg {
+  width: 12px;
+  height: 12px;
+}
+.ed-plegar:hover {
+  background: var(--ws-sel, #dde9f6);
+}
+.ed.ed-min .ed-plegar svg {
+  transform: rotate(180deg);
+}
+.ds-rango input[type="range"] {
+  width: 110px;
+  height: 14px;
+  accent-color: #c77d2e;
 }
 /* Cinta del editor: herramienta activa marcada; sin plano, los comandos que lo necesitan quedan apagados */
 .ed-ribbon .rb.on,

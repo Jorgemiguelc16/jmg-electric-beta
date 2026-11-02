@@ -224,7 +224,8 @@ function edAbrir(conArchivo) {
   $("editor").hidden = false;
   document.body.classList.add("ed-on");
   $("edNom").textContent = $("p_nombre").value.trim() || "Proyecto sin nombre";
-  plTema();
+  dsFondo();
+  edCinta();
   PLH.obj = -1;
   plHerr(null);
   if (!EPL) {
@@ -475,6 +476,7 @@ function plIndice(m) {
 /* ---------- Vista: conversión de coordenadas, zoom y desplazamiento ---------- */
 PL_NOMH.mano = "Mano";
 PL_NOMH.zventana = "Zoom ventana";
+PL_NOMH.lamzona = "Zona de la lámina";
 // Vistas anteriores (Vista anterior en la barra de navegación)
 const PL_VHIST = [];
 let PL_VHT = 0;
@@ -780,14 +782,14 @@ function plSobreDibujar() {
   // Medición o encuadre en curso, con el punto actual del cursor
   const pts = PLH.pts.slice(),
     q = plPuntoActual();
-  if ((PLH.h === "planta" || PLH.h === "zventana") && pts.length === 1 && q) {
+  if ((PLH.h === "planta" || PLH.h === "zventana" || PLH.h === "lamzona") && pts.length === 1 && q) {
     const [a, b] = plAPant(pts[0][0], pts[0][1]),
       [c, e] = plAPant(q[0], q[1]);
     g.fillStyle = PL_OSCURO ? "rgba(143,193,240,.12)" : "rgba(20,48,79,.08)";
     g.fillRect(a, b, c - a, e - b);
     g.strokeStyle = azul;
     g.strokeRect(a, b, c - a, e - b);
-  } else if (pts.length && PLH.h !== "planta" && PLH.h !== "zventana") {
+  } else if (pts.length && !["planta", "zventana", "lamzona"].includes(PLH.h)) {
     const todo = PLH.med ? pts : q ? [...pts, q] : pts;
     g.strokeStyle = acento;
     g.lineWidth = 2 * d;
@@ -1224,7 +1226,8 @@ function plOrden(txt) {
           : "Designe el primer punto de una medida conocida (por ejemplo, los extremos de una cota)",
         planta: n ? "Designe la esquina opuesta" : "Designe una esquina de la planta",
         mano: "Arrastre para desplazar el plano · rueda para acercar o alejar",
-        zventana: n ? "Designe la esquina opuesta" : "Designe una esquina del rectángulo que quiere ver"
+        zventana: n ? "Designe la esquina opuesta" : "Designe una esquina del rectángulo que quiere ver",
+        lamzona: n ? "Designe la esquina opuesta" : "Designe una esquina de lo que va en la lámina"
       };
     c.innerHTML = dsEsHerr(PLH.h)
       ? dsOrden(PLH.h, n)
@@ -1287,6 +1290,12 @@ function plPunto(p) {
   }
   PLH.pts.push(p);
   const n = PLH.pts.length;
+  if (h === "lamzona") {
+    if (n < 2) return plOrden();
+    const [a, b] = PLH.pts;
+    plHerr(null);
+    return lamZonaMarcada([Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]);
+  }
   if (h === "zventana") {
     if (n < 2) return plOrden();
     const [a, b] = PLH.pts;
@@ -1794,6 +1803,9 @@ addEventListener("keydown", e => {
   } else if (e.key === "F3" || e.key === "F8") {
     e.preventDefault();
     edAlternar(e.key === "F3" ? "plSnap" : "plOrto");
+  } else if (e.key === "F1" && ctrl) {
+    e.preventDefault();
+    edCinta(true);
   } else if (e.key === "F10") {
     e.preventDefault();
     dsAlternarRejilla("polar", true);
@@ -1946,6 +1958,20 @@ function plMostrar() {
     plDibujar();
   }
 }
+/* ---------- Cinta plegable: más espacio de trabajo (botón ⌃, Ctrl+F1 o doble clic en una pestaña) ---------- */
+function edCinta(alternar) {
+  if (alternar) {
+    DSU.cintaMin = !DSU.cintaMin;
+    dsGuardarPref();
+  }
+  $("editor").classList.toggle("ed-min", !!DSU.cintaMin);
+  if (alternar) toast(DSU.cintaMin ? "Cinta oculta: clic en una pestaña para verla de nuevo" : "Cinta visible");
+}
+$("editor").addEventListener("dblclick", e => {
+  if (e.target.closest("[data-tab-e]")) edCinta(true);
+});
+document.querySelector("#editor [data-edplegar]").addEventListener("click", () => edCinta(true));
+
 /* ---------- Comandos por teclado ----------
    Como la línea de comandos de AutoCAD: se escribe el comando y se pulsa Intro; Intro sin herramienta repite el
    último. Los nombres van en español (y algunos como en AutoCAD). */
@@ -2424,7 +2450,7 @@ $("editor").addEventListener("click", e => {
 });
 new MutationObserver(() => {
   if (!ED.abierto) return;
-  plTema();
+  dsFondo();
   plPanel();
   plDibujar();
 }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-paleta"] });
@@ -2454,6 +2480,7 @@ $("editor").addEventListener("click", e => {
     return;
   }
   if (tab) {
+    if (DSU.cintaMin) edCinta(true);
     $("editor")
       .querySelectorAll("[data-tab-e]")
       .forEach(t => t.classList.toggle("on", t === tab));
@@ -2518,7 +2545,13 @@ $("editor").addEventListener("click", e => {
   }
   if (!PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
   if (a === "ajustar") plAjustar();
-  else if (a === "zprev") plVistaAnterior();
+  else if (a === "fondo0") {
+    DSU.calido = 0;
+    DSU.brillo = 100;
+    dsGuardarPref();
+    dsCinta();
+    dsFondo();
+  } else if (a === "zprev") plVistaAnterior();
   else if (a === "acercar") plZoom(1.5);
   else if (a === "alejar") plZoom(1 / 1.5);
   else if (a === "todas" || a === "ninguna") {

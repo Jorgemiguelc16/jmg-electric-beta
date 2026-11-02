@@ -374,7 +374,11 @@ const DSU = {
   marcas: true,
   marcaEst: "incl",
   polar: true,
-  polarInc: 45
+  polarInc: 45,
+  // Fondo del plano: temperatura (0 blanco, 100 cálido) y brillo (%); cinta plegada
+  calido: 0,
+  brillo: 100,
+  cintaMin: false
 };
 try {
   const g = JSON.parse(localStorage.getItem("jmg-electric-editor-rejilla") || "{}");
@@ -481,14 +485,30 @@ const dsBBs = k => {
 // unidades del símbolo; los textos se dibujan siempre legibles, aunque el símbolo esté girado
 const dsEsLetra = (k, p) => DS_CAT[k] && DS_CAT[k].let && p.t === "t" && p.tx !== "S";
 function dsDibSim(g, k, X, Y, rot, u, col, fondo, lw = plDpr(), dt) {
+  const cr = dsSimb(k);
+  if (cr && cr.gr) lw *= cr.gr;
   g.save();
   g.translate(X, Y);
   g.rotate(-rot);
   g.scale(u, u);
   g.lineCap = "round";
+  // Relleno del cuerpo de criterio: primero, para que las líneas del símbolo queden encima
+  if (cr && cr.rel && cr.rel !== "ninguno" && fondo !== null) {
+    g.lineWidth = Math.max(lw, 0.9 * plDpr()) / u;
+    dsRellenoCuerpo(g, k, cr.rel, col);
+  }
   for (const p of dsPrims(k)) {
     const a = p.a,
-      fi = !p.fi || p.fi === "none" ? null : /^#fff(fff)?$/i.test(p.fi) ? fondo : p.fi === INK_S ? col : p.fi,
+      fi =
+        !p.fi || p.fi === "none" || (cr && cr.rel === "ninguno" && p === dsCuerpo(k) && p.fi === INK_S)
+          ? null
+          : /^#fff(fff)?$/i.test(p.fi)
+            ? cr && cr.rel && cr.rel !== "ninguno" && p === dsCuerpo(k)
+              ? null
+              : fondo
+            : p.fi === INK_S
+              ? col
+              : p.fi,
       st = p.st && p.st !== "none" ? col : null;
     // Líneas del ancho de la capa en pantalla, sin engrosarse con el zoom (las más finas del símbolo, algo menos)
     g.lineWidth = Math.max((lw * p.w) / 1.2, 0.9 * plDpr()) / u;
@@ -505,8 +525,11 @@ function dsDibSim(g, k, X, Y, rot, u, col, fondo, lw = plDpr(), dt) {
       for (let i = 2; i + 1 < a.length; i += 2) g.lineTo(a[i], a[i + 1]);
       g.closePath();
     } else if (p.t === "t") {
-      const mov = dt && dsEsLetra(k, p) ? dt : [0, 0],
-        w = a[2] * 0.6 * p.tx.length,
+      // Letra del tipo cambiada por el proyectista (vacía: sin letra)
+      if (cr && typeof cr.let === "string" && dsEsLetra(k, p) && !cr.let) continue;
+      const txt = cr && typeof cr.let === "string" && dsEsLetra(k, p) ? cr.let : p.tx,
+        mov = dt && dsEsLetra(k, p) ? dt : [0, 0],
+        w = a[2] * 0.6 * txt.length,
         // Centro aproximado del texto: se gira sobre él para dejarlo derecho
         cx = a[0] + mov[0] + (p.an === "middle" ? 0 : p.an === "end" ? -w / 2 : w / 2),
         cy = a[1] + mov[1] - a[2] * 0.35;
@@ -518,7 +541,7 @@ function dsDibSim(g, k, X, Y, rot, u, col, fondo, lw = plDpr(), dt) {
       g.textAlign = "center";
       g.textBaseline = "middle";
       g.fillStyle = p.fi && p.fi !== "none" && !/^#fff(fff)?$/i.test(p.fi) && p.fi !== INK_S ? p.fi : col;
-      g.fillText(p.tx, 0, 0);
+      g.fillText(txt, 0, 0);
       g.restore();
       continue;
     }
@@ -727,10 +750,130 @@ function dsDibDir(g, el, col, s, lw = plDpr()) {
   g.fillText(el.s, X2 + G.lado * dsMm(0.8) * s, Y2);
 }
 
+/* ---------- Símbolos con criterio del proyectista (editor de símbolos) ---------- */
+const dsSimb = k => (dsD() && dsD().simb && dsD().simb[k]) || null;
+const dsTam = k => (dsSimb(k) && dsSimb(k).tam) || 1;
+// Unidades del dibujo por unidad de un símbolo de tipo k (con su tamaño de criterio)
+const dsUk = k => dsU() * dsTam(k);
+// Cuerpo del símbolo (la figura de mayor área: círculo, rectángulo, elipse o polígono), para su relleno
+const DS_CUERPO = {};
+function dsCuerpo(k) {
+  if (k in DS_CUERPO) return DS_CUERPO[k];
+  let mejor = null,
+    am = 0;
+  dsPrims(k).forEach(p => {
+    const a = p.a;
+    let ar = 0;
+    if (p.t === "c") ar = Math.PI * a[2] * a[2];
+    else if (p.t === "e") ar = Math.PI * a[2] * a[3];
+    else if (p.t === "r") ar = Math.abs(a[2] * a[3]);
+    else if (p.t === "p") {
+      for (let i = 0; i + 1 < a.length; i += 2) {
+        const j = (i + 2) % a.length;
+        ar += a[i] * a[j + 1] - a[j] * a[i + 1];
+      }
+      ar = Math.abs(ar / 2);
+    }
+    if (ar > am) {
+      am = ar;
+      mejor = p;
+    }
+  });
+  return (DS_CUERPO[k] = mejor);
+}
+// Camino del cuerpo en el lienzo (en unidades del símbolo, con la transformación ya puesta)
+function dsCaminoCuerpo(g, p) {
+  const a = p.a;
+  g.beginPath();
+  if (p.t === "c") g.arc(a[0], a[1], a[2], 0, 2 * Math.PI);
+  else if (p.t === "e") g.ellipse(a[0], a[1], a[2], a[3], 0, 0, 2 * Math.PI);
+  else if (p.t === "r") g.rect(a[0], a[1], a[2], a[3]);
+  else {
+    g.moveTo(a[0], a[1]);
+    for (let i = 2; i + 1 < a.length; i += 2) g.lineTo(a[i], a[i + 1]);
+    g.closePath();
+  }
+}
+// Contorno del cuerpo como polígono (los círculos y elipses, con 48 lados), en unidades del símbolo
+function dsPoliCuerpo(p) {
+  const a = p.a,
+    out = [];
+  if (p.t === "c" || p.t === "e")
+    for (let i = 0; i < 48; i++) {
+      const t = (i / 48) * 2 * Math.PI;
+      out.push([a[0] + a[2] * Math.cos(t), a[1] + (p.t === "c" ? a[2] : a[3]) * Math.sin(t)]);
+    }
+  else if (p.t === "r") out.push([a[0], a[1]], [a[0] + a[2], a[1]], [a[0] + a[2], a[1] + a[3]], [a[0], a[1] + a[3]]);
+  else for (let i = 0; i + 1 < a.length; i += 2) out.push([a[i], a[i + 1]]);
+  return out;
+}
+// Relleno de criterio del cuerpo: sólido, achurado a 45° o mitad llena. Se recorta con cálculo (sin el recorte del
+// lienzo), así sale igual en la pantalla, en la lámina y en el DXF
+function dsRellenoCuerpo(g, k, rel, col) {
+  const p = dsCuerpo(k);
+  if (!p) return;
+  let P = dsPoliCuerpo(p);
+  const xs = P.map(q => q[0]),
+    ys = P.map(q => q[1]),
+    bb = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  const poli = Q => {
+    g.beginPath();
+    Q.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
+    g.closePath();
+  };
+  g.save();
+  g.fillStyle = col;
+  g.strokeStyle = col;
+  if (rel === "solido") {
+    if (p.t === "c" || p.t === "e") dsCaminoCuerpo(g, p);
+    else poli(P);
+    g.fill();
+  } else if (rel === "mitad") {
+    // La mitad del lado contrario a la llegada (derecha del símbolo): el polígono recortado en x ≥ centro
+    const cx = (bb[0] + bb[2]) / 2,
+      Q = [];
+    P.forEach((a, i) => {
+      const b = P[(i + 1) % P.length],
+        da = a[0] >= cx,
+        db = b[0] >= cx;
+      if (da) Q.push(a);
+      if (da !== db) Q.push([cx, a[1] + ((b[1] - a[1]) * (cx - a[0])) / (b[0] - a[0])]);
+    });
+    if (Q.length > 2) {
+      poli(Q);
+      g.fill();
+    }
+  } else if (rel === "achurado") {
+    // Rectas a 45° (x − y = c) cortadas por el contorno
+    const paso = Math.max(1.2, (bb[2] - bb[0]) / 7);
+    g.beginPath();
+    for (let c = bb[0] - bb[3]; c <= bb[2] - bb[1]; c += paso) {
+      const xs2 = [];
+      P.forEach((a, i) => {
+        const b = P[(i + 1) % P.length],
+          fa = a[0] - a[1] - c,
+          fb = b[0] - b[1] - c;
+        if ((fa <= 0 && fb > 0) || (fa > 0 && fb <= 0)) {
+          const t = fa / (fa - fb);
+          xs2.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+        }
+      });
+      xs2.sort((u, v) => u[0] - v[0]);
+      for (let i = 0; i + 1 < xs2.length; i += 2) {
+        g.moveTo(xs2[i][0], xs2[i][1]);
+        g.lineTo(xs2[i + 1][0], xs2[i + 1][1]);
+      }
+    }
+    g.stroke();
+  }
+  P = null;
+  g.restore();
+}
+
 /* ---------- Geometría: rectángulo, toque y puntos de enganche de cada elemento ---------- */
 // De unidades del símbolo (y hacia abajo) al dibujo, con el giro del elemento
 function dsAMundo(el, a, b) {
-  const u = dsU(),
+  const u = el.k ? dsUk(el.k) : dsU(),
     r = ((el.r || 0) * Math.PI) / 180,
     c = Math.cos(r),
     s = Math.sin(r);
@@ -763,12 +906,13 @@ function dsFilasLey() {
   });
   const out = Object.keys(DS_CAT)
     .filter(k => usados.has(k))
-    .map(k => ({ k, n: DS_CAT[k].n, c: DS_CAT[k].c }));
+    .map(k => ({ k, n: DS_CAT[k].n, c: DS_CAT[k].c + (dsSimb(k) ? " *" : "") }));
   if (tubs.techo) out.push({ tub: "techo", n: "Tubería empotrada en techo o pared", c: "" });
   if (tubs.piso) out.push({ tub: "piso", n: "Tubería empotrada en piso", c: "" });
   if (cond.f) out.push({ cond: { f: 1 }, n: "Conductor de fase", c: "" });
   if (cond.n) out.push({ cond: { n: true }, n: "Conductor neutro", c: "09-93-01" });
   if (cond.t) out.push({ cond: { t: true }, n: "Conductor de protección (tierra)", c: "09-93-02" });
+  if (out.some(f => f.k && dsSimb(f.k))) out.push({ nota: true, n: "(*) Símbolo con criterio del proyectista", c: "" });
   return out;
 }
 // Tamaño de la leyenda en el dibujo
@@ -831,9 +975,10 @@ function dsDibLeyenda(g, el, col, s, lw) {
     texto(f.n, x1 + 2, yc, "left", "", L.w[1] - 4);
     if (f.c) texto(f.c, (x2 + xw) / 2, yc, "center", "", L.w[2] - 2);
     const [Xc, Yc] = P(x1 / 2, yc);
+    if (f.nota) return;
     if (f.k) {
       const c = plColorDis(dsColorEl({ t: "sim", k: f.k }, dsCapa(DS_SIS[DS_CAT[f.k].s].capa)));
-      dsDibSim(g, f.k, Xc, Yc, 0, Math.min(dsU() * s, ((L.fila - 2) * m * s) / 20), c, PL_FONDO, lw);
+      dsDibSim(g, f.k, Xc, Yc, 0, Math.min(dsUk(f.k) * s, ((L.fila - 2) * m * s) / 20), c, PL_FONDO, lw);
     } else {
       // Muestra de tubería (continua o a trazos) o de conductor con su marca
       const a = el.x + 2 * m,
@@ -934,7 +1079,7 @@ function dsHit(x, y, r) {
     const el = orden[i];
     if (!dsEditable(el)) continue;
     if (el.t === "sim") {
-      const u = dsU(),
+      const u = dsUk(el.k),
         rr = ((el.r || 0) * Math.PI) / 180,
         wx = (x - el.x) / u,
         wy = (y - el.y) / u,
@@ -1005,7 +1150,7 @@ function dsFormaCon(k) {
 }
 // Del dibujo a las unidades del símbolo (lo inverso de dsAMundo)
 function dsALocal(el, x, y) {
-  const u = dsU(),
+  const u = dsUk(el.k),
     r = ((el.r || 0) * Math.PI) / 180,
     c = Math.cos(r),
     s = Math.sin(r),
@@ -1033,7 +1178,7 @@ function dsBorde(el, x, y) {
 // Radio en que el artefacto atrae la punta de la tubería (en el dibujo)
 const dsRadioCon = el => {
   const f = dsFormaCon(el.k);
-  return (f.r || Math.max(f.w, f.h)) * dsU();
+  return (f.r || Math.max(f.w, f.h)) * dsUk(el.k);
 };
 const dsConecta = el => !!(el && el.t === "sim" && el.k !== "tab" && DS_CAT[el.k] && dsVis(el));
 // Tablero bajo el punto (dentro de su rectángulo, con r de tolerancia)
@@ -1043,7 +1188,7 @@ function dsTableroEn(x, y, r) {
       if (el.t !== "sim" || el.k !== "tab" || !dsVis(el)) return false;
       const [a, b] = dsALocal(el, x, y),
         bb = dsBBs("tab"),
-        t = r / dsU();
+        t = r / dsUk("tab");
       return a >= bb[0] - t && a <= bb[2] + t && b >= bb[1] - t && b <= bb[3] + t;
     }) || null
   );
@@ -1359,17 +1504,18 @@ function dsPintar(g) {
     const cap = dsCapaDe(el),
       col = plColorDis(dsColorEl(el, cap));
     if (el.t === "sim") {
-      const [X, Y] = plAPant(el.x, el.y);
-      if (!DS_EXPORT && (X < -40 * u || X > W + 40 * u || Y < -40 * u || Y > H + 40 * u)) continue;
-      if (u * 17 < 2.5) {
+      const [X, Y] = plAPant(el.x, el.y),
+        uk = u * dsTam(el.k);
+      if (!DS_EXPORT && (X < -40 * uk || X > W + 40 * uk || Y < -40 * uk || Y > H + 40 * uk)) continue;
+      if (uk * 17 < 2.5) {
         g.fillStyle = col;
         g.fillRect(X - 1, Y - 1, 2, 2);
         continue;
       }
-      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, u, col, PL_FONDO, dsGrosor(cap), el.dt);
+      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, uk, col, PL_FONDO, dsGrosor(cap), el.dt);
       if (el.enc) dsDibEnc(g, el, col, s);
       if (D.nsal && el.cir && el.k !== "tab") dsDibNum(g, el, col, s);
-      if (el.k === "tab") dsDibSalidas(g, el, col, u, dsGrosor(cap));
+      if (el.k === "tab") dsDibSalidas(g, el, col, uk, dsGrosor(cap));
     } else if (el.t === "txt") {
       const hp = el.ht * s;
       if (hp < 2) continue;
@@ -1789,7 +1935,7 @@ function dsAgarreMover1(ag, q) {
   } else if (ag.t === "letra") {
     // Corrimiento de la letra en unidades del símbolo: el punto q llevado a las coordenadas del símbolo
     const p = dsPrims(el.k).find(x => dsEsLetra(el.k, x)),
-      u = dsU(),
+      u = dsUk(el.k),
       r = ((el.r || 0) * Math.PI) / 180,
       wx = (q[0] - el.x) / u,
       wy = (q[1] - el.y) / u,
@@ -1832,7 +1978,7 @@ function dsAlinear(k, q) {
   const nx = vx / d,
     ny = vy / d,
     b = DS_BB[k],
-    u = dsU(),
+    u = dsUk(k),
     // Lado del símbolo que mira al muro: izquierdo, de abajo o de arriba (unidades del símbolo, y hacia abajo)
     th = c.m === "izq" ? Math.atan2(-ny, -nx) : c.m === "arriba" ? Math.atan2(-nx, ny) : Math.atan2(nx, -ny),
     ext = c.m === "izq" ? -b[0] : c.m === "arriba" ? -b[1] : b[3],
@@ -1854,7 +2000,7 @@ function dsSobre(g) {
     g.globalAlpha = sel ? 0.32 : 0.18;
     if (el.t === "sim") {
       const [X, Y] = plAPant(el.x, el.y);
-      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, dsU() * PLV.s, selc, null, 5 * d, el.dt);
+      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, dsUk(el.k) * PLV.s, selc, null, 5 * d, el.dt);
     } else if (el.t === "txt") {
       const b = dsBBox(el),
         [a, c] = plAPant(b[0], b[3]),
@@ -1943,7 +2089,7 @@ function dsSobre(g) {
       X,
       Y,
       (((al ? al.r : PLH.rot) || 0) * Math.PI) / 180,
-      dsU() * PLV.s,
+      dsUk(k) * PLV.s,
       plColorDis(dsColorEl({ t: "sim", k }, dsCapa(DS_SIS[DS_CAT[k].s].capa))),
       PL_FONDO
     );
@@ -2442,7 +2588,7 @@ function dsFantasma(g, el, tr, col) {
   const o = JSON.parse(JSON.stringify(el));
   tr(o);
   if (o.t === "sim")
-    dsDibSim(g, o.k, ...plAPant(o.x, o.y), ((o.r || 0) * Math.PI) / 180, dsU() * PLV.s, col, null, plDpr());
+    dsDibSim(g, o.k, ...plAPant(o.x, o.y), ((o.r || 0) * Math.PI) / 180, dsUk(o.k) * PLV.s, col, null, plDpr());
   else if (o.t === "txt" || o.t === "ley") {
     const b = dsBBox(o),
       [x0, y0] = plAPant(b[0], b[3]),
@@ -2766,6 +2912,7 @@ function dsProps(c) {
     h =
       `<div class="ed-pt">${cat.n}<small>Norma DGE ${cat.c}</small></div>` +
       `<div class="ds-prev">${dsIcono(el.k)}</div>` +
+      `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="simbolo" title="Relleno, tamaño, letra y grosor de este tipo de símbolo (criterio del proyectista)">Editar símbolo…</button>${dsSimb(el.k) ? '<span class="ds-crit">Con criterio del proyectista</span>' : ""}</div>` +
       campo("Capa", capas(el.capa)) +
       campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
       (cat.h
@@ -2975,6 +3122,7 @@ function dsPropClic(e) {
   if (!b) return;
   const a = b.dataset.dsa;
   if (a === "girar") dsGirar();
+  else if (a === "simbolo") siAbrir(dsSel()[0].k);
   else if (a === "condcir") {
     const t = dsSel()[0];
     let n = 0;
@@ -3096,6 +3244,8 @@ function dsCinta() {
   $("dsColor").value = DSU.color;
   $("dsMarcas").checked = DSU.marcas;
   $("dsMarcaEst").value = DSU.marcaEst === "recta" ? "recta" : "incl";
+  $("dsCalido").value = String(DSU.calido || 0);
+  $("dsBrillo").value = String(DSU.brillo || 100);
   $("dsCirT").checked = !!(D && D.cirt);
   $("dsNSal").checked = !!(D && D.nsal);
   $("dsNSal").disabled = sin;
@@ -3167,6 +3317,13 @@ $("dsColor").addEventListener("change", e => {
   dsResumen();
   plDibujar();
 });
+["dsCalido", "dsBrillo"].forEach(id =>
+  $(id).addEventListener("input", e => {
+    DSU[id === "dsCalido" ? "calido" : "brillo"] = +e.target.value;
+    dsGuardarPref();
+    dsFondo();
+  })
+);
 $("dsMarcaEst").addEventListener("change", e => {
   DSU.marcaEst = e.target.value === "recta" ? "recta" : "incl";
   e.target.blur();
@@ -3212,6 +3369,123 @@ $("edRefs").addEventListener("change", e => {
   if (e.target.id === "edSens") DSU.sens = [6, 12, 20].includes(+e.target.value) ? +e.target.value : 12;
   dsGuardarPref();
 });
+
+/* ---------- Editor de símbolos: relleno, tamaño, letra y grosor por tipo (criterio del proyectista) ---------- */
+const SI_VW = ventanaMovil(document.querySelector("#simDlg .vw"), "jmg-electric-simbolo", {
+  w: 600,
+  h: 420,
+  minW: 520,
+  minH: 360
+});
+let SI_K = null;
+function siAbrir(k) {
+  if (!DS_CAT[k] || !dsD()) return;
+  SI_K = k;
+  const o = dsSimb(k) || {},
+    letra = (dsPrims(k).find(p => dsEsLetra(k, p)) || {}).tx;
+  $("siT").textContent = "Editar símbolo · " + DS_CAT[k].n;
+  $("siCod").textContent = `Norma DGE ${DS_CAT[k].c}${letra ? " · letra de la norma: " + letra : ""}`;
+  $("siRel").value = o.rel || "";
+  $("siTam").value = Math.round((o.tam || 1) * 100);
+  $("siTamV").textContent = Math.round((o.tam || 1) * 100) + " %";
+  $("siLet").value = typeof o.let === "string" ? o.let : "";
+  $("siLet").placeholder = letra ? `${letra} (como la norma)` : "sin letra en la norma";
+  $("siLet").disabled = !letra;
+  $("siGr").value = String(o.gr || 1);
+  $("simDlg").hidden = false;
+  vwFondo();
+  SI_VW.abrir();
+  siVista();
+}
+function siCerrar() {
+  $("simDlg").hidden = true;
+  vwFondo();
+  if (!$("bibDlg").hidden) bibRender();
+}
+function siVista() {
+  const c = $("siPrev"),
+    g = c.getContext("2d"),
+    k = SI_K,
+    b = dsBBs(k),
+    t = dsTam(k),
+    u = (Math.min(c.width / (b[2] - b[0]), c.height / (b[3] - b[1])) * 0.7 * t) / Math.max(1, t),
+    col = dsColorEl({ t: "sim", k }, dsCapa(DS_SIS[DS_CAT[k].s].capa));
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, c.width, c.height);
+  dsDibSim(
+    g,
+    k,
+    c.width / 2 - ((b[0] + b[2]) / 2) * u,
+    c.height / 2 - ((b[1] + b[3]) / 2) * u,
+    0,
+    u,
+    col,
+    "#ffffff",
+    2
+  );
+}
+function siLeer() {
+  const D = dsD(),
+    k = SI_K,
+    o = {},
+    rel = $("siRel").value,
+    tam = Math.max(0.6, Math.min(1.6, (+$("siTam").value || 100) / 100)),
+    let_ = $("siLet").value.replace(/[<>]/g, "").trim().slice(0, 4),
+    gr = +$("siGr").value === 1.6 ? 1.6 : 1;
+  if (rel) o.rel = rel;
+  if (tam !== 1) o.tam = tam;
+  if ($("siLet").value !== "" && !$("siLet").disabled) o.let = let_;
+  if (gr !== 1) o.gr = gr;
+  D.simb = D.simb || {};
+  if (Object.keys(o).length) D.simb[k] = o;
+  else delete D.simb[k];
+  if (!Object.keys(D.simb).length) delete D.simb;
+  $("siTamV").textContent = Math.round(tam * 100) + " %";
+  edCambio();
+  siVista();
+}
+$("simDlg").addEventListener("input", e => {
+  if (e.target.id === "siTam") $("siTamV").textContent = e.target.value + " %";
+});
+$("simDlg").addEventListener("change", siLeer);
+$("simDlg").addEventListener("click", e => {
+  if (e.target.id === "simDlg") return siCerrar();
+  const b = e.target.closest("[data-si]");
+  if (!b) return;
+  if (b.dataset.si === "cerrar") siCerrar();
+  else if (b.dataset.si === "norma") {
+    const D = dsD();
+    if (D.simb) delete D.simb[SI_K];
+    if (D.simb && !Object.keys(D.simb).length) delete D.simb;
+    edCambio();
+    siAbrir(SI_K);
+    toast("Símbolo como la Norma DGE");
+  }
+});
+$("simDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    siCerrar();
+  }
+  e.stopPropagation();
+});
+
+/* ---------- Fondo del plano: temperatura y brillo (Vista) ---------- */
+function dsFondo() {
+  const L = plLienzo;
+  L.style.backgroundColor = "";
+  const base = (getComputedStyle(L).backgroundColor.match(/\d+/g) || [255, 255, 255]).slice(0, 3).map(Number);
+  // Solo con el tema claro: del blanco al tono cálido (papel) y más o menos brillo
+  if (plLum(base) > 0.5 && (DSU.calido || DSU.brillo < 100)) {
+    const k = (DSU.calido || 0) / 100,
+      b = (DSU.brillo || 100) / 100,
+      calido = [246, 233, 204],
+      v = base.map((x, i) => (x + (calido[i] - x) * k) * b);
+    L.style.backgroundColor = plHex(v);
+  }
+  plTema();
+  plDibujar();
+}
 
 /* ---------- Ventana de propiedades (doble clic en un elemento) ---------- */
 const EL_VW = ventanaMovil(document.querySelector("#elDlg .vw"), "jmg-electric-propiedades", {
@@ -3578,7 +3852,7 @@ function bibRender() {
         : "";
     }).join("");
   const tarjeta = k =>
-      `<button type="button" class="bi-s" data-bik="${k}" title="${esc(DS_CAT[k].n)} · Norma DGE ${DS_CAT[k].c}">${dsIcono(k)}<b>${esc(DS_CAT[k].n)}</b><small>${DS_CAT[k].c}</small></button>`,
+      `<div class="bi-s" role="button" tabindex="0" data-bik="${k}" title="${esc(DS_CAT[k].n)} · Norma DGE ${DS_CAT[k].c}">${dsSimb(k) ? '<i class="bi-crit">criterio</i>' : ""}<button type="button" class="bi-ed" data-bie="${k}" title="Editar este símbolo (criterio del proyectista)" aria-label="Editar este símbolo">✎</button>${dsIcono(k)}<b>${esc(DS_CAT[k].n)}</b><small>${DS_CAT[k].c}</small></div>`,
     bloque = (tit, ks) =>
       ks.length ? `<h4>${esc(tit)}</h4><div class="bi-lista">${ks.map(tarjeta).join("")}</div>` : "";
   let h;
@@ -3619,7 +3893,9 @@ $("bibDlg").addEventListener("click", e => {
   if (e.target.id === "bibDlg") return bibCerrar();
   const s = e.target.closest("[data-bik]"),
     g = e.target.closest("[data-big]"),
-    b = e.target.closest("[data-bi]");
+    b = e.target.closest("[data-bi]"),
+    ed = e.target.closest("[data-bie]");
+  if (ed) return siAbrir(ed.dataset.bie);
   if (s) return bibElegir(s.dataset.bik);
   if (g) {
     BI_GRUPO = g.dataset.big;
@@ -3636,6 +3912,9 @@ $("bibDlg").addEventListener("keydown", e => {
     e.preventDefault();
     const p = $("biRejilla").querySelector("[data-bik]");
     if (p) bibElegir(p.dataset.bik);
+  } else if (e.key === "Enter" && e.target.dataset && e.target.dataset.bik) {
+    e.preventDefault();
+    bibElegir(e.target.dataset.bik);
   } else if (e.key === "ArrowDown" && e.target.id === "biBusca") {
     e.preventDefault();
     const p = $("biRejilla").querySelector("[data-bik]");
