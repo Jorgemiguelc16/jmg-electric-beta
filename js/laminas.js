@@ -523,7 +523,13 @@ function laSvg(op = laOp()) {
 
 /* ---------- DXF del diseño en coordenadas reales (R12) ---------- */
 // Color ACI más cercano a un color
+const LA_ACI = new Map();
 function laAci(hex) {
+  const h = laHex(hex);
+  if (!LA_ACI.has(h)) LA_ACI.set(h, laAci0(h));
+  return LA_ACI.get(h);
+}
+function laAci0(hex) {
   const v = plRgb(laHex(hex));
   if (v.every(x => x < 60)) return 7;
   let mejor = 7,
@@ -737,9 +743,10 @@ function laDxf(conArq) {
       "ENTITIES"
     ];
   const out = [...tablas, ...E, 0, "ENDSEC", 0, "EOF"];
-  let txt = "";
-  for (let i = 0; i < out.length; i += 2) txt += `${out[i]}\r\n${out[i + 1]}\r\n`;
-  return txt;
+  // El texto del archivo se arma de una vez (sumar cadenas una por una es muy lento con proyectos grandes)
+  const ln = new Array(out.length);
+  for (let i = 0; i < out.length; i++) ln[i] = out[i];
+  return ln.join("\r\n") + "\r\n";
 }
 
 /* ---------- Ventana Lámina ---------- */

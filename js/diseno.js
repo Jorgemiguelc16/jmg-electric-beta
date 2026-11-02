@@ -1067,14 +1067,90 @@ function dsLineas(el) {
 }
 // Elemento editable bajo el punto, o null: primero los símbolos y textos (aunque una tubería pase por encima) y
 // después las líneas; entre iguales, el último dibujado
+/* ---------- Índice espacial del diseño ----------
+   Para que el cursor responda al instante en proyectos grandes: el rectángulo de cada elemento se anota en las
+   celdas de una cuadrícula que tapa; al mover el cursor (tocar, enganchar, conectar) y al dibujar, solo se revisan
+   los elementos de las celdas cercanas o visibles. El índice se rehace cuando el diseño cambia (DS_IDXV). */
+let DS_IDX = null,
+  DS_IDXV = 0;
+const dsIdxSucio = () => DS_IDXV++;
+function dsIdx() {
+  const D = dsD();
+  if (DS_IDX && DS_IDX.D === D && DS_IDX.v === DS_IDXV && DS_IDX.n === D.els.length) return DS_IDX;
+  const bb = new Map(),
+    pos = new Map();
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  D.els.forEach((el, i) => {
+    let b;
+    try {
+      b = dsBBox(el);
+    } catch (e) {
+      b = null;
+    }
+    if (!b || !b.every(Number.isFinite)) return;
+    bb.set(el, b);
+    pos.set(el, i);
+    x0 = Math.min(x0, b[0]);
+    y0 = Math.min(y0, b[1]);
+    x1 = Math.max(x1, b[2]);
+    y1 = Math.max(y1, b[3]);
+  });
+  // Sin elementos: un índice vacío (con números finitos)
+  if (!bb.size) x0 = y0 = x1 = y1 = 0;
+  // Celdas de alrededor de 1/150 del diseño (al menos 0.25 m)
+  const tam = Math.max((x1 - x0) / 150, (y1 - y0) / 150, 0.25 / (EPL ? EPL.f : 1)) || 1,
+    cel = new Map(),
+    grandes = [];
+  bb.forEach((b, el) => {
+    const i0 = Math.floor((b[0] - x0) / tam),
+      i1 = Math.floor((b[2] - x0) / tam),
+      j0 = Math.floor((b[1] - y0) / tam),
+      j1 = Math.floor((b[3] - y0) / tam);
+    // Los elementos que tapan muchas celdas (una leyenda, una tubería muy larga) van aparte y se revisan siempre
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 400) return grandes.push(el);
+    for (let i = i0; i <= i1; i++)
+      for (let j = j0; j <= j1; j++) {
+        const k = i + "," + j;
+        (cel.get(k) || cel.set(k, []).get(k)).push(el);
+      }
+  });
+  return (DS_IDX = { D, v: DS_IDXV, n: D.els.length, bb, pos, cel, grandes, tam, x0, y0 });
+}
+// Elementos cuyo rectángulo toca el rectángulo [xa, ya, xb, yb] (sin repetir)
+function dsEnZona(xa, ya, xb, yb) {
+  if (!dsD() || ![xa, ya, xb, yb].every(Number.isFinite)) return [];
+  const I = dsIdx();
+  if (!I.bb.size) return [];
+  const out = new Set(),
+    i0 = Math.floor((xa - I.x0) / I.tam),
+    i1 = Math.floor((xb - I.x0) / I.tam),
+    j0 = Math.floor((ya - I.y0) / I.tam),
+    j1 = Math.floor((yb - I.y0) / I.tam),
+    toca = el => {
+      const b = I.bb.get(el);
+      return b && b[0] <= xb && b[2] >= xa && b[1] <= yb && b[3] >= ya;
+    };
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 40000) return I.D.els.filter(toca);
+  for (let i = i0; i <= i1; i++)
+    for (let j = j0; j <= j1; j++) for (const el of I.cel.get(i + "," + j) || []) if (toca(el)) out.add(el);
+  I.grandes.forEach(el => toca(el) && out.add(el));
+  return [...out];
+}
+const dsCercanos = (x, y, r) => dsEnZona(x - r, y - r, x + r, y + r);
 function dsHit(x, y, r) {
   const D = dsD();
   if (!D) return null;
-  // Se recorre desde el final: los símbolos y textos van al final para revisarse primero
-  const orden = [
-    ...D.els.filter(el => el.t !== "sim" && el.t !== "txt"),
-    ...D.els.filter(el => el.t === "sim" || el.t === "txt")
-  ];
+  // Solo los cercanos, en el orden del dibujo; se recorre desde el final: los símbolos y textos van al final para
+  // revisarse primero
+  const I = dsIdx(),
+    cand = dsCercanos(x, y, r).sort((a, b) => I.pos.get(a) - I.pos.get(b)),
+    orden = [
+      ...cand.filter(el => el.t !== "sim" && el.t !== "txt"),
+      ...cand.filter(el => el.t === "sim" || el.t === "txt")
+    ];
   for (let i = orden.length - 1; i >= 0; i--) {
     const el = orden[i];
     if (!dsEditable(el)) continue;
@@ -1184,7 +1260,7 @@ const dsConecta = el => !!(el && el.t === "sim" && el.k !== "tab" && DS_CAT[el.k
 // Tablero bajo el punto (dentro de su rectángulo, con r de tolerancia)
 function dsTableroEn(x, y, r) {
   return (
-    (dsD() ? dsD().els : []).find(el => {
+    dsCercanos(x, y, r).find(el => {
       if (el.t !== "sim" || el.k !== "tab" || !dsVis(el)) return false;
       const [a, b] = dsALocal(el, x, y),
         bb = dsBBs("tab"),
@@ -1213,7 +1289,7 @@ function dsInvertirTub(el) {
 function dsArtefactoEn(x, y, r) {
   let mejor = null,
     md = Infinity;
-  (dsD() ? dsD().els : []).forEach(el => {
+  dsCercanos(x, y, r).forEach(el => {
     if (!dsConecta(el)) return;
     const c = dsCentroCon(el),
       dd = Math.hypot(c[0] - x, c[1] - y);
@@ -1496,8 +1572,15 @@ function dsPintar(g) {
     H = plH();
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
+  let vista = null;
+  if (!DS_EXPORT) {
+    const a = plADib(0, H),
+      b = plADib(W, 0),
+      m = dsMm(12);
+    vista = new Set(dsEnZona(a[0] - m, a[1] - m, b[0] + m, b[1] + m));
+  }
   for (const el of D.els) {
-    if (!dsVis(el)) continue;
+    if (!dsVis(el) || (vista && !vista.has(el))) continue;
     // Capa del elemento para la lámina y el DXF (el lienzo de grabación la anota)
     g.capa = el.capa;
     // Color propio del elemento o, si no tiene, el de su capa
@@ -1912,6 +1995,7 @@ function dsAgarreMover(ag, q) {
   if (el && el.t === "sim") dsReconectar();
 }
 function dsAgarreMover1(ag, q) {
+  dsIdxSucio();
   const el = dsD().els.find(e => e.id === ag.id);
   if (!el) return;
   const o = JSON.parse(ag.orig);
@@ -2694,6 +2778,7 @@ function dsTrasladar(el, dx, dy) {
   }
 }
 function dsMover(q) {
+  dsIdxSucio();
   const a = PLH.arr,
     dx = q[0] - a.base[0],
     dy = q[1] - a.base[1],
@@ -3157,7 +3242,16 @@ function dsPropClic(e) {
 });
 
 /* ---------- Resumen del diseño (panel izquierdo): cuántos hay de cada cosa; un clic los selecciona ---------- */
-function dsResumen() {
+function dsResumen(ya) {
+  const D = dsD();
+  if (!ya && D && D.els.length > 3000) {
+    clearTimeout(dsResumen.t);
+    dsResumen.t = setTimeout(() => dsResumen(true), 300);
+    return;
+  }
+  dsResumen0();
+}
+function dsResumen0() {
   const D = dsD(),
     box = $("dsResumen");
   if (!D || !PL_MOD) {

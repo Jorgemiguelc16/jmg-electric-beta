@@ -258,6 +258,7 @@ function edCerrar() {
 }
 // Un cambio en la copia del editor: entra a su historial de deshacer
 function edCambio() {
+  dsIdxSucio();
   if (EPL && EPL.dis) {
     dsReconectar();
     dsPropagarCircuitos();
@@ -266,6 +267,9 @@ function edCambio() {
   if (ED.hist[ED.hist.length - 1] !== s) {
     ED.hist.push(s);
     if (ED.hist.length > 80) ED.hist.shift();
+    // Tope de memoria del deshacer: con proyectos grandes se guardan menos pasos (al menos 10), unos 80 MB en total
+    let tot = ED.hist.reduce((a, h) => a + h.length, 0);
+    while (ED.hist.length > 10 && tot > 4e7) tot -= ED.hist.shift().length;
     ED.redo = [];
   }
   edEstado();
@@ -978,7 +982,7 @@ function plSegmentos(x, y, r, muros) {
   }
   const D = dsD();
   if (D)
-    D.els.forEach(el => {
+    dsCercanos(x, y, r).forEach(el => {
       if (!dsVis(el) || (fuera && fuera.has(el.id))) return;
       dsLineas(el).forEach(p => {
         for (let j = 0; j + 3 < p.length; j += 2) {
@@ -1033,7 +1037,7 @@ function plEnganche(x, y) {
     if (c) {
       // Sobre el cuerpo del tablero: el menú de sus salidas; fuera de él, la salida más cercana
       if (c[2] === 10 && dsTableroEn(x, y, 0)) return c;
-      const sal = dsPuntosEnganche()
+      const sal = dsPuntosEnganche(dsCercanos(x, y, r))
         .filter(q => q[2] === 8 && Math.hypot(q[0] - x, q[1] - y) < r)
         .sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y))[0];
       return sal || c;
@@ -1042,7 +1046,7 @@ function plEnganche(x, y) {
   let mejor = null,
     md = r;
   const fuera = plMoviendo(),
-    del = dsD() ? dsD().els.filter(el => !(fuera && fuera.has(el.id))) : [];
+    del = dsD() ? dsCercanos(x, y, r).filter(el => !(fuera && fuera.has(el.id))) : [];
   for (const q of dsPuntosEnganche(del)) {
     const dd = Math.hypot(q[0] - x, q[1] - y);
     if (dd < md && vale(q[2])) {

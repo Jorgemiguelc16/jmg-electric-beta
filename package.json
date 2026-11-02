@@ -14,7 +14,8 @@
     "revisar": "node herramientas/revisar.js",
     "estilos-sin-uso": "node herramientas/estilos-sin-uso.js",
     "estilos-tapados": "node herramientas/estilos-tapados.js",
-    "capturas": "node herramientas/capturas.mjs"
+    "capturas": "node herramientas/capturas.mjs",
+    "estres": "node herramientas/estres.mjs"
   },
   "devDependencies": {
     "eslint": "9.9.1",
