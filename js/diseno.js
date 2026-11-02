@@ -1280,6 +1280,42 @@ function dsTableroEn(x, y, r) {
     }) || null
   );
 }
+// Salida de tablero más cercana a (x, y), a menos de r: { tb, o } o null
+function dsSalidaEn(x, y, r) {
+  let mejor = null,
+    md = r;
+  dsCercanos(x, y, r + dsMm(20)).forEach(tb => {
+    if (tb.k !== "tab" || !dsVis(tb)) return;
+    dsSalidasTab(tb).forEach(o => {
+      const d = Math.hypot(o.p[0] - x, o.p[1] - y);
+      if (d < md) {
+        md = d;
+        mejor = { tb, o };
+      }
+    });
+  });
+  return mejor;
+}
+// Empieza una tubería desde una salida del tablero o desde un artefacto, por el techo, la pared o el piso
+function dsSacarTub(desde, modo) {
+  DS_SEL.clear();
+  plHerr(modo === "piso" ? "tubP" : "tubT");
+  PLH.modoT = modo;
+  if (desde.o)
+    dsPuntoTub(desde.o.p, [
+      desde.o.p[0],
+      desde.o.p[1],
+      8,
+      { cir: desde.o.n, tab: desde.tb.id, nom: desde.tb.nom || "" }
+    ]);
+  else {
+    const c = dsCentroCon(desde.el);
+    dsPuntoTub(c, [c[0], c[1], 9, { con: desde.el.id, nom: DS_CAT[desde.el.k].n }]);
+  }
+  toast(
+    `Tubería por ${modo === "piso" ? "el piso" : modo === "pared" ? "la pared" : "el techo"}: haga clic en cada punto; clic derecho o Intro para terminar`
+  );
+}
 // Invierte el sentido de una tubería (para que empiece en el tablero)
 function dsInvertirTub(el) {
   const q = [];
@@ -1849,7 +1885,7 @@ function dsInfoEl(el) {
   }
   if (el.t === "tub")
     return [
-      `Tubería en ${el.modo === "piso" ? "piso" : "techo"}`,
+      `Tubería en ${el.modo === "piso" ? "piso" : el.modo === "pared" ? "pared" : "techo"}`,
       el.cir || "",
       `${fmt(dsLargo(el) * f, 2)} m`,
       el.cond ? dpCond(el.cond) : "",
@@ -2852,7 +2888,7 @@ function dsTerminar(conFin, tabFin) {
   dsCapa(capa);
   const el = { t: h === "pol" ? "lin" : "tub", pts: PLH.pts.flat(), c: false, capa };
   if (dsEsTub(h)) {
-    el.modo = h === "tubP" ? "piso" : "techo";
+    el.modo = h === "tubP" ? "piso" : PLH.modoT === "pared" ? "pared" : "techo";
     if ((PLH.bul || []).some(Boolean)) el.b = PLH.bul.slice(0, PLH.pts.length - 1);
     if (PLH.cirIni) {
       el.cir = PLH.cirIni.cir;
@@ -3236,7 +3272,7 @@ function dsProps(c) {
       (tub
         ? campo(
             "Recorrido",
-            `<select data-dsp="modo"><option value="techo"${el.modo !== "piso" ? " selected" : ""}>Techo o pared (línea continua)</option><option value="piso"${el.modo === "piso" ? " selected" : ""}>Piso (línea discontinua)</option></select>`
+            `<select data-dsp="modo"><option value="techo"${!el.modo || el.modo === "techo" ? " selected" : ""}>Techo (línea continua)</option><option value="pared"${el.modo === "pared" ? " selected" : ""}>Pared (línea continua)</option><option value="piso"${el.modo === "piso" ? " selected" : ""}>Piso (línea discontinua)</option></select>`
           )
         : "") +
       fila(
@@ -3375,7 +3411,7 @@ function dsPropCambio(e) {
     else if (k === "rad") el.rad = Math.max(0.01, parseFloat(v) || 0.1) / EPL.f;
     else if (k === "modo") {
       if (el.t === "tub") {
-        el.modo = v === "piso" ? "piso" : "techo";
+        el.modo = ["piso", "pared"].includes(v) ? v : "techo";
         // La tubería pasa a la capa de su recorrido si estaba en la del otro
         if (el.capa === DS_SIS.tubT.capa || el.capa === DS_SIS.tubP.capa)
           el.capa = el.modo === "piso" ? DS_SIS.tubP.capa : DS_SIS.tubT.capa;

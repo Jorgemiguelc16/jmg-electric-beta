@@ -783,7 +783,7 @@ function metDatos() {
   // Tuberías por recorrido y diámetro
   const tub = new Map();
   tubs.forEach(t => {
-    const k = `Tubería PVC empotrada en ${t.modo === "piso" ? "piso" : "techo o pared"}${t.dia ? ` · Ø ${t.dia} mm` : " · diámetro sin indicar"}`;
+    const k = `Tubería PVC empotrada en ${t.modo === "piso" ? "piso" : t.modo === "pared" ? "pared" : "techo"}${t.dia ? ` · Ø ${t.dia} mm` : " · diámetro sin indicar"}`;
     tub.set(k, (tub.get(k) || 0) + dsLargo(t) * f);
   });
   sec.push(["Tuberías", [...tub].sort().map(([k, v]) => [k, "m", v])]);

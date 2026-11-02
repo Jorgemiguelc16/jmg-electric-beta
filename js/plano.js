@@ -1039,6 +1039,11 @@ function plEnganche(x, y) {
     sn = PL_MOD.snap,
     vale = k => R[PL_REF[k]] !== false;
   // Tubería: la punta se conecta al artefacto cercano (en su borde); la salida del tablero va primero
+  if (dsEsTub(PLH.h) || (PLH.agarre && PLH.agarre.t === "v")) {
+    const s = dsSalidaEn(x, y, r * 1.6);
+    // (sobre el cuerpo del tablero manda el menú de sus salidas)
+    if (s && !dsTableroEn(x, y, 0)) return [s.o.p[0], s.o.p[1], 8, { cir: s.o.n, tab: s.tb.id, nom: s.tb.nom || "" }];
+  }
   if (vale(9)) {
     const c = dsEngancheCon(x, y, r);
     if (c) {
@@ -1217,6 +1222,7 @@ function plHerr(h) {
   PLH.lado = 1;
   PLH.cirIni = null;
   PLH.conIni = null;
+  PLH.modoT = null;
   plPedir(null);
   // Sin herramienta, el modo es Seleccionar
   document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
@@ -2409,6 +2415,23 @@ function edMenuAbrir(e) {
     p = plADib(X, Y),
     D = dsD();
   ED_MENU.p = p;
+  ED_MENU.ctx = null;
+  // Sobre el circulito de una salida del tablero: sus opciones
+  const sal = !PLH.h && D && dsSalidaEn(p[0], p[1], (9 * plDpr()) / PLV.s);
+  if (sal) {
+    ED_MENU.ctx = sal;
+    DS_SEL.clear();
+    PL_ASEL.clear();
+    DS_SEL.add(sal.tb.id);
+    edProps();
+    plSobreDibujar();
+    ED_MENU.innerHTML =
+      `<div class="ed-mt">${esc(sal.o.n)}${sal.o.d ? " · " + esc(sal.o.d) : ""} · ${esc(sal.tb.nom || "Tablero")}</div>` +
+      `<button type="button" data-edm="salmenu" role="menuitem"><span>Salida del circuito ${esc(sal.o.n)}</span><kbd>▸</kbd></button>` +
+      `<hr><button type="button" data-edm="tablero" role="menuitem"><span>Circuitos del tablero…</span></button>`;
+    ED_MENU.hidden = false;
+    return edMenuPos(e.clientX, e.clientY);
+  }
   if (!PLH.h && D) {
     const id = dsHit(p[0], p[1], (6 * plDpr()) / PLV.s);
     if (id && !DS_SEL.has(id)) {
@@ -2438,6 +2461,16 @@ function edMenuAbrir(e) {
     if (PLH.h.startsWith("col:")) b("girar", `Girar ${DSU.giro || 90}° a la izquierda`, "R");
   } else if (sel.length) {
     tit(sel.length > 1 ? `${sel.length} elementos del diseño` : dsNomEl(sel[0]));
+    // Sacar una tubería: del tablero, por una de sus salidas; de un artefacto, desde él
+    if (sel.length === 1 && sel[0].k === "tab" && sel[0].nc) {
+      ED_MENU.ctx = { tb: sel[0] };
+      b("saltab", "Salida de circuito ▸");
+      sep();
+    } else if (sel.length === 1 && dsConecta(sel[0])) {
+      ED_MENU.ctx = { el: sel[0] };
+      b("salmenu", "Sacar tubería ▸");
+      sep();
+    }
     b("copiar", "Copiar", "Ctrl+C");
     b("cortar", "Cortar", "Ctrl+X");
     b("pegar", "Pegar", "Ctrl+V", DS_PORTA.length > 0);
@@ -2618,11 +2651,49 @@ const dsNomEl = el =>
   el.t === "sim"
     ? esc(DS_CAT[el.k] ? DS_CAT[el.k].n : el.k)
     : { tub: "Tubería", lin: "Línea", txt: "Texto", cir: "Círculo", cot: "Cota", dir: "Directriz" }[el.t] || "Elemento";
+// Submenú del recorrido de la tubería que se saca (techo, pared o piso), en el mismo lugar del menú
+function edMenuRecorrido(ctx) {
+  const t = ctx.o ? `Salida ${ctx.o.n} · sacar tubería` : `${DS_CAT[ctx.el.k].n} · sacar tubería`;
+  ED_MENU.ctx = ctx;
+  ED_MENU.innerHTML =
+    `<div class="ed-mt">${esc(t)}</div>` +
+    [
+      ["techo", "Por el techo", "línea continua"],
+      ["pared", "Por la pared", "línea continua"],
+      ["piso", "Por el piso", "línea discontinua"]
+    ]
+      .map(
+        ([m, n, k]) =>
+          `<button type="button" data-edm="tub:${m}" role="menuitem"><span>${n}</span><kbd>${k}</kbd></button>`
+      )
+      .join("");
+  ED_MENU.hidden = false;
+}
 function edMenuAccion(a) {
-  const fn = ED_MENU.fn;
+  const fn = ED_MENU.fn,
+    ctx = ED_MENU.ctx;
+  if (a === "salmenu" && ctx) return edMenuRecorrido(ctx);
+  if (a === "saltab" && ctx && ctx.tb) {
+    // Lista de salidas del tablero; al elegir una, el recorrido
+    const S = dsSalidasTab(ctx.tb);
+    ED_MENU.innerHTML =
+      `<div class="ed-mt">Salidas de ${esc(ctx.tb.nom || "tablero")}</div>` +
+      S.map(
+        o =>
+          `<button type="button" data-edm="salsel:${o.i}" role="menuitem"><span><b style="color:${plColorDis(dsColCir(o.n, ctx.tb.id))}">${o.n}</b>${o.d ? " · " + esc(o.d) : ""}</span><kbd>▸</kbd></button>`
+      ).join("");
+    return;
+  }
+  if (a.startsWith("salsel:") && ctx && ctx.tb)
+    return edMenuRecorrido({ tb: ctx.tb, o: dsSalidasTab(ctx.tb)[+a.slice(7)] });
+  if (a.startsWith("tub:") && ctx) {
+    edMenuCerrar();
+    return dsSacarTub(ctx, a.slice(4));
+  }
   edMenuCerrar();
   if (a.startsWith("sal:")) return fn && fn(+a.slice(4));
   if (a.startsWith("tablero:")) return tabAbrir(a.slice(8));
+  if (a === "tablero" && ctx && ctx.tb) return tabAbrir(ctx.tb.id);
   const sel = dsD() ? dsSel().filter(dsEditable) : [];
   if (a === "terminar") return PLH.h === "rec" ? plTerminarRecorrido() : dsTerminar();
   if (a === "cancelar" || a === "soltar") {

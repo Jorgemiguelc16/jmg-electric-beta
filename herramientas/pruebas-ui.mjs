@@ -1506,9 +1506,7 @@ prueba(
     await clic('#editor [data-pl="metrado"]');
     const met = await ev("$('metC').textContent");
     ok(
-      /techo o pared · Ø 20 mm/.test(met) &&
-        /Salida de alumbrado en techo/.test(met) &&
-        /Conductor de protección/.test(met),
+      /techo · Ø 20 mm/.test(met) && /Salida de alumbrado en techo/.test(met) && /Conductor de protección/.test(met),
       "metrado: tuberías, artefactos y conductores"
     );
     await clic('[data-met="cerrar"]');
@@ -1595,6 +1593,91 @@ prueba("Editor de diseño: ángulo junto al punto de giro (clic para escribirlo)
     (await ev("dsD().els.find(e => e.k === 'toma').r")) === 60,
     `imán: cerca de 59° queda en 60° (${await ev("dsD().els.find(e => e.k === 'toma').r")}°)`
   );
+  await clic('[data-ed="aceptar"]');
+});
+
+prueba("Editor de diseño: salidas del tablero precisas y clic derecho para sacar tuberías", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Tablero pegado al muro superior (sus salidas quedan junto a las líneas del muro)
+  await ev(
+    `(() => { dsAgregar({ t: 'sim', k: 'tab', x: ${OX} + 3, y: ${OY} + 7.9, r: 180, capa: 'E-TABLEROS', nom: 'TG', nc: 4 });
+      dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 5, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' }); edCambio(); plVer(${OX} + 1.5, ${OY} + 6.5, ${OX} + 4.5, ${OY} + 8.5); })()`
+  );
+  await esperar(150);
+  const sal = await J("dsSalidasTab(dsD().els.find(e => e.k === 'tab')).map(o => o.p)");
+  // Con la tubería, el cursor 5 px al lado de la salida C-2: engancha la salida, no el muro
+  await clic('#editor [data-pl="tubT"]');
+  await moverPlano(sal[1][0] + (5 * (await ev("plDpr()"))) / (await ev("PLV.s")), sal[1][1]);
+  const eng = await J("PLH.eng");
+  ok(eng && eng[2] === 8 && eng[3].cir === "C-2", `engancha la salida C-2 (${eng && eng[2]})`);
+  await teclaE("Escape", "Escape", 27);
+  // Clic derecho en la salida C-3 › Salida del circuito › Por la pared
+  const [X, Y] = await J(
+    `(() => { const [X, Y] = plAPant(${sal[2][0]}, ${sal[2][1]}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+  );
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: X,
+    y: Y,
+    button: "right",
+    buttons: 2,
+    clickCount: 1
+  });
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: X,
+    y: Y,
+    button: "right",
+    buttons: 0,
+    clickCount: 1
+  });
+  await esperar(80);
+  ok(
+    /C-3/.test(await ev("$('edMenu').textContent")) &&
+      (await ev("!!$('edMenu').querySelector('[data-edm=\"salmenu\"]')")),
+    "clic derecho en la salida: «Salida del circuito C-3»"
+  );
+  await clic('#edMenu [data-edm="salmenu"]');
+  ok(await ev("!!$('edMenu').querySelector('[data-edm=\"tub:pared\"]')"), "submenú: techo, pared o piso");
+  await clic('#edMenu [data-edm="tub:pared"]');
+  ok((await ev("PLH.h")) === "tubT" && (await ev("PLH.pts.length")) === 1, "la tubería empieza en la salida");
+  await ev(`plVer(${OX} + 1, ${OY} + 3, ${OX} + 7, ${OY} + 8.5); 1`);
+  await clicPlano(OX + 5, OY + 5, 0);
+  await teclaE("Escape", "Escape", 27);
+  const t = await J("dsD().els.find(e => e.t === 'tub')");
+  ok(
+    t && t.modo === "pared" && t.cir === "C-3" && t.c0 === t.tab && !!t.c1,
+    `tubería por la pared, del C-3 hasta la luminaria (${t && t.modo})`
+  );
+  // En un artefacto: Sacar tubería (sin herramienta activa)
+  await ev("plHerr(null); 1");
+  await ev("DS_SEL.clear(); DS_SEL.add(dsD().els.find(e => e.k === 'luz').id); 1");
+  const [Xl, Yl] = await J(
+    `(() => { const [X, Y] = plAPant(${OX} + 5, ${OY} + 5), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+  );
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: Xl,
+    y: Yl,
+    button: "right",
+    buttons: 2,
+    clickCount: 1
+  });
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: Xl,
+    y: Yl,
+    button: "right",
+    buttons: 0,
+    clickCount: 1
+  });
+  await esperar(80);
+  ok(
+    await ev("!!$('edMenu').querySelector('[data-edm=\"salmenu\"]')"),
+    "en un artefacto: «Sacar tubería ▸» " + (await ev("$('edMenu').textContent.slice(0, 80)"))
+  );
+  await ev("edMenuCerrar(); 1");
   await clic('[data-ed="aceptar"]');
 });
 

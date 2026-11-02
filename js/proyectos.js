@@ -716,7 +716,8 @@ function disValido(v) {
             : {}),
           ...(e.t === "tub"
             ? {
-                modo: e.modo === "piso" ? "piso" : "techo",
+                // Recorrido: techo, pared (las dos con línea continua) o piso (discontinua)
+                modo: ["piso", "pared"].includes(e.modo) ? e.modo : "techo",
                 ...cir,
                 ...(typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {}),
                 // Artefactos a los que está conectada en su inicio (c0) y en su final (c1)
