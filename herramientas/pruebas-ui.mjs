@@ -761,6 +761,112 @@ prueba("Editor de diseño: tablero con circuitos (doble clic) y tubería desde s
   );
 });
 
+prueba(
+  "Editor de diseño: biblioteca, giro libre, letra movible, color y Ctrl+X en el diseño y la arquitectura",
+  async ok => {
+    await ejemplo("uni");
+    await abrirPlano();
+    // Biblioteca de símbolos (tecla B): buscador por nombre o código de la norma
+    await teclaE("b", "KeyB", 66);
+    await esperar(80);
+    ok(await ev("!$('bibDlg').hidden"), "la tecla B abre la biblioteca de símbolos");
+    ok(
+      await ev("$('biRejilla').querySelectorAll('[data-bik]').length === Object.keys(DS_CAT).length"),
+      "la biblioteca muestra todos los símbolos"
+    );
+    await poner("#biBusca", "caja de paso");
+    ok(
+      (await ev("$('biRejilla').querySelector('[data-bik]').dataset.bik")) === "caja",
+      "buscar «caja de paso» encuentra la caja (09-93-08)"
+    );
+    await poner("#biBusca", "09-93-17");
+    await ev("$('biBusca').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))");
+    ok(await ev("$('bibDlg').hidden && PLH.h === 'col:toma'"), "Enter elige el primero: el tomacorriente queda listo");
+    ok(await ev("biRecientes()[0] === 'toma'"), "queda entre los usados hace poco");
+    // Sin encajar en el muro: el tomacorriente se coloca suelto en el ambiente
+    await ev("DSU.alinear = false; 1");
+    await clicPlano(OX + 3.3, OY + 4.1, 0);
+    await teclaE("Escape", "Escape", 27);
+    await ev("DSU.alinear = true; 1");
+    const t = await J("EPL.dis.els.find(e => e.k === 'toma')");
+    ok(t && !t.r, "tomacorriente colocado");
+    // Giro libre con su pinzamiento redondo
+    await clicPlano(t.x, t.y, 0);
+    const g = await J(`dsAgarres(EPL.dis.els.find(e => e.id === '${t.id}')).find(a => a.t === 'giro')`);
+    ok(!!g, "el símbolo seleccionado tiene pinzamiento de giro");
+    const a = ((37 + 90) * Math.PI) / 180;
+    await arrastrarPlano([g.x, g.y], [t.x + 0.6 * Math.cos(a), t.y + 0.6 * Math.sin(a)]);
+    const r1 = await ev(`EPL.dis.els.find(e => e.id === '${t.id}').r`);
+    ok(Math.abs(r1 - 37) < 0.6, `giro libre a 37° (${r1}°)`);
+    await poner('#edPropC [data-dsp="r"]', "12.5");
+    ok((await ev(`EPL.dis.els.find(e => e.id === '${t.id}').r`)) === 12.5, "rotación escrita con decimales: 12.5°");
+    // La letra T se mueve con su pinzamiento y vuelve a su lugar
+    const l = await J(`dsAgarres(EPL.dis.els.find(e => e.id === '${t.id}')).find(a => a.t === 'letra')`);
+    ok(!!l, "la letra del tipo tiene pinzamiento");
+    await arrastrarPlano([l.x, l.y], [l.x + 0.25, l.y + 0.1]);
+    ok(await ev(`!!EPL.dis.els.find(e => e.id === '${t.id}').dt`), "la letra se corrió");
+    await clic('#edPropC [data-dsa="letra0"]');
+    ok(await ev(`!EPL.dis.els.find(e => e.id === '${t.id}').dt`), "«Letra a su lugar» la devuelve");
+    // Color propio y «Por capa»
+    await poner('#edPropC [data-dsp="col"]', "#ff0000");
+    ok((await ev(`EPL.dis.els.find(e => e.id === '${t.id}').col`)) === "#ff0000", "color propio del elemento");
+    await clic('#edPropC [data-dsa="colcapa"]');
+    ok(await ev(`!EPL.dis.els.find(e => e.id === '${t.id}').col`), "«Por capa» vuelve al color de la capa");
+    // Ctrl+X corta lo del diseño y Ctrl+V lo pega
+    await teclaE("x", "KeyX", 88, 2);
+    ok(
+      await ev(`!EPL.dis.els.some(e => e.id === '${t.id}') && DS_PORTA.length === 1`),
+      "Ctrl+X corta el tomacorriente"
+    );
+    await teclaE("v", "KeyV", 86, 2);
+    ok(await ev("EPL.dis.els.some(e => e.k === 'toma')"), "Ctrl+V lo pega");
+    await teclaE("Escape", "Escape", 27);
+    // Arquitectura: un clic elige el muro y Supr lo borra (se oculta: el archivo no cambia)
+    await clicPlano(OX + 10, OY + 3, 0);
+    ok((await ev("PL_ASEL.size")) === 1, "clic en el muro: elegido");
+    await teclaE("Delete", "Delete", 46);
+    ok(
+      await ev("EPL.borr && EPL.borr.length === 1 && plObjeto(" + (OX + 10) + ", " + (OY + 3) + ", 0.05) < 0"),
+      "Supr borra el muro de la vista"
+    );
+    await ctrlZ();
+    ok(
+      await ev("!(EPL.borr && EPL.borr.length) && plObjeto(" + (OX + 10) + ", " + (OY + 3) + ", 0.05) >= 0"),
+      "Ctrl+Z lo devuelve"
+    );
+    // Marco sobre todo el plano y Ctrl+X: borra la arquitectura y el diseño juntos, en un solo paso
+    await arrastrarPlano([OX - 1, OY - 1], [OX + 11, OY + 9]);
+    const na = await ev("PL_ASEL.size");
+    ok(na > 3 && (await ev("DS_SEL.size")) > 0, `el marco elige objetos de la arquitectura (${na}) y del diseño`);
+    await teclaE("x", "KeyX", 88, 2);
+    ok((await ev("EPL.borr.length")) === na && (await ev("PL_ASEL.size")) === 0, "Ctrl+X los borra");
+    await clic('[data-ed="aplicar"]');
+    ok((await ev("PLANO.borr.length")) === na, "los borrados se guardan con el proyecto");
+    await clic("#edPropC [data-pl-rest]");
+    ok(await ev("!EPL.borr && plObjeto(" + (OX + 10) + ", " + (OY + 3) + ", 0.05) >= 0"), "«Restaurar los borrados»");
+    // Paneles: ancho con el borde (doble clic: el de siempre), cerrar con × y volver a abrir
+    const w0 = await ev("$('plLado').offsetWidth"),
+      sp = await J(
+        "(() => { const r = document.querySelector('[data-esp=\"izq\"]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + 200]; })()"
+      );
+    await raton("mousePressed", sp[0], sp[1]);
+    for (let i = 1; i <= 5; i++) await raton("mouseMoved", sp[0] + i * 20, sp[1]);
+    await raton("mouseReleased", sp[0] + 100, sp[1]);
+    await esperar(80);
+    const w1 = await ev("$('plLado').offsetWidth");
+    ok(w1 > w0 + 40, `el panel izquierdo se ensancha arrastrando su borde (${w0} → ${w1} px)`);
+    ok(/"w":\d+/.test(await ev("localStorage.getItem('jmg-electric-editor-paneles')")), "el ancho se recuerda");
+    await clic('[data-edx="der"]');
+    ok(await ev("$('edProp').hidden"), "× cierra el panel de propiedades");
+    await clic('#editor [data-pl="props"]');
+    ok(await ev("!$('edProp').hidden"), "Vista › Propiedades lo vuelve a abrir");
+    await dobleClic('[data-esp="izq"]');
+    ok((await ev("$('plLado').style.width")) === "", "doble clic en el borde: el ancho de siempre");
+    await ev("localStorage.removeItem('jmg-electric-editor-paneles'); 1");
+    await clic('[data-ed="aceptar"]');
+  }
+);
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

@@ -336,6 +336,10 @@ function planoValido(v) {
           .map(p => ({ n: txt(p.n, 60) || "Planta", x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1 }))
       : [],
     tenue: v.tenue === true,
+    // Objetos de la arquitectura borrados de la vista (su número de objeto en el DXF; el archivo no cambia)
+    ...(Array.isArray(v.borr) && v.borr.length
+      ? { borr: [...new Set(v.borr.filter(i => Number.isInteger(i) && i >= 0 && i < 1e7))].slice(0, 500000) }
+      : {}),
     dis: disValido(v.dis)
   };
 }
@@ -366,6 +370,8 @@ function disValido(v) {
     .map(e => {
       if (!e || typeof e !== "object") return null;
       const b = {
+          // Color propio del elemento (si no, el de su capa)
+          ...(typeof e.col === "string" && /^#[0-9a-f]{6}$/i.test(e.col) ? { col: e.col.toLowerCase() } : {}),
           id: typeof e.id === "string" && /^d[0-9]{1,7}$/.test(e.id) ? e.id : "",
           capa: txt(e.capa, 60).trim() || "E-DIBUJO"
         },
@@ -380,6 +386,10 @@ function disValido(v) {
           r: n(e.r) ? e.r : 0,
           ...(n(e.h) && e.h >= 0 ? { h: e.h } : {}),
           ...(n(e.p) && e.p >= 0 ? { p: e.p } : {}),
+          // Letra del tipo corrida (unidades del símbolo)
+          ...(Array.isArray(e.dt) && e.dt.length === 2 && e.dt.every(v => n(v) && Math.abs(v) < 200)
+            ? { dt: e.dt.slice() }
+            : {}),
           ...cir,
           // Tablero: nombre, número de circuitos y descripción de cada uno
           ...(e.k === "tab" && e.nom ? { nom: txt(e.nom, 20) } : {}),

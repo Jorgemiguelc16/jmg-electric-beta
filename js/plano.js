@@ -15,6 +15,9 @@
    - Se dibuja en dos lienzos: el plano (se redibuja al mover o cambiar la vista) y encima lo que sigue al cursor
      (enganche, selección, mediciones, encuadres). Las coordenadas se guardan respecto del centro del dibujo para no
      perder precisión en planos georreferenciados. */
+// Objetos de la arquitectura borrados (ocultos) y elegidos, por su número de objeto en el DXF
+const PL_BORR = new Set(),
+  PL_ASEL = new Set();
 let PL_MOD = null,
   PL_SHA = null,
   PL_GR = null,
@@ -148,10 +151,12 @@ async function plAbrir(file) {
             .map(([n]) => n),
       plantas: sigue ? EPL.plantas : [],
       tenue: sigue ? EPL.tenue : false,
+      ...(sigue && EPL.sha === sha && EPL.borr ? { borr: EPL.borr } : {}),
       // El diseño eléctrico se conserva aunque cambie el archivo de arquitectura
       dis: EPL && EPL.dis ? EPL.dis : dsNuevo()
     };
     PLH.obj = -1;
+    PL_ASEL.clear();
     plPreparar();
     if (!(sigue && plVistaGuardada())) plAjustar();
     edCambio();
@@ -328,9 +333,12 @@ function plPreparar() {
     ocultas = new Set(EPL.ocultas),
     O = plOrigen(),
     grupos = new Map();
+  PL_BORR.clear();
+  (EPL.borr || []).forEach(n => PL_BORR.add(n));
+  [...PL_ASEL].forEach(n => PL_BORR.has(n) && PL_ASEL.delete(n));
   for (let i = 0; i < m.trazos.length; i++) {
     const t = m.trazos[i];
-    if (ocultas.has(t.capa)) continue;
+    if (ocultas.has(t.capa) || PL_BORR.has(t.e)) continue;
     const k = `${t.col}|${t.lt}|${t.k}|${t.lte}`;
     let g = grupos.get(k);
     if (!g) grupos.set(k, (g = { col: t.col, lt: t.lt, lte: t.lte, k: t.k, path: new Path2D() }));
@@ -341,10 +349,74 @@ function plPreparar() {
   }
   // Primero los rellenos y las tramas, después las líneas
   PL_GR = [...grupos.values()].sort((a, b) => (a.k === "l") - (b.k === "l"));
-  PL_TX = m.textos.filter(t => !ocultas.has(t.capa));
+  PL_TX = m.textos.filter(t => !ocultas.has(t.capa) && !PL_BORR.has(t.e));
   if (!m.idx) m.idx = plIndice(m);
   PL_IDX = m.idx;
-  if (PLH.obj >= 0 && ocultas.has(m.trazos[PLH.obj].capa)) PLH.obj = -1;
+  if (PLH.obj >= 0 && (ocultas.has(m.trazos[PLH.obj].capa) || PL_BORR.has(m.trazos[PLH.obj].e))) PLH.obj = -1;
+}
+// Marco de selección sobre la arquitectura: los objetos visibles que quedan dentro (o que toca, en captura)
+function plMarcoArq(xa, ya, xb, yb, captura, suma) {
+  if (!PL_MOD) return;
+  if (!suma) PL_ASEL.clear();
+  const oc = new Set(EPL.ocultas),
+    caja = new Map(),
+    toca = new Set();
+  PL_MOD.trazos.forEach(t => {
+    if (oc.has(t.capa) || PL_BORR.has(t.e)) return;
+    const p = t.p;
+    let b = caja.get(t.e);
+    if (!b) caja.set(t.e, (b = [Infinity, Infinity, -Infinity, -Infinity]));
+    for (let j = 0; j < p.length; j += 2) {
+      b[0] = Math.min(b[0], p[j]);
+      b[2] = Math.max(b[2], p[j]);
+      b[1] = Math.min(b[1], p[j + 1]);
+      b[3] = Math.max(b[3], p[j + 1]);
+    }
+    // En captura basta con que uno de sus tramos toque el marco
+    if (captura && !toca.has(t.e)) {
+      const n = t.c ? p.length : p.length - 2;
+      for (let j = 0; j < n; j += 2)
+        if (plTramoEnCaja(p[j], p[j + 1], p[(j + 2) % p.length], p[(j + 3) % p.length], xa, ya, xb, yb)) {
+          toca.add(t.e);
+          break;
+        }
+    }
+  });
+  caja.forEach((b, n) => {
+    if (toca.has(n) || (b[0] >= xa && b[2] <= xb && b[1] >= ya && b[3] <= yb)) PL_ASEL.add(n);
+  });
+}
+// ¿El tramo A→B toca el rectángulo? (recorte de Liang-Barsky)
+function plTramoEnCaja(ax, ay, bx, by, xa, ya, xb, yb) {
+  const dx = bx - ax,
+    dy = by - ay;
+  let t0 = 0,
+    t1 = 1;
+  for (const [p, q] of [
+    [-dx, ax - xa],
+    [dx, xb - ax],
+    [-dy, ay - ya],
+    [dy, yb - ay]
+  ]) {
+    if (!p) {
+      if (q < 0) return false;
+      continue;
+    }
+    const r = q / p;
+    if (p < 0) t0 = Math.max(t0, r);
+    else t1 = Math.min(t1, r);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+// Trazos de un objeto de la arquitectura (un bloque insertado tiene varios)
+function plTrazosDe(n) {
+  const m = PL_MOD;
+  if (!m.porE) {
+    m.porE = new Map();
+    m.trazos.forEach((t, i) => (m.porE.get(t.e) || m.porE.set(t.e, []).get(t.e)).push(i));
+  }
+  return m.porE.get(n) || [];
 }
 const plOrigen = () => {
   const e = PL_MOD.ext;
@@ -623,7 +695,20 @@ function plSobreDibujar() {
     plTrazo(g, t.p, t.c);
     g.globalAlpha = 1;
   }
-  // Objeto seleccionado: resaltado con sus vértices (está bloqueado: no se mueve)
+  // Objetos elegidos de la arquitectura (para borrarlos): resaltados con trazos
+  if (PL_ASEL.size && !PLH.h) {
+    g.strokeStyle = selc;
+    g.lineWidth = 2.5 * d;
+    g.setLineDash([8 * d, 4 * d]);
+    PL_ASEL.forEach(n =>
+      plTrazosDe(n).forEach(i => {
+        const t = PL_MOD.trazos[i];
+        if (t.k === "l" && i !== PLH.obj) plTrazo(g, t.p, t.c);
+      })
+    );
+    g.setLineDash([]);
+  }
+  // Objeto seleccionado: resaltado con sus vértices (no se mueve)
   if (PLH.obj >= 0 && !PLH.h) {
     const t = PL_MOD.trazos[PLH.obj];
     g.strokeStyle = selc;
@@ -815,7 +900,7 @@ function plSegmentos(x, y, r, muros) {
             if (vistos.has(i)) continue;
             vistos.add(i);
             const t = PL_MOD.trazos[i];
-            if (oc.has(t.capa) || (muros && t.lt)) continue;
+            if (oc.has(t.capa) || PL_BORR.has(t.e) || (muros && t.lt)) continue;
             const p = t.p,
               m = t.c ? p.length : p.length - 2;
             for (let j = 0; j < m; j += 2) {
@@ -894,7 +979,7 @@ function plEnganche(x, y) {
           const dd = Math.hypot(sn[i] - x, sn[i + 1] - y);
           // Un extremo gana a un punto medio que esté casi a la misma distancia
           if (dd < md - (sn[i + 2] === 1 ? -r * 0.15 : 0) && vale(sn[i + 2])) {
-            if (oc.has(PL_MOD.snapC[i / 3])) continue;
+            if (oc.has(PL_MOD.snapC[i / 3]) || PL_BORR.has(PL_MOD.snapE[i / 3])) continue;
             md = dd;
             mejor = [sn[i], sn[i + 1], sn[i + 2]];
           }
@@ -948,7 +1033,7 @@ function plPuntoActual() {
   const u =
     PLH.pts[PLH.pts.length - 1] ||
     (PLH.arr && PLH.arr.base) ||
-    (PLH.agarre && PLH.agarre.t !== "m" && PLH.agarre.t !== "o" ? [PLH.agarre.x, PLH.agarre.y] : null);
+    (PLH.agarre && !["m", "o", "giro", "letra"].includes(PLH.agarre.t) ? [PLH.agarre.x, PLH.agarre.y] : null);
   if (u && $("plOrto").checked && !PLH.eng) {
     if (Math.abs(p[0] - u[0]) > Math.abs(p[1] - u[1])) p = [p[0], u[1]];
     else p = [u[0], p[1]];
@@ -972,7 +1057,7 @@ function plObjeto(x, y, r) {
         if (vistos.has(i)) continue;
         vistos.add(i);
         const t = PL_MOD.trazos[i];
-        if (oc.has(t.capa)) continue;
+        if (oc.has(t.capa) || PL_BORR.has(t.e)) continue;
         const dd = plDistTrazo(t, x, y);
         if (dd < md) {
           md = dd;
@@ -1185,8 +1270,16 @@ function plTerminarRecorrido() {
   plSobreDibujar();
 }
 // Seleccionar: un clic en una línea la elige y muestra sus propiedades; en un lugar vacío, la suelta
-function plSeleccionar(p) {
+function plSeleccionar(p, suma) {
   PLH.obj = plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+  if (!suma) PL_ASEL.clear();
+  if (PLH.obj >= 0) {
+    const n = PL_MOD.trazos[PLH.obj].e;
+    if (suma && PL_ASEL.has(n)) {
+      PL_ASEL.delete(n);
+      PLH.obj = -1;
+    } else PL_ASEL.add(n);
+  }
   edProps();
   plSobreDibujar();
 }
@@ -1235,7 +1328,11 @@ function edProps() {
       fila("Objetos", m.nEnt.toLocaleString("es-PE")) +
       fila("Bloques", m.nBloques) +
       fila("Plantas", EPL.plantas.length || "—") +
-      `<p class="pl-nota">Haga clic en una línea del plano para ver sus propiedades. La arquitectura es una referencia: se consulta y se mide, pero no se mueve.</p>`;
+      (PL_BORR.size ? fila("Objetos borrados", PL_BORR.size.toLocaleString("es-PE")) : "") +
+      `<p class="pl-nota">Haga clic en una línea del plano para ver sus propiedades. La arquitectura es una referencia: se consulta y se mide, pero no se mueve. Lo que sobre (muebles, textos, achurados) se puede borrar con <span class="pl-k">Supr</span> o <span class="pl-k">Ctrl</span>+<span class="pl-k">X</span>: solo se oculta en la plataforma; el archivo DXF no cambia.</p>` +
+      (PL_BORR.size
+        ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-pl-rest>Restaurar los borrados</button></div>`
+        : "");
     return;
   }
   const t = m.trazos[PLH.obj],
@@ -1251,10 +1348,46 @@ function edProps() {
     (curva ? "" : fila("Vértices", t.p.length / 2 - (t.c && t.ent !== "LINE" ? 1 : 0))) +
     fila("Cerrado", t.c ? "sí" : "no") +
     fila("Toda la capa", `${plFm(totCapa)} m`) +
-    `<p class="pl-nota ed-bloq"><b>Bloqueada:</b> la arquitectura es una referencia del plano del arquitecto y no se mueve.</p>` +
-    `<div class="ed-pb"><button type="button" class="btn sec sm" data-pl-oc="${esc(t.capa)}">Ocultar la capa</button></div>`;
+    (PL_ASEL.size > 1 ? fila("Elegidos", `${PL_ASEL.size} objetos`) : "") +
+    `<p class="pl-nota ed-bloq"><b>No se mueve:</b> la arquitectura es una referencia del plano del arquitecto. Se puede borrar${t.bl ? " (el bloque completo)" : ""}; el archivo DXF no cambia.</p>` +
+    `<div class="ed-pb"><button type="button" class="btn sec sm" data-pl-oc="${esc(t.capa)}">Ocultar la capa</button><button type="button" class="btn sec sm ed-del" data-pl-del title="Supr o Ctrl+X">Borrar</button></div>`;
+}
+// Borra lo elegido, del diseño y de la arquitectura, en un solo paso de deshacer; con cortar, lo del diseño queda
+// copiado para pegarlo con Ctrl+V
+function edBorrar(cortar) {
+  const sel = dsD() ? dsSel().filter(dsEditable) : [],
+    na = PL_ASEL.size;
+  if (!sel.length && !na) return toast("Elija primero lo que quiere borrar");
+  if (sel.length) {
+    if (cortar) DS_PORTA = sel.map(el => JSON.parse(JSON.stringify(el)));
+    const ids = new Set(sel.map(el => el.id));
+    dsD().els = dsD().els.filter(el => !ids.has(el.id));
+    DS_SEL.clear();
+  }
+  if (na) {
+    EPL.borr = [...new Set([...(EPL.borr || []), ...PL_ASEL])].sort((a, b) => a - b);
+    PL_ASEL.clear();
+    PLH.obj = -1;
+    plPreparar();
+  }
+  edCambio();
+  const s = n => (n > 1 ? "s" : ""),
+    partes = [];
+  if (sel.length) partes.push(`${sel.length} elemento${s(sel.length)} del diseño`);
+  if (na) partes.push(`${na} objeto${s(na)} de la arquitectura`);
+  toast(
+    `${partes.join(" y ")}: ${cortar && sel.length ? "cortado" : "borrado"}${s(sel.length + na)} · Ctrl+Z para deshacer${cortar && sel.length ? " · Ctrl+V para pegar" : ""}`
+  );
 }
 $("edPropC").addEventListener("click", e => {
+  if (e.target.closest("[data-pl-del]")) return edBorrar(false);
+  if (e.target.closest("[data-pl-rest]")) {
+    const n = (EPL.borr || []).length;
+    delete EPL.borr;
+    plPreparar();
+    edCambio();
+    return toast(`${n} objeto${n > 1 ? "s" : ""} de la arquitectura restaurado${n > 1 ? "s" : ""}`);
+  }
   const b = e.target.closest("[data-pl-oc]");
   if (!b) return;
   EPL.ocultas = [...new Set([...EPL.ocultas, b.dataset.plOc])];
@@ -1341,7 +1474,8 @@ plLienzo.addEventListener("pointermove", e => {
   if (PLH.agarre) {
     if (!lejos && !PLH.agarre.mov) return;
     PLH.agarre.mov = true;
-    PLH.eng = PLH.agarre.t === "m" || PLH.agarre.t === "o" ? null : plEnganche(p[0], p[1]);
+    // La curvatura, la línea de cota, el giro y la letra siguen al cursor; lo demás se engancha
+    PLH.eng = ["m", "o", "giro", "letra"].includes(PLH.agarre.t) ? null : plEnganche(p[0], p[1]);
     const q = plPuntoActual() || p;
     $("plXY").textContent = `X ${plFm(q[0])}   Y ${plFm(q[1])} m`;
     return dsAgarreMover(PLH.agarre, q);
@@ -1401,7 +1535,7 @@ plLienzo.addEventListener("pointerup", e => {
     if (mc.mov) return dsMarco(mc);
     // Clic en un lugar vacío: suelta la selección del diseño y elige la línea de la arquitectura bajo el cursor
     if (!mc.shift) DS_SEL.clear();
-    return plSeleccionar(plADib(abajo[0], abajo[1]));
+    return plSeleccionar(plADib(abajo[0], abajo[1]), mc.shift);
   }
   if (!PLH.h || lejos) return;
   // Un clic en el mismo punto que el anterior (doble clic) termina el recorrido, la polilínea o la tubería
@@ -1465,6 +1599,11 @@ addEventListener("keydown", e => {
     return edHist(k === "y" || e.shiftKey ? 1 : -1);
   }
   if (enCampo) return;
+  if (ctrl && k === "x") {
+    if (!PL_MOD) return;
+    e.preventDefault();
+    return edBorrar(true);
+  }
   if (ctrl && (k === "a" || k === "c" || k === "v")) {
     if (!dsD() || !PL_MOD) return;
     e.preventDefault();
@@ -1494,8 +1633,9 @@ addEventListener("keydown", e => {
     if (PLH.h === "rec" && !PLH.med && PLH.pts.length > 1) return plTerminarRecorrido();
     if (dsTerminar()) return;
     if (PLH.h) return plHerr(null);
-    if (DS_SEL.size || PLH.obj >= 0) {
+    if (DS_SEL.size || PLH.obj >= 0 || PL_ASEL.size) {
       DS_SEL.clear();
+      PL_ASEL.clear();
       PLH.obj = -1;
       edProps();
       plSobreDibujar();
@@ -1506,7 +1646,10 @@ addEventListener("keydown", e => {
     else dsTerminar();
   } else if (e.key === "Delete" || e.key === "Supr") {
     e.preventDefault();
-    dsBorrar();
+    edBorrar(false);
+  } else if (k === "b" && !ctrl && !e.altKey && PL_MOD) {
+    e.preventDefault();
+    bibAbrir();
   } else if (k === "r" && !ctrl && dsD()) {
     e.preventDefault();
     dsGirar();
@@ -1658,6 +1801,79 @@ function plMostrar() {
     plDibujar();
   }
 }
+/* Paneles del editor, como los del espacio de trabajo: el ancho se cambia arrastrando su borde (doble clic: el de
+   siempre), se cierran con × (y se vuelven a abrir en Vista › Paneles) y se recuerdan en este navegador */
+const ED_PAN = { izq: { el: "plLado", w: null }, der: { el: "edProp", w: null } },
+  ED_PAN_K = "jmg-electric-editor-paneles";
+function edPanGuardar() {
+  try {
+    localStorage.setItem(
+      ED_PAN_K,
+      JSON.stringify({
+        izq: { oculto: !!plPanel.oculto, w: ED_PAN.izq.w },
+        der: { oculto: !!edProps.oculto, w: ED_PAN.der.w }
+      })
+    );
+  } catch (e) {}
+}
+const edPanAncho = () => Object.values(ED_PAN).forEach(p => ($(p.el).style.width = p.w ? p.w + "px" : ""));
+try {
+  const o = JSON.parse(localStorage.getItem(ED_PAN_K) || "null");
+  if (o) {
+    plPanel.oculto = !!(o.izq && o.izq.oculto);
+    edProps.oculto = !!(o.der && o.der.oculto);
+    Object.keys(ED_PAN).forEach(k => (ED_PAN[k].w = o[k] && +o[k].w > 0 ? +o[k].w : null));
+  }
+} catch (e) {}
+edPanAncho();
+document.querySelectorAll("#editor .ed-sp").forEach(sp => {
+  const k = sp.dataset.esp,
+    p = ED_PAN[k];
+  sp.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    try {
+      sp.setPointerCapture(e.pointerId);
+    } catch (_) {}
+    sp.classList.add("drag");
+    document.body.classList.add("arrastrando");
+    const mv = ev => {
+      const r = document.querySelector("#editor .ed-main").getBoundingClientRect(),
+        otro = ED_PAN[k === "izq" ? "der" : "izq"],
+        wo = $(otro.el).hidden ? 0 : $(otro.el).offsetWidth,
+        // Las coordenadas del mouse están en píxeles de pantalla; se dividen por la escala del espacio de trabajo
+        S = parseFloat(getComputedStyle($("ws")).zoom) || 1,
+        w = (k === "izq" ? ev.clientX - r.left : r.right - ev.clientX) / S;
+      p.w = Math.round(Math.max(170, Math.min(560, r.width / S - wo - 320, w)));
+      edPanAncho();
+    };
+    const up = () => {
+      sp.classList.remove("drag");
+      document.body.classList.remove("arrastrando");
+      removeEventListener("pointermove", mv);
+      removeEventListener("pointerup", up);
+      removeEventListener("pointercancel", up);
+      edPanGuardar();
+    };
+    addEventListener("pointermove", mv);
+    addEventListener("pointerup", up);
+    addEventListener("pointercancel", up);
+  });
+  sp.addEventListener("dblclick", () => {
+    p.w = null;
+    edPanAncho();
+    edPanGuardar();
+    toast("Ancho del panel restablecido");
+  });
+});
+$("editor").addEventListener("click", e => {
+  const x = e.target.closest("[data-edx]");
+  if (!x) return;
+  if (x.dataset.edx === "izq") plPanel.oculto = true;
+  else edProps.oculto = true;
+  edPanGuardar();
+  plPanel();
+  toast("Panel cerrado: se vuelve a abrir en Vista › Paneles");
+});
 new MutationObserver(() => {
   if (!ED.abierto) return;
   plTema();
@@ -1709,6 +1925,7 @@ $("editor").addEventListener("click", e => {
   if (a === "panel" || a === "props") {
     if (a === "panel") plPanel.oculto = !plPanel.oculto;
     else edProps.oculto = !edProps.oculto;
+    edPanGuardar();
     plPanel();
     plTam();
     return plDibujar();
@@ -1723,8 +1940,9 @@ $("editor").addEventListener("click", e => {
     return dsCurvar("invertir");
   }
   if (a === "capas") return capasAbrir();
+  if (a === "biblio") return bibAbrir();
   if (a === "girar") return dsGirar();
-  if (a === "borrar") return dsBorrar();
+  if (a === "borrar") return edBorrar(false);
   if (a === "copiar") {
     dsCopiar();
     return dsPegar();

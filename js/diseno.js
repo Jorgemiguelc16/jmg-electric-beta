@@ -33,55 +33,191 @@ const DS_SIS = {
   txt: { capa: "E-TEXTOS", col: "#263238", n: "Textos" },
   dib: { capa: "E-DIBUJO", col: "#37474f", n: "Dibujo" }
 };
-/* Símbolos que se pueden colocar: nombre, código de la Norma DGE, sistema, altura de montaje por defecto (dato de
-   Parámetros › Alturas; null si va en el techo o no corresponde), potencia por defecto (dato del proyecto) y cómo
-   se apoya en el muro al encajarlo (m: «izq», el lado izquierdo del símbolo toca el muro, como las líneas de
-   llegada del tomacorriente o la barra del braquete; «abajo», el lado largo del tablero). Las letras A y F de las
-   salidas de aire acondicionado y de fuerza son las que la norma deja definir en la leyenda del plano (09-93-13:
-   letra del tipo abajo a la derecha). */
-const DS_CAT = {
-  luz: { n: "Salida de alumbrado en techo", c: "09-93-51", s: "alu", h: null, p: "al_p", u: "W" },
-  braq: {
-    n: "Salida de alumbrado en pared (braquete)",
-    c: "09-93-52",
-    s: "alu",
-    h: "hBraq",
-    p: "al_p",
-    u: "W",
-    m: "izq"
-  },
-  emer: { n: "Luminaria de emergencia", c: "09-93-67", s: "alu", h: "hBraq", u: "W" },
-  emerB: { n: "Bloque autónomo de emergencia", c: "09-93-68", s: "alu", h: "hBraq", u: "W", m: "abajo" },
-  int: { n: "Interruptor unipolar", c: "09-93-30", s: "alu", h: "hInt", m: "izq" },
-  int2: { n: "Interruptor bipolar", c: "09-93-31", s: "alu", h: "hInt", m: "izq" },
-  int3: { n: "Interruptor de tres vías (conmutación)", c: "09-93-32", s: "alu", h: "hInt", m: "izq" },
-  int4: { n: "Interruptor de cuatro vías", c: "09-93-33", s: "alu", h: "hInt", m: "izq" },
-  toma: {
-    n: "Tomacorriente monofásico con puesta a tierra",
-    c: "09-93-17",
-    s: "tom",
-    h: "hToma",
-    p: "tg_p",
-    u: "VA",
-    m: "izq"
-  },
-  toma1: { n: "Tomacorriente monofásico", c: "09-93-13", s: "tom", h: "hToma", p: "tg_p", u: "VA", m: "izq" },
-  toma3: { n: "Tomacorriente trifásico", c: "09-93-15", s: "tom", h: "hToma", u: "VA", m: "izq" },
-  tomaPA: { n: "Tomacorriente a prueba de agua", c: "09-93-19", s: "tom", h: "hToma", p: "tg_p", u: "VA", m: "izq" },
-  coc: { n: "Salida trifásica para cocina", c: "09-93-18", s: "fza", h: "hFza", u: "W", m: "izq" },
-  terma: { n: "Calentador de agua (terma)", c: "09-93-69", s: "fza", h: "hTerma", u: "W", m: "izq" },
-  aire: { n: "Salida para aire acondicionado", c: "09-93-13 · letra A", s: "fza", h: "hAire", u: "W", m: "izq" },
-  fza: { n: "Salida de fuerza", c: "09-93-13 · letra F", s: "fza", h: "hFza", u: "W", m: "izq" },
-  itc: { n: "Intercomunicador", c: "09-93-73", s: "com", h: "hInt", m: "abajo" },
-  pul: { n: "Pulsador de timbre", c: "09-93-43", s: "com", h: "hInt" },
-  timbre: { n: "Timbre (campana)", c: "08-80-49", s: "com", h: "hBraq", m: "abajo" },
-  caja: { n: "Caja de paso", c: "09-93-08", s: "can", h: null },
-  subida: { n: "Canalización que sube", c: "09-93-05", s: "can", h: null },
-  bajada: { n: "Canalización que baja", c: "09-93-06", s: "can", h: null },
-  tab: { n: "Tablero de distribución empotrado", c: "09-91-17", s: "tab", h: "hTab", m: "abajo" },
-  med: { n: "Medidor de energía", c: "08-80-22", s: "tab", h: "hMed", m: "abajo" },
-  pat: { n: "Pozo de puesta a tierra", c: "03-31-46", s: "tie", h: null }
-};
+/* Símbolos que se pueden colocar (toda la sección 093 de la Norma DGE «Instalaciones en edificaciones» y los tableros
+   de la sección 091): nombre y código de la norma, sistema (capa), grupo de la biblioteca, altura de montaje por
+   defecto (dato de Parámetros › Alturas; null si va en el techo o no corresponde), potencia por defecto (dato del
+   proyecto) y cómo se apoya en el muro al encajarlo (m: «izq», su lado izquierdo toca el muro, como las líneas de
+   llegada del tomacorriente o la barra del braquete; «abajo», el lado largo del tablero; «arriba», la llegada de los
+   tomacorrientes en forma general). let: la letra o el número del tipo (abajo a la derecha, 09-93-13) se puede
+   mover. Las letras A y F de las salidas de aire acondicionado y de fuerza son de las que la norma deja definir en
+   la leyenda del plano. */
+const DS_GRUPOS = [
+  "Iluminación",
+  "Interruptores",
+  "Tomacorrientes",
+  "Telecomunicaciones",
+  "Pulsadores y control",
+  "Tableros y medición",
+  "Cajas y canalización",
+  "Otros equipos"
+];
+const DS_CAT = Object.fromEntries(
+  [
+    // [clave, nombre, código, sistema, grupo, altura, potencia, unidad, apoyo, letra móvil]
+    ["luz", "Salida de alumbrado en techo", "09-93-51", "alu", 0, null, "al_p", "W"],
+    ["braq", "Salida de alumbrado en pared (braquete)", "09-93-52", "alu", 0, "hBraq", "al_p", "W", "izq"],
+    ["luzEmp", "Salida de alumbrado empotrada en techo", "09-93-53", "alu", 0, null, "al_p", "W"],
+    ["braqEmp", "Salida de alumbrado empotrada en pared", "09-93-54", "alu", 0, "hBraq", "al_p", "W", "izq"],
+    ["fluor", "Salida para artefacto fluorescente en techo", "09-93-55", "alu", 0, null, "al_p", "W"],
+    ["fluorEmp", "Salida para artefacto fluorescente empotrado", "09-93-56", "alu", 0, null, "al_p", "W"],
+    ["fluorH", "Salida para fluorescentes en hilera", "09-93-57", "alu", 0, null, "al_p", "W"],
+    ["fluorHE", "Salida para fluorescentes en hilera, empotrados", "09-93-58", "alu", 0, null, "al_p", "W"],
+    ["posLuz", "Posición de la toma de iluminación", "09-93-49", "alu", 0, null, "al_p", "W"],
+    ["posLuzP", "Toma de iluminación en la pared", "09-93-50", "alu", 0, "hBraq", "al_p", "W"],
+    ["lamp", "Lámpara, símbolo general", "09-93-59", "alu", 0, null, "al_p", "W"],
+    ["lumG", "Luminaria, símbolo general", "09-93-60", "alu", 0, null, "al_p", "W"],
+    ["lum3", "Luminaria con tres tubos fluorescentes", "09-93-61", "alu", 0, null, "al_p", "W"],
+    ["lum5", "Luminaria con cinco tubos fluorescentes", "09-93-62", "alu", 0, null, "al_p", "W", null, true],
+    ["proy", "Proyector, símbolo general", "09-93-63", "alu", 0, null, "al_p", "W"],
+    ["proyIl", "Iluminación proyectada", "09-93-64", "alu", 0, null, "al_p", "W"],
+    ["proyDir", "Proyector de iluminación", "09-93-65", "alu", 0, null, "al_p", "W"],
+    ["aux", "Aparato auxiliar para lámpara de descarga", "09-93-66", "alu", 0, null],
+    ["emer", "Luminaria de alumbrado de emergencia", "09-93-67", "alu", 0, "hBraq", null, "W"],
+    ["emerB", "Bloque autónomo de alumbrado de emergencia", "09-93-68", "alu", 0, "hBraq", null, "W", "abajo"],
+    ["int", "Interruptor unipolar", "09-93-30", "alu", 1, "hInt", null, null, "izq"],
+    ["int2", "Interruptor bipolar", "09-93-31", "alu", 1, "hInt", null, null, "izq", true],
+    ["int3", "Interruptor de tres vías", "09-93-32", "alu", 1, "hInt", null, null, "izq", true],
+    ["int4", "Interruptor de cuatro vías", "09-93-33", "alu", 1, "hInt", null, null, "izq", true],
+    ["intL", "Interruptor con lámpara piloto", "09-93-29", "alu", 1, "hInt", null, null, "izq", true],
+    ["intT", "Interruptor unipolar con tirador", "09-93-38", "alu", 1, "hInt", null, null, "izq", true],
+    ["intP", "Interruptor de puerta", "09-93-39", "alu", 1, "hInt", null, null, "izq", true],
+    ["int2PE", "Interruptor bipolar a prueba de explosión", "09-93-40", "alu", 1, "hInt", null, null, "izq", true],
+    ["int3PA", "Interruptor de tres vías a prueba de agua", "09-93-41", "alu", 1, "hInt", null, null, "izq", true],
+    ["intTi", "Interruptor de tiempo", "09-93-47", "alu", 1, "hInt", null, null, "izq", true],
+    ["intG", "Interruptor, símbolo general", "09-93-28", "alu", 1, "hInt"],
+    ["intPil", "Interruptor con luz piloto", "09-93-29", "alu", 1, "hInt"],
+    ["intTemp", "Interruptor con tiempo de cierre limitado, unipolar", "09-93-30", "alu", 1, "hInt"],
+    ["int2G", "Interruptor bipolar (forma gráfica)", "09-93-31", "alu", 1, "hInt"],
+    ["conm", "Conmutador unipolar", "09-93-34", "alu", 1, "hInt"],
+    ["int2v", "Interruptor unipolar de dos vías", "09-93-35", "alu", 1, "hInt"],
+    ["conmInt", "Conmutador intermedio", "09-93-36", "alu", 1, "hInt"],
+    ["grad", "Interruptor graduador", "09-93-37", "alu", 1, "hInt"],
+    ["jal", "Interruptor unipolar con jalador", "09-93-38", "alu", 1, "hInt"],
+    ["toma", "Tomacorriente monofásico puesto a tierra", "09-93-17", "tom", 2, "hToma", "tg_p", "VA", "izq", true],
+    ["toma1", "Tomacorriente monofásico", "09-93-13", "tom", 2, "hToma", "tg_p", "VA", "izq"],
+    ["toma3", "Tomacorriente trifásico", "09-93-15", "tom", 2, "hToma", null, "VA", "izq"],
+    ["tomaPA", "Tomacorriente monofásico a prueba de agua", "09-93-19", "tom", 2, "hToma", "tg_p", "VA", "izq", true],
+    ["tomaPiso", "Tomacorriente monofásico en el piso", "09-93-14", "tom", 2, null, "tg_p", "VA"],
+    ["toma3Piso", "Tomacorriente trifásico en el piso", "09-93-16", "tom", 2, null, null, "VA"],
+    ["coc", "Salida trifásica para cocina", "09-93-18", "fza", 2, "hFza", null, "W", "izq", true],
+    ["aire", "Salida para aire acondicionado", "09-93-13 · letra A", "fza", 2, "hAire", null, "W", "izq", true],
+    ["fza", "Salida de fuerza", "09-93-13 · letra F", "fza", 2, "hFza", null, "W", "izq", true],
+    ["tomaG", "Tomacorriente (potencia), símbolo general", "09-93-12", "tom", 2, "hToma", "tg_p", "VA", "arriba"],
+    ["tomaMult", "Tomacorriente múltiple", "09-93-20", "tom", 2, "hToma", "tg_p", "VA", "arriba", true],
+    ["tomaTres", "Tomacorriente con tres tomas", "09-93-21", "tom", 2, "hToma", "tg_p", "VA", "arriba"],
+    [
+      "tomaPE",
+      "Tomacorriente con contacto para el conductor de protección",
+      "09-93-22",
+      "tom",
+      2,
+      "hToma",
+      "tg_p",
+      "VA",
+      "arriba"
+    ],
+    ["tomaObt", "Tomacorriente con obturador", "09-93-23", "tom", 2, "hToma", "tg_p", "VA", "arriba"],
+    ["tomaInt", "Tomacorriente con interruptor unipolar", "09-93-24", "tom", 2, "hToma", "tg_p", "VA", "arriba"],
+    [
+      "tomaEnc",
+      "Tomacorriente con interruptor de encerrojamiento",
+      "09-93-25",
+      "tom",
+      2,
+      "hToma",
+      "tg_p",
+      "VA",
+      "arriba"
+    ],
+    [
+      "tomaTr",
+      "Tomacorriente con transformador aislante (máquina de afeitar)",
+      "09-93-26",
+      "tom",
+      2,
+      "hToma",
+      null,
+      "VA",
+      "arriba"
+    ],
+    [
+      "telG",
+      "Tomacorriente de telecomunicaciones, símbolo general",
+      "09-93-27",
+      "com",
+      3,
+      "hToma",
+      null,
+      null,
+      "arriba"
+    ],
+    ["telTP", "Tomacorriente de teléfono (TP)", "09-93-27", "com", 3, "hToma", null, null, "arriba", true],
+    ["telTV", "Tomacorriente de televisión (TV)", "09-93-27", "com", 3, "hToma", null, null, "arriba", true],
+    ["telFX", "Tomacorriente de telefax (FX)", "09-93-27", "com", 3, "hToma", null, null, "arriba", true],
+    ["telM", "Tomacorriente de micrófono (M)", "09-93-27", "com", 3, "hToma", null, null, "arriba", true],
+    [
+      "telFM",
+      "Tomacorriente de modulación de frecuencia (FM)",
+      "09-93-27",
+      "com",
+      3,
+      "hToma",
+      null,
+      null,
+      "arriba",
+      true
+    ],
+    ["telTX", "Tomacorriente de télex (TX)", "09-93-27", "com", 3, "hToma", null, null, "arriba", true],
+    ["itc", "Interfono, intercomunicador", "09-93-73", "com", 3, "hInt", null, null, "abajo"],
+    ["pul", "Botón de presión (pulsador de timbre)", "09-93-43", "com", 4, "hInt"],
+    ["pulL", "Botón de presión con lámpara indicadora", "09-93-44", "com", 4, "hInt"],
+    ["pulProt", "Botón de presión protegido contra un funcionamiento involuntario", "09-93-45", "com", 4, "hInt"],
+    [
+      "intC",
+      "Pulsador o contactor (propósitos diferentes a la señalización)",
+      "09-93-42",
+      "com",
+      4,
+      "hInt",
+      null,
+      null,
+      "izq",
+      true
+    ],
+    ["timbre", "Timbre (campana)", "08-80-49", "com", 4, "hBraq", null, null, "abajo"],
+    ["crono", "Cronómetro, aparato limitador de duración", "09-93-46", "com", 4, "hInt", null, null, "abajo"],
+    ["horario", "Interruptor horario", "09-93-47", "com", 4, "hInt", null, null, "abajo"],
+    ["tecla", "Dispositivo de maniobra accionado por una tecla", "09-93-48", "com", 4, "hInt", null, null, "abajo"],
+    ["relojR", "Reloj, registrador horario", "09-93-71", "com", 4, "hInt", null, null, "abajo"],
+    ["cerr", "Cerradura eléctrica", "09-93-72", "com", 4, "hInt"],
+    ["tab", "Tablero de distribución empotrado", "09-91-17", "tab", 5, "hTab", null, null, "abajo"],
+    ["tabD", "Panel de distribución o centro de control", "09-91-16", "tab", 5, "hTab", null, null, "abajo"],
+    ["centroDist", "Centro de distribución", "09-93-11", "tab", 5, "hTab"],
+    ["med", "Medidor de energía", "08-80-22", "tab", 5, "hMed", null, null, "abajo"],
+    ["caja", "Caja, símbolo general (caja de paso)", "09-93-08", "can", 6, null],
+    ["cajaCon", "Caja de conexión o de derivación", "09-93-09", "can", 6, null],
+    ["terminal", "Terminal de consumidores", "09-93-10", "can", 6, null],
+    ["subida", "Canalización hacia arriba", "09-93-05", "can", 6, null],
+    ["bajada", "Canalización hacia abajo", "09-93-06", "can", 6, null],
+    ["atrav", "Canalización atravesando verticalmente", "09-93-07", "can", 6, null],
+    ["terma", "Calentador de agua (terma)", "09-93-69", "fza", 7, "hTerma", null, "W", "izq"],
+    ["vent", "Ventilador", "09-93-70", "fza", 7, null, null, "W", "izq"],
+    ["pat", "Pozo de puesta a tierra", "03-31-46", "tie", 7, null]
+  ].map(([k, n, c, s, g, h, p, u, m, l]) => [
+    k,
+    {
+      n,
+      c,
+      s,
+      g: DS_GRUPOS[g],
+      h: h || null,
+      ...(p ? { p } : {}),
+      ...(u ? { u } : {}),
+      ...(m ? { m } : {}),
+      ...(l ? { let: true } : {})
+    }
+  ])
+);
 const DS_LT = { cont: "Continua", trazos: "Trazos", punto: "Trazo y punto" };
 // Grosores de línea de las capas (mm); 0 es el fino de siempre (una línea normal, sin grosor), como en AutoCAD
 const DS_GROSORES = [0, 0.25, 0.35, 0.5, 0.7, 1];
@@ -261,7 +397,10 @@ const dsBBs = k => {
   return [b[0] - 1, b[1] - 1, b[2] + 1, b[3] + 1];
 };
 // Dibuja el símbolo k en el lienzo: X, Y en píxeles, giro en radianes (antihorario), u píxeles por unidad
-function dsDibSim(g, k, X, Y, rot, u, col, fondo, lw = plDpr()) {
+// La letra o el número del tipo (no la S de los interruptores, que es el símbolo) se puede correr con dt, en
+// unidades del símbolo; los textos se dibujan siempre legibles, aunque el símbolo esté girado
+const dsEsLetra = (k, p) => DS_CAT[k] && DS_CAT[k].let && p.t === "t" && p.tx !== "S";
+function dsDibSim(g, k, X, Y, rot, u, col, fondo, lw = plDpr(), dt) {
   g.save();
   g.translate(X, Y);
   g.rotate(-rot);
@@ -286,11 +425,21 @@ function dsDibSim(g, k, X, Y, rot, u, col, fondo, lw = plDpr()) {
       for (let i = 2; i + 1 < a.length; i += 2) g.lineTo(a[i], a[i + 1]);
       g.closePath();
     } else if (p.t === "t") {
+      const mov = dt && dsEsLetra(k, p) ? dt : [0, 0],
+        w = a[2] * 0.6 * p.tx.length,
+        // Centro aproximado del texto: se gira sobre él para dejarlo derecho
+        cx = a[0] + mov[0] + (p.an === "middle" ? 0 : p.an === "end" ? -w / 2 : w / 2),
+        cy = a[1] + mov[1] - a[2] * 0.35;
+      g.save();
+      g.translate(cx, cy);
+      // La letra del tipo queda siempre horizontal; los demás textos del símbolo giran con él, sin quedar de cabeza
+      g.rotate(dsEsLetra(k, p) ? rot : rot - dsLegible(rot));
       g.font = `${p.it ? "italic " : ""}${p.b ? "700 " : ""}${a[2]}px Arial, sans-serif`;
-      g.textAlign = p.an === "middle" ? "center" : p.an === "end" ? "right" : "left";
-      g.textBaseline = "alphabetic";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
       g.fillStyle = p.fi && p.fi !== "none" && !/^#fff(fff)?$/i.test(p.fi) && p.fi !== INK_S ? p.fi : col;
-      g.fillText(p.tx, a[0], a[1]);
+      g.fillText(p.tx, 0, 0);
+      g.restore();
       continue;
     }
     if (fi) {
@@ -696,8 +845,9 @@ function dsPintar(g) {
   g.setTransform(1, 0, 0, 1, 0, 0);
   for (const el of D.els) {
     if (!dsVis(el)) continue;
+    // Color propio del elemento o, si no tiene, el de su capa
     const cap = dsCapaDe(el),
-      col = plColorDis(cap.col);
+      col = plColorDis(el.col || cap.col);
     if (el.t === "sim") {
       const [X, Y] = plAPant(el.x, el.y);
       if (X < -40 * u || X > W + 40 * u || Y < -40 * u || Y > H + 40 * u) continue;
@@ -706,7 +856,7 @@ function dsPintar(g) {
         g.fillRect(X - 1, Y - 1, 2, 2);
         continue;
       }
-      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, u, col, PL_FONDO, dsGrosor(cap));
+      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, u, col, PL_FONDO, dsGrosor(cap), el.dt);
       if (el.k === "tab") dsDibSalidas(g, el, col, u, dsGrosor(cap));
     } else if (el.t === "txt") {
       const hp = el.ht * s;
@@ -875,8 +1025,32 @@ function plColorDis(h) {
 }
 
 /* ---------- Pinzamientos: vértices, curvatura de cada tramo, centro, radio y línea de cota ---------- */
+// Posición de la letra del tipo de un símbolo (su primer texto movible, con el corrimiento dt)
+function dsPosLetra(el) {
+  const p = dsPrims(el.k).find(q => dsEsLetra(el.k, q));
+  if (!p) return null;
+  const dt = el.dt || [0, 0];
+  return dsAMundo(el, p.a[0] + dt[0], p.a[1] + dt[1] - p.a[2] * 0.35);
+}
+// Pinzamiento de giro: por encima del símbolo (o al final del texto), a la vista
+function dsPosGiro(el) {
+  if (el.t === "txt") {
+    const r = ((el.r || 0) * Math.PI) / 180,
+      l = el.ht * 0.62 * el.s.length + dsMm(3);
+    return [el.x + l * Math.cos(r), el.y + l * Math.sin(r)];
+  }
+  dsPrims(el.k);
+  return dsAMundo(el, 0, DS_BB[el.k][1] - 7);
+}
 function dsAgarres(el) {
-  if (el.t === "sim" || el.t === "txt") return [{ t: "ins", x: el.x, y: el.y }];
+  if (el.t === "sim" || el.t === "txt") {
+    const out = [{ t: "ins", x: el.x, y: el.y }],
+      [gx, gy] = dsPosGiro(el);
+    out.push({ t: "giro", x: gx, y: gy });
+    const pl = el.t === "sim" && dsPosLetra(el);
+    if (pl) out.push({ t: "letra", x: pl[0], y: pl[1] });
+    return out;
+  }
   if (el.t === "cir")
     return [
       { t: "ins", x: el.x, y: el.y },
@@ -929,6 +1103,21 @@ function dsAgarreMover(ag, q) {
       el.x = o.x + dx;
       el.y = o.y + dy;
     }
+  } else if (ag.t === "giro") {
+    // El pinzamiento está arriba del símbolo (a 90° de su eje) o al final del texto (sobre su eje)
+    let a = (Math.atan2(q[1] - el.y, q[0] - el.x) * 180) / Math.PI - (el.t === "sim" ? 90 : 0);
+    if (PLH.libre) a = Math.round(a / 15) * 15;
+    el.r = Math.round((((a % 360) + 360) % 360) * 100) / 100;
+  } else if (ag.t === "letra") {
+    // Corrimiento de la letra en unidades del símbolo: el punto q llevado a las coordenadas del símbolo
+    const p = dsPrims(el.k).find(x => dsEsLetra(el.k, x)),
+      u = dsU(),
+      r = ((el.r || 0) * Math.PI) / 180,
+      wx = (q[0] - el.x) / u,
+      wy = (q[1] - el.y) / u,
+      a = wx * Math.cos(r) + wy * Math.sin(r),
+      b = wx * Math.sin(r) - wy * Math.cos(r);
+    el.dt = [+(a - p.a[0]).toFixed(2), +(b - (p.a[1] - p.a[2] * 0.35)).toFixed(2)];
   } else if (ag.t === "v") {
     el.pts[2 * ag.i] = q[0];
     el.pts[2 * ag.i + 1] = q[1];
@@ -966,8 +1155,9 @@ function dsAlinear(k, q) {
     ny = vy / d,
     b = DS_BB[k],
     u = dsU(),
-    th = c.m === "izq" ? Math.atan2(-ny, -nx) : Math.atan2(nx, -ny),
-    ext = c.m === "izq" ? -b[0] : b[3],
+    // Lado del símbolo que mira al muro: izquierdo, de abajo o de arriba (unidades del símbolo, y hacia abajo)
+    th = c.m === "izq" ? Math.atan2(-ny, -nx) : c.m === "arriba" ? Math.atan2(-nx, ny) : Math.atan2(nx, -ny),
+    ext = c.m === "izq" ? -b[0] : c.m === "arriba" ? -b[1] : b[3],
     r = Math.round((((((th * 180) / Math.PI) % 360) + 360) % 360) * 100) / 100;
   return { x: s.p[0] - nx * ext * u, y: s.p[1] - ny * ext * u, r, seg: s };
 }
@@ -1007,6 +1197,31 @@ function dsSobre(g) {
       const [X, Y] = plAPant(a.x, a.y),
         cal = PLH.agSobre && PLH.agSobre.id === el.id && PLH.agSobre.t === a.t && PLH.agSobre.i === a.i;
       g.fillStyle = cal ? caliente : selc;
+      // Giro: círculo unido al punto de inserción; letra: cuadrado hueco
+      if (a.t === "giro") {
+        const [Xi, Yi] = plAPant(el.x, el.y);
+        g.save();
+        g.strokeStyle = selc;
+        g.setLineDash([3 * d, 2 * d]);
+        g.beginPath();
+        g.moveTo(Xi, Yi);
+        g.lineTo(X, Y);
+        g.stroke();
+        g.restore();
+        g.beginPath();
+        g.arc(X, Y, 5 * d, 0, 2 * Math.PI);
+        g.fill();
+        g.stroke();
+        return;
+      }
+      if (a.t === "letra") {
+        g.save();
+        g.strokeStyle = cal ? caliente : selc;
+        g.lineWidth = 1.6 * d;
+        g.strokeRect(X - 4 * d, Y - 4 * d, 8 * d, 8 * d);
+        g.restore();
+        return;
+      }
       g.beginPath();
       if (a.t === "m" || a.t === "o") {
         const r = 5 * d;
@@ -1321,6 +1536,7 @@ function dsPresionar(id, p, suma) {
     else DS_SEL.add(id);
   } else if (!DS_SEL.has(id)) {
     DS_SEL.clear();
+    PL_ASEL.clear();
     DS_SEL.add(id);
   }
   PLH.obj = -1;
@@ -1387,6 +1603,7 @@ function dsMarco(mc) {
       toca = b[0] <= xb && b[2] >= xa && b[1] <= yb && b[3] >= ya;
     if (captura ? toca : dentro) DS_SEL.add(el.id);
   });
+  plMarcoArq(xa, ya, xb, yb, captura, mc.shift);
   PLH.obj = -1;
   edProps();
   plSobreDibujar();
@@ -1417,15 +1634,6 @@ function dsGirar() {
     }
   });
   edCambio();
-}
-function dsBorrar() {
-  const sel = dsSel().filter(dsEditable);
-  if (!sel.length) return;
-  const ids = new Set(sel.map(el => el.id));
-  dsD().els = dsD().els.filter(el => !ids.has(el.id));
-  DS_SEL.clear();
-  edCambio();
-  toast(`${ids.size} elemento${ids.size > 1 ? "s" : ""} borrado${ids.size > 1 ? "s" : ""} · Ctrl+Z para deshacer`);
 }
 function dsCopiar() {
   DS_PORTA = dsSel().map(el => JSON.parse(JSON.stringify(el)));
@@ -1539,10 +1747,7 @@ function dsProps(c) {
       `<div class="ed-pt">${cat.n}<small>Norma DGE ${cat.c}</small></div>` +
       `<div class="ds-prev">${dsIcono(el.k)}</div>` +
       campo("Capa", capas(el.capa)) +
-      campo(
-        "Rotación",
-        `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="90" min="-360" max="360"><i>°</i>`
-      ) +
+      campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
       (cat.h
         ? campo(
             "Altura",
@@ -1573,7 +1778,7 @@ function dsProps(c) {
         "Altura",
         `<input type="number" data-dsp="ht" value="${+(el.ht * EPL.f).toFixed(3)}" step="0.01" min="0.01"><i>m</i>`
       ) +
-      campo("Rotación", `<input type="number" data-dsp="r" value="${el.r || 0}" step="90"><i>°</i>`) +
+      campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
       campo("Capa", capas(el.capa));
   } else if (el.t === "dir") {
     h =
@@ -1627,7 +1832,11 @@ function dsProps(c) {
       `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices.</p>` +
       curvas;
   }
-  c.innerHTML = h + (cap.bloq ? `<p class="pl-nota">La capa está bloqueada.</p>` : "") + acciones;
+  const color = `<label class="ed-pf ed-pc"><span>Color</span><span class="ds-colr"><input type="color" data-dsp="col" value="${el.col || cap.col}" title="Color propio de este elemento"><button type="button" class="btn sec sm" data-dsa="colcapa"${el.col ? "" : " disabled"} title="Vuelve al color de su capa">Por capa</button></span></label>`,
+    letra = el.dt
+      ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="letra0">Letra a su lugar</button></div>`
+      : "";
+  c.innerHTML = h + color + letra + (cap.bloq ? `<p class="pl-nota">La capa está bloqueada.</p>` : "") + acciones;
 }
 const dsNomTipo = t =>
   DS_CAT[t]
@@ -1649,7 +1858,8 @@ $("edPropC").addEventListener("change", e => {
   dsSel().forEach(el => {
     if (k === "capa") {
       if (v) el.capa = v;
-    } else if (k === "r") el.r = (((parseFloat(v) || 0) % 360) + 360) % 360;
+    } else if (k === "r") el.r = Math.round(((((parseFloat(v) || 0) % 360) + 360) % 360) * 100) / 100;
+    else if (k === "col") el.col = /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : el.col;
     else if (k === "h") el.h = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "p") el.p = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "cir") el.cir = v.replace(/[<>]/g, "").slice(0, 12) || undefined;
@@ -1672,7 +1882,10 @@ $("edPropC").addEventListener("click", e => {
   if (!b) return;
   const a = b.dataset.dsa;
   if (a === "girar") dsGirar();
-  else if (a === "borrar") dsBorrar();
+  else if (a === "colcapa" || a === "letra0") {
+    dsSel().forEach(el => delete el[a === "colcapa" ? "col" : "dt"]);
+    edCambio();
+  } else if (a === "borrar") edBorrar(false);
   else if (a === "copiar") {
     dsCopiar();
     dsPegar();
@@ -1791,6 +2004,152 @@ $("edRefs").addEventListener("change", e => {
   if (c) DSU.ref[c.dataset.ref] = c.checked;
   if (e.target.id === "edSens") DSU.sens = [6, 12, 20].includes(+e.target.value) ? +e.target.value : 12;
   dsGuardarPref();
+});
+
+/* ---------- Biblioteca de símbolos: todos los de la Norma DGE, por grupos, con buscador y los usados hace poco ---------- */
+const BI_VW = ventanaMovil(document.querySelector("#bibDlg .vw"), "jmg-electric-biblioteca", {
+  w: 860,
+  h: 600,
+  minW: 520,
+  minH: 340
+});
+const BI_REC = "jmg-electric-simbolos-recientes";
+let BI_GRUPO = "";
+const biRecientes = () => {
+  try {
+    return (JSON.parse(localStorage.getItem(BI_REC) || "[]") || []).filter(k => DS_CAT[k]).slice(0, 12);
+  } catch (e) {
+    return [];
+  }
+};
+function biUsado(k) {
+  if (!DS_CAT[k]) return;
+  try {
+    localStorage.setItem(BI_REC, JSON.stringify([k, ...biRecientes().filter(x => x !== k)].slice(0, 12)));
+  } catch (e) {}
+}
+// Texto para buscar sin tildes ni mayúsculas
+const biNorm = s =>
+  String(s)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+const BI_SIS = {
+  alu: "alumbrado",
+  tom: "tomacorrientes",
+  fza: "fuerza",
+  tab: "tableros",
+  com: "comunicaciones telecomunicaciones",
+  can: "canalizacion",
+  tie: "tierra"
+};
+function bibAbrir() {
+  if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
+  dsAsegurar();
+  $("bibDlg").hidden = false;
+  vwFondo();
+  BI_VW.abrir();
+  $("biBusca").value = "";
+  bibRender();
+  setTimeout(() => $("biBusca").focus(), 30);
+}
+function bibCerrar() {
+  $("bibDlg").hidden = true;
+  vwFondo();
+}
+// Claves que cumplen la búsqueda (todas las palabras, en el nombre, el código, el grupo o el sistema)
+function biBuscar(q) {
+  const pal = biNorm(q).split(/\s+/).filter(Boolean);
+  return Object.keys(DS_CAT).filter(k => {
+    const c = DS_CAT[k],
+      t = biNorm(`${c.n} ${c.c} ${c.g} ${BI_SIS[c.s] || ""} ${k}`);
+    return pal.every(p => t.includes(p));
+  });
+}
+function bibRender() {
+  if ($("bibDlg").hidden) return;
+  const q = $("biBusca").value.trim(),
+    todas = biBuscar(q),
+    rec = q ? [] : biRecientes(),
+    cuenta = g => todas.filter(k => DS_CAT[k].g === g).length;
+  if (BI_GRUPO && BI_GRUPO !== "rec" && !cuenta(BI_GRUPO)) BI_GRUPO = "";
+  if (BI_GRUPO === "rec" && !rec.length) BI_GRUPO = "";
+  $("biGrupos").innerHTML =
+    `<button type="button" data-big=""${BI_GRUPO ? "" : ' class="on"'}>Todos<i>${todas.length}</i></button>` +
+    (rec.length
+      ? `<button type="button" data-big="rec"${BI_GRUPO === "rec" ? ' class="on"' : ""}>Usados hace poco<i>${rec.length}</i></button>`
+      : "") +
+    DS_GRUPOS.map(g => {
+      const n = cuenta(g);
+      return n
+        ? `<button type="button" data-big="${esc(g)}"${BI_GRUPO === g ? ' class="on"' : ""}>${esc(g)}<i>${n}</i></button>`
+        : "";
+    }).join("");
+  const tarjeta = k =>
+      `<button type="button" class="bi-s" data-bik="${k}" title="${esc(DS_CAT[k].n)} · Norma DGE ${DS_CAT[k].c}">${dsIcono(k)}<b>${esc(DS_CAT[k].n)}</b><small>${DS_CAT[k].c}</small></button>`,
+    bloque = (tit, ks) =>
+      ks.length ? `<h4>${esc(tit)}</h4><div class="bi-lista">${ks.map(tarjeta).join("")}</div>` : "";
+  let h;
+  if (BI_GRUPO === "rec") h = bloque("Usados hace poco", rec);
+  else if (BI_GRUPO)
+    h = bloque(
+      BI_GRUPO,
+      todas.filter(k => DS_CAT[k].g === BI_GRUPO)
+    );
+  else
+    h =
+      bloque("Usados hace poco", rec) +
+      DS_GRUPOS.map(g =>
+        bloque(
+          g,
+          todas.filter(k => DS_CAT[k].g === g)
+        )
+      ).join("");
+  $("biRejilla").innerHTML =
+    h ||
+    `<p class="bi-vacio">Ningún símbolo coincide con «${esc(q)}». Pruebe con otra palabra o con el código de la norma.</p>`;
+  $("biN").textContent = q ? `${todas.length} de ${Object.keys(DS_CAT).length} símbolos` : `${todas.length} símbolos`;
+}
+// Elige un símbolo: se cierra la ventana y queda listo para colocarlo
+function bibElegir(k) {
+  if (!DS_CAT[k]) return;
+  biUsado(k);
+  bibCerrar();
+  DS_SEL.clear();
+  plHerr("col:" + k);
+}
+$("biBusca").addEventListener("input", () => {
+  BI_GRUPO = "";
+  bibRender();
+  $("biRejilla").scrollTop = 0;
+});
+$("bibDlg").addEventListener("click", e => {
+  if (e.target.id === "bibDlg") return bibCerrar();
+  const s = e.target.closest("[data-bik]"),
+    g = e.target.closest("[data-big]"),
+    b = e.target.closest("[data-bi]");
+  if (s) return bibElegir(s.dataset.bik);
+  if (g) {
+    BI_GRUPO = g.dataset.big;
+    bibRender();
+    $("biRejilla").scrollTop = 0;
+  } else if (b && b.dataset.bi === "cerrar") bibCerrar();
+  else if (b && b.dataset.bi === "max") BI_VW.maximizar();
+});
+$("bibDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    bibCerrar();
+  } else if (e.key === "Enter" && e.target.id === "biBusca") {
+    e.preventDefault();
+    const p = $("biRejilla").querySelector("[data-bik]");
+    if (p) bibElegir(p.dataset.bik);
+  } else if (e.key === "ArrowDown" && e.target.id === "biBusca") {
+    e.preventDefault();
+    const p = $("biRejilla").querySelector("[data-bik]");
+    if (p) p.focus();
+  }
+  e.stopPropagation();
 });
 
 /* ---------- Ventana Tablero (doble clic en un tablero): nombre y circuitos, que salen del tablero como C-1, C-2… ---------- */

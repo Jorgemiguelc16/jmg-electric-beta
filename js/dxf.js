@@ -257,12 +257,15 @@ function modeloDxf(entrada) {
     textos = [],
     snap = [],
     snapC = [],
+    // Número del objeto del DXF (entidad de primer nivel; un bloque insertado es un solo objeto) de cada punto
+    snapE = [],
     insertos = [];
   let nEnt = 0;
   // Punto de enganche: x, y y tipo (1 extremo, 2 punto medio, 3 centro, 4 inserción de bloque), con su capa aparte
   const pS = (x, y, k, capa) => {
     snap.push(x, y, k);
     snapC.push(capa);
+    snapE.push(nEnt);
   };
   const color = (g, capa, colPadre) => {
     const tc = dxStr(g, 420, "");
@@ -288,7 +291,18 @@ function modeloDxf(entrada) {
       p[i] = q[0];
       p[i + 1] = q[1];
     }
-    trazos.push({ capa: o.capa, col: o.col, lt: o.lt, lte: o.lte * mEsc(m), k, p, c: !!cerrado, ent: o.ent, bl: o.bl });
+    trazos.push({
+      capa: o.capa,
+      col: o.col,
+      lt: o.lt,
+      lte: o.lte * mEsc(m),
+      k,
+      p,
+      c: !!cerrado,
+      ent: o.ent,
+      bl: o.bl,
+      e: o.e
+    });
     if (k !== "l") return;
     if (curva) {
       pS(p[0], p[1], 1, o.capa);
@@ -311,6 +325,7 @@ function modeloDxf(entrada) {
       let capa = dxStr(g, 8, "0");
       if (capa === "0" && padre) capa = padre.capa;
       if (!capas[capa]) capas[capa] = { col: "#ffffff", on: true, lt: "CONTINUOUS", n: 0 };
+      if (!prof) nEnt++;
       const o = {
         capa,
         col: color(g, capa, padre && padre.col),
@@ -318,9 +333,10 @@ function modeloDxf(entrada) {
         lte: dxNum(g, 48, 1) * LTS,
         // Tipo de objeto y bloque que lo contiene (para las propiedades en el editor)
         ent: e.t,
-        bl: padre ? padre.bl : ""
+        bl: padre ? padre.bl : "",
+        // Objeto de primer nivel al que pertenece (lo de dentro de un bloque, al bloque insertado)
+        e: nEnt
       };
-      if (!prof) nEnt++;
       const ocs = mMul(m, mOcs(g));
       switch (e.t) {
         case "LINE":
@@ -552,7 +568,8 @@ function modeloDxf(entrada) {
       ha,
       va,
       w: ancho,
-      mt: !!mt
+      mt: !!mt,
+      e: o.e
     });
   }
   // Sombreado: el contorno de cada camino (polilínea o aristas: línea, arco, elipse, spline); relleno sólido o de
@@ -684,6 +701,7 @@ function modeloDxf(entrada) {
     insertos,
     snap,
     snapC,
+    snapE,
     nEnt,
     ext: x0 <= x1 ? [x0, y0, x1, y1] : [0, 0, 1, 1],
     unidad: unidadDxf(cotas, parseInt(c1("$INSUNITS"), 10) || 0, x1 - x0),

@@ -206,6 +206,7 @@
 }
 /* Panel de plantas y capas */
 .pl-lado {
+  position: relative;
   width: 236px;
   min-height: 0;
   display: flex;
@@ -837,6 +838,164 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--ws-text2, #66737f);
+}
+/* Paneles del editor: borde para cambiar el ancho (doble clic: el de siempre) y botón para cerrarlos */
+.ed-sp {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 6;
+  touch-action: none;
+}
+.ed-izq .ed-sp {
+  right: -5px;
+}
+.ed-der .ed-sp {
+  left: -5px;
+}
+.ed-sp:hover,
+.ed-sp.drag {
+  background: linear-gradient(90deg, transparent 2px, #1f4fb4 2px, #1f4fb4 5px, transparent 5px);
+  opacity: 0.55;
+}
+.ed-x {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ws-text2, #7d8996);
+  padding: 0 4px 1px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.ed-x:hover {
+  background: var(--ws-hover, #dde4ec);
+  color: var(--ws-text, #14304f);
+}
+/* Color propio de un elemento del diseño */
+.ds-colr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ds-colr input[type="color"] {
+  width: 34px;
+  height: 22px;
+  padding: 0 2px;
+}
+/* Biblioteca de símbolos: grupos a la izquierda y los símbolos en tarjetas */
+.bi-box {
+  display: flex;
+  flex-direction: column;
+}
+.bi-box .ca-barra input {
+  flex: 1;
+  width: auto;
+  max-width: 420px;
+}
+.bi-n {
+  font: 11.5px var(--f-body);
+  color: var(--dl-ink2, #5f6b77);
+}
+.bi-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+.bi-grupos {
+  overflow: auto;
+  padding: 6px 0;
+  border-right: 1px solid var(--dl-grid2, #c9cfd6);
+  background: var(--dl-head, #f4f6f8);
+}
+.bi-grupos button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: 12px var(--f-body);
+  color: var(--dl-ink, #1b1b1b);
+  cursor: pointer;
+}
+.bi-grupos button i {
+  font-style: normal;
+  color: var(--dl-ink2, #5f6b77);
+}
+.bi-grupos button:hover {
+  background: #e6edf5;
+}
+.bi-grupos button.on {
+  background: #dde9f6;
+  box-shadow: inset 3px 0 0 #c77d2e;
+  font-weight: 600;
+}
+.bi-rejilla {
+  overflow: auto;
+  padding: 8px 10px 12px;
+  background: #fff;
+}
+.bi-rejilla h4 {
+  margin: 10px 2px 6px;
+  font: 600 10.5px var(--f-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dl-ink2, #5f6b77);
+}
+.bi-rejilla h4:first-child {
+  margin-top: 2px;
+}
+.bi-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px;
+}
+.bi-s {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 104px;
+  padding: 8px 6px 6px;
+  border: 1px solid #dfe4ea;
+  border-radius: 3px;
+  background: #fff;
+  color: #14304f;
+  font: 11px/1.25 var(--f-body);
+  text-align: center;
+  cursor: pointer;
+}
+.bi-s:hover,
+.bi-s:focus-visible {
+  border-color: #1f6fd6;
+  background: #f3f8fe;
+  outline: none;
+}
+.bi-s .ds-ico {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 2px;
+}
+.bi-s b {
+  font-weight: 500;
+  color: #1b1b1b;
+}
+.bi-s small {
+  font: 600 10px var(--f-mono);
+  color: #66737f;
+}
+.bi-vacio {
+  padding: 30px 10px;
+  text-align: center;
+  font: 12px var(--f-body);
+  color: var(--dl-ink2, #5f6b77);
 }
 /* Ventana Tablero: nombre, número de circuitos y descripción de cada uno */
 .ta-box {
