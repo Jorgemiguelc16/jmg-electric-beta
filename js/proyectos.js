@@ -391,6 +391,8 @@ function disValido(v) {
             ? { dt: e.dt.slice() }
             : {}),
           ...cir,
+          // Tablero del circuito del artefacto (lo hereda de la tubería que llega a él)
+          ...(e.k !== "tab" && typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {}),
           // Tablero: nombre, número de circuitos y descripción de cada uno
           ...(e.k === "tab" && e.nom ? { nom: txt(e.nom, 20) } : {}),
           ...(e.k === "tab" && n(e.nc) && e.nc >= 1 ? { nc: Math.min(60, Math.round(e.nc)) } : {}),
@@ -434,7 +436,10 @@ function disValido(v) {
             ? {
                 modo: e.modo === "piso" ? "piso" : "techo",
                 ...cir,
-                ...(typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {})
+                ...(typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {}),
+                // Artefactos a los que está conectada en su inicio (c0) y en su final (c1)
+                ...(typeof e.c0 === "string" && /^d[0-9]{1,7}$/.test(e.c0) ? { c0: e.c0 } : {}),
+                ...(typeof e.c1 === "string" && /^d[0-9]{1,7}$/.test(e.c1) ? { c1: e.c1 } : {})
               }
             : {})
         };

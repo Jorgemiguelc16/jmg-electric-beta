@@ -320,13 +320,15 @@ const DSU = {
   forz: false,
   paso: 0.5,
   // Enganches activos y sensibilidad (píxeles alrededor del cursor)
-  ref: { fin: true, med: true, cen: true, ins: true, cer: true, per: true, int: true },
+  ref: { fin: true, med: true, cen: true, ins: true, cer: true, per: true, int: true, con: true },
   sens: 12,
   alinear: true,
   curva: true,
   // Cada tipo de símbolo con su color; paso del giro (0: libre)
   colTipo: true,
-  giro: 0
+  giro: 0,
+  // Marcar lo que no está conectado
+  sueltos: true
 };
 try {
   const g = JSON.parse(localStorage.getItem("jmg-electric-editor-rejilla") || "{}");
@@ -809,6 +811,232 @@ function dsPuntosEnganche(lista) {
   return out;
 }
 
+/* ---------- Conexiones: tuberías que llegan a los artefactos ----------
+   Cada artefacto (luminaria, tomacorriente, interruptor, caja…) recibe tuberías: la punta de la tubería se atrae a
+   él cuando queda cerca (imán) y termina en su borde, hacia el tramo que llega. La tubería guarda el artefacto de
+   su inicio (c0) y de su final (c1): si el artefacto se mueve o gira, la tubería lo sigue; el circuito de la
+   tubería pasa al artefacto. El tablero se conecta por sus salidas C-1, C-2… */
+const DS_CON = {};
+// Forma de llegada de cada símbolo, en sus unidades: su círculo principal o, si no tiene, su rectángulo
+function dsFormaCon(k) {
+  if (DS_CON[k]) return DS_CON[k];
+  const b = dsBBs(k),
+    w = b[2] - b[0],
+    h = b[3] - b[1];
+  let c = null;
+  dsPrims(k).forEach(p => {
+    if (p.t === "c" && (!c || p.a[2] > c.a[2])) c = p;
+  });
+  return (DS_CON[k] =
+    c && c.a[2] >= 0.2 * Math.min(w, h)
+      ? { c: [c.a[0], c.a[1]], r: c.a[2] }
+      : { c: [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], w: w / 2, h: h / 2 });
+}
+// Del dibujo a las unidades del símbolo (lo inverso de dsAMundo)
+function dsALocal(el, x, y) {
+  const u = dsU(),
+    r = ((el.r || 0) * Math.PI) / 180,
+    c = Math.cos(r),
+    s = Math.sin(r),
+    wx = (x - el.x) / u,
+    wy = (y - el.y) / u;
+  return [wx * c + wy * s, wx * s - wy * c];
+}
+const dsCentroCon = el => {
+  const f = dsFormaCon(el.k);
+  return dsAMundo(el, f.c[0], f.c[1]);
+};
+// Punto del borde del artefacto en la dirección de (x, y): allí termina la tubería
+function dsBorde(el, x, y) {
+  const f = dsFormaCon(el.k),
+    [a, b] = dsALocal(el, x, y);
+  let dx = a - f.c[0],
+    dy = b - f.c[1];
+  const d = Math.hypot(dx, dy);
+  if (d < 1e-9) return dsCentroCon(el);
+  dx /= d;
+  dy /= d;
+  const t = f.r || Math.min(dx ? f.w / Math.abs(dx) : Infinity, dy ? f.h / Math.abs(dy) : Infinity);
+  return dsAMundo(el, f.c[0] + dx * t, f.c[1] + dy * t);
+}
+// Radio en que el artefacto atrae la punta de la tubería (en el dibujo)
+const dsRadioCon = el => {
+  const f = dsFormaCon(el.k);
+  return (f.r || Math.max(f.w, f.h)) * dsU();
+};
+const dsConecta = el => !!(el && el.t === "sim" && el.k !== "tab" && DS_CAT[el.k] && dsVis(el));
+// Artefacto que atrae un punto (x, y), con r de tolerancia
+function dsArtefactoEn(x, y, r) {
+  let mejor = null,
+    md = Infinity;
+  (dsD() ? dsD().els : []).forEach(el => {
+    if (!dsConecta(el)) return;
+    const c = dsCentroCon(el),
+      dd = Math.hypot(c[0] - x, c[1] - y);
+    if (dd <= dsRadioCon(el) + r && dd < md) {
+      md = dd;
+      mejor = el;
+    }
+  });
+  return mejor;
+}
+// Punto anterior a la punta que se está colocando: al dibujar una tubería o al arrastrar la punta de una
+function dsContextoCon() {
+  if (dsEsTub(PLH.h)) return { ref: PLH.pts[PLH.pts.length - 1] || null };
+  const ag = PLH.agarre,
+    el = ag && ag.t === "v" && dsD() ? dsD().els.find(e => e.id === ag.id) : null;
+  if (!el || el.t !== "tub") return null;
+  const n = el.pts.length / 2;
+  if (ag.i === 0) return { ref: [el.pts[2], el.pts[3]] };
+  if (ag.i === n - 1) return { ref: [el.pts[2 * n - 4], el.pts[2 * n - 3]] };
+  return null;
+}
+// Enganche de conexión (tipo 9): el borde del artefacto cercano, hacia el punto anterior
+function dsEngancheCon(x, y, r) {
+  const cx = dsContextoCon();
+  if (!cx) return null;
+  const el = dsArtefactoEn(x, y, r);
+  if (!el) return null;
+  const p = cx.ref ? dsBorde(el, cx.ref[0], cx.ref[1]) : dsCentroCon(el);
+  return [p[0], p[1], 9, { con: el.id, nom: DS_CAT[el.k].n }];
+}
+// El circuito (y su tablero) de la tubería pasa a los artefactos que aún no tienen
+function dsHeredar(t) {
+  if (!t.cir) return;
+  ["c0", "c1"].forEach(c => {
+    const s = t[c] && dsD().els.find(e => e.id === t[c]);
+    if (s && !s.cir) {
+      s.cir = t.cir;
+      if (t.tab) s.tab = t.tab;
+    }
+  });
+}
+// Las puntas conectadas siguen a su artefacto (al moverlo, girarlo o editarlo)
+function dsReconectar() {
+  const D = dsD();
+  if (!D) return;
+  const por = new Map(D.els.filter(e => e.t === "sim").map(e => [e.id, e]));
+  D.els.forEach(t => {
+    if (t.t !== "tub" || !(t.c0 || t.c1)) return;
+    const n = t.pts.length / 2;
+    for (let vuelta = 0; vuelta < (n === 2 ? 2 : 1); vuelta++)
+      ["c0", "c1"].forEach(c => {
+        if (!t[c]) return;
+        const s = por.get(t[c]);
+        if (!s) return delete t[c];
+        // Una tubería que se arrastra sola (sin su artefacto) se desconecta al soltarla
+        if (PLH.arr && DS_SEL.has(t.id) && !DS_SEL.has(s.id)) return;
+        const i = c === "c0" ? 0 : n - 1,
+          j = c === "c0" ? 1 : n - 2,
+          p = dsBorde(s, t.pts[2 * j], t.pts[2 * j + 1]);
+        t.pts[2 * i] = p[0];
+        t.pts[2 * i + 1] = p[1];
+      });
+  });
+}
+// Tuberías que se mueven o giran sin su artefacto: dejan de estar conectadas a él
+function dsDesligar(sel) {
+  const ids = new Set(sel.map(el => el.id));
+  sel.forEach(t => {
+    if (t.t !== "tub") return;
+    ["c0", "c1"].forEach(c => {
+      if (t[c] && !ids.has(t[c])) delete t[c];
+    });
+  });
+}
+// Al soltar la punta de una tubería: queda conectada al artefacto donde cayó, o suelta
+function dsAgarreSoltar(ag, eng) {
+  const el = dsD() && dsD().els.find(e => e.id === ag.id);
+  if (!el || el.t !== "tub") return;
+  if (ag.t === "ins") return dsDesligar([el]);
+  if (ag.t !== "v") return;
+  const n = el.pts.length / 2,
+    c = ag.i === 0 ? "c0" : ag.i === n - 1 ? "c1" : null;
+  if (!c) return;
+  if (eng && eng[2] === 9) {
+    el[c] = eng[3].con;
+    dsHeredar(el);
+  } else delete el[c];
+}
+// Lo que no está conectado: artefactos sin tubería y puntas de tubería que no llegan a nada
+function dsSueltos() {
+  const D = dsD(),
+    out = { sims: [], puntas: [] };
+  if (!D) return out;
+  const tubs = D.els.filter(e => e.t === "tub" && dsVis(e)),
+    con = new Set(),
+    tol = 0.01 / (EPL ? EPL.f : 1);
+  tubs.forEach(t => [t.c0, t.c1].forEach(c => c && con.add(c)));
+  D.els.forEach(el => {
+    if (dsConecta(el) && !con.has(el.id)) out.sims.push(el);
+  });
+  // Una punta que toca un vértice de otra tubería (derivación) también cuenta como conectada
+  const toca = (t, x, y) =>
+    tubs.some(o => {
+      if (o === t) return false;
+      for (let i = 0; i < o.pts.length; i += 2) if (Math.hypot(o.pts[i] - x, o.pts[i + 1] - y) < tol) return true;
+      return false;
+    });
+  tubs.forEach(t => {
+    const n = t.pts.length;
+    if (!t.c0 && !t.tab && !toca(t, t.pts[0], t.pts[1])) out.puntas.push({ el: t, p: [t.pts[0], t.pts[1]] });
+    if (!t.c1 && !toca(t, t.pts[n - 2], t.pts[n - 1])) out.puntas.push({ el: t, p: [t.pts[n - 2], t.pts[n - 1]] });
+  });
+  return out;
+}
+// Conecta las puntas sueltas que ya están sobre un artefacto (por ejemplo, las dibujadas antes de esta versión)
+function dsConectarAuto() {
+  const D = dsD();
+  if (!D) return 0;
+  let k = 0;
+  const tol = dsMm(1);
+  D.els.forEach(t => {
+    if (t.t !== "tub") return;
+    const n = t.pts.length;
+    if (!t.c0 && !t.tab) {
+      const s = dsArtefactoEn(t.pts[0], t.pts[1], tol);
+      if (s && s.id !== t.c1) {
+        t.c0 = s.id;
+        k++;
+      }
+    }
+    if (!t.c1) {
+      const s = dsArtefactoEn(t.pts[n - 2], t.pts[n - 1], tol);
+      if (s && s.id !== t.c0) {
+        t.c1 = s.id;
+        k++;
+      }
+    }
+    dsHeredar(t);
+  });
+  return k;
+}
+// Marcas naranjas de lo no conectado (solo en el editor)
+function dsDibSueltos(g) {
+  if (!DSU.sueltos || dsU() * PLV.s * 17 < 6) return;
+  const s = dsSueltos(),
+    d = plDpr(),
+    nar = PL_OSCURO ? "#ff9b4a" : "#e8590c";
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.lineWidth = 1.4 * d;
+  const punto = (X, Y, r) => {
+    g.beginPath();
+    g.arc(X, Y, r, 0, 2 * Math.PI);
+    g.fillStyle = nar;
+    g.fill();
+    g.strokeStyle = PL_OSCURO ? "#111922" : "#fff";
+    g.stroke();
+  };
+  s.puntas.forEach(o => punto(...plAPant(o.p[0], o.p[1]), 3.5 * d));
+  s.sims.forEach(el => {
+    const b = dsBBox(el),
+      [X, Y] = plAPant(b[2], b[3]);
+    punto(X + 2 * d, Y - 2 * d, 3 * d);
+  });
+  g.restore();
+}
+
 /* ---------- Rejilla ---------- */
 // Paso de la rejilla en unidades del dibujo
 const dsPasoU = () => DSU.paso / (EPL ? EPL.f : 1);
@@ -915,6 +1143,7 @@ function dsPintar(g) {
     }
   }
   g.restore();
+  dsDibSueltos(g);
 }
 // Longitudes de una tubería: la total en su tramo central o la de cada tramo; texto de 2 mm impreso, a lo largo del
 // tramo y del lado de afuera de la curva (en un tramo recto, a su izquierda), sin tocar la línea
@@ -1116,6 +1345,12 @@ function dsAgarreEn(X, Y) {
 }
 // Arrastre de un pinzamiento hasta q (orig: el elemento antes de empezar)
 function dsAgarreMover(ag, q) {
+  dsAgarreMover1(ag, q);
+  const el = dsD().els.find(e => e.id === ag.id);
+  // Un artefacto que se mueve o gira arrastra las puntas de sus tuberías
+  if (el && el.t === "sim") dsReconectar();
+}
+function dsAgarreMover1(ag, q) {
   const el = dsD().els.find(e => e.id === ag.id);
   if (!el) return;
   const o = JSON.parse(ag.orig);
@@ -1302,8 +1537,13 @@ function dsSobre(g) {
   // Trazo en curso
   const h = PLH.h;
   if (DS_HERR[h] && PLH.pts.length && q) {
-    const pts = PLH.pts,
-      capa = dsCapaPara(h),
+    let pts = PLH.pts;
+    const ini = dsEsTub(h) && PLH.conIni && dsD().els.find(e => e.id === PLH.conIni);
+    if (ini) {
+      const sg = pts[1] || q;
+      pts = [dsBorde(ini, sg[0], sg[1]), ...pts.slice(1)];
+    }
+    const capa = dsCapaPara(h),
       col = plColorDis(dsCapa(capa).col);
     g.strokeStyle = col;
     g.fillStyle = col;
@@ -1468,6 +1708,7 @@ function dsPunto(p) {
     });
     return;
   }
+  if (dsEsTub(h)) return dsPuntoTub(p);
   PLH.pts.push(p);
   const n = PLH.pts.length,
     capa = dsCapaPara(h);
@@ -1515,14 +1756,67 @@ function dsPunto(p) {
   plOrden();
   plSobreDibujar();
 }
-// Termina la polilínea o la tubería en curso (Intro, doble clic o Esc)
-function dsTerminar() {
+// Punto de una tubería: si empieza en un artefacto queda conectada a él; si llega a otro, esa tubería termina en
+// su borde y empieza otra desde él (con el mismo circuito), como se cablea de una salida a la siguiente
+function dsPuntoTub(p) {
+  const eng = PLH.eng,
+    con = eng && eng[2] === 9 ? eng[3].con : null,
+    D = dsD();
+  if (!PLH.pts.length) {
+    PLH.pts.push(p);
+    PLH.conIni = con;
+    if (eng && eng[2] === 8) PLH.cirIni = eng[3];
+    else if (con) {
+      // Empieza en un artefacto que ya tiene circuito: la tubería lo toma
+      const s = D.els.find(e => e.id === con),
+        tb = s && s.tab && D.els.find(e => e.id === s.tab);
+      if (s && s.cir) PLH.cirIni = { cir: s.cir, tab: s.tab || "", nom: tb ? tb.nom || "" : "" };
+    }
+    if (PLH.cirIni)
+      toast(`Tubería del circuito ${PLH.cirIni.cir}${PLH.cirIni.nom ? " del tablero " + PLH.cirIni.nom : ""}`);
+    plOrden();
+    return plSobreDibujar();
+  }
+  // Un clic en el mismo artefacto del inicio no hace un tramo
+  if (con && con === PLH.conIni && PLH.pts.length === 1) return;
+  // El inicio en un artefacto: a su borde, hacia este punto
+  if (PLH.pts.length === 1 && PLH.conIni) {
+    const s = D.els.find(e => e.id === PLH.conIni);
+    if (s) PLH.pts[0] = dsBorde(s, p[0], p[1]);
+  }
+  PLH.pts.push(p);
+  (PLH.bul = PLH.bul || []).push(dsBulNuevo());
+  if (eng && eng[2] === 8 && !PLH.cirIni) PLH.cirIni = eng[3];
+  if (con) {
+    const t = dsTerminar(con),
+      s = D.els.find(e => e.id === con);
+    if (t && s) {
+      // Sigue desde el artefacto, con el mismo circuito
+      PLH.pts = [dsCentroCon(s)];
+      PLH.conIni = con;
+      PLH.cirIni = t.cir ? { cir: t.cir, tab: t.tab || "", nom: "" } : null;
+      toast(`Conectada a ${DS_CAT[s.k].n.toLowerCase()} · siga a la próxima salida o Esc para terminar`);
+    }
+  }
+  plOrden();
+  plSobreDibujar();
+}
+// Termina la polilínea o la tubería en curso (Intro, doble clic o Esc); conFin: artefacto al que llega
+function dsTerminar(conFin) {
   const h = PLH.h;
   if (!(h === "pol" || dsEsTub(h)) || PLH.pts.length < 2) {
     if (h === "pol" || dsEsTub(h)) {
+      // Una tubería que solo tenía su inicio en un artefacto: se descarta y se sigue en la herramienta
+      const habia = dsEsTub(h) && PLH.pts.length === 1 && PLH.conIni;
       PLH.pts = [];
       PLH.bul = [];
       PLH.cirIni = null;
+      PLH.conIni = null;
+      if (habia) {
+        plOrden();
+        plSobreDibujar();
+        return true;
+      }
     }
     return false;
   }
@@ -1534,16 +1828,20 @@ function dsTerminar() {
     if ((PLH.bul || []).some(Boolean)) el.b = PLH.bul.slice(0, PLH.pts.length - 1);
     if (PLH.cirIni) {
       el.cir = PLH.cirIni.cir;
-      el.tab = PLH.cirIni.tab;
+      if (PLH.cirIni.tab) el.tab = PLH.cirIni.tab;
     }
+    if (PLH.conIni) el.c0 = PLH.conIni;
+    if (conFin && conFin !== PLH.conIni) el.c1 = conFin;
   }
   dsAgregar(el);
+  if (el.t === "tub") dsHeredar(el);
   PLH.pts = [];
   PLH.bul = [];
   PLH.cirIni = null;
+  PLH.conIni = null;
   edCambio();
   plOrden();
-  return true;
+  return el;
 }
 // Punto a la distancia escrita desde el último punto, en la dirección del cursor (entrada de longitud)
 function dsPuntoAdistancia(L) {
@@ -1600,12 +1898,16 @@ function dsMover(q) {
       dsTrasladar(o, dx, dy);
       D.els[i] = o;
     });
+  dsReconectar();
   plDibujar();
 }
 function dsSoltar() {
   const a = PLH.arr;
   PLH.arr = null;
-  if (a.mov) return edCambio();
+  if (a.mov) {
+    dsDesligar(dsSel());
+    return edCambio();
+  }
   // Clic sin mover sobre un elemento de una selección múltiple: queda solo ese
   if (!a.suma && DS_SEL.size > 1) {
     DS_SEL.clear();
@@ -1620,6 +1922,7 @@ function dsEmpujar(dx, dy, grande) {
   if (!sel.length) return false;
   const l = (grande ? 0.1 : 0.01) / EPL.f;
   sel.forEach(el => dsTrasladar(el, dx * l, dy * l));
+  dsDesligar(sel);
   edCambio();
   return true;
 }
@@ -1647,6 +1950,7 @@ function dsGirar(ang = DSU.giro || 90) {
   }
   const sel = dsSel().filter(dsEditable);
   if (!sel.length) return;
+  dsDesligar(sel);
   // Los símbolos y textos giran sobre su punto; lo demás, sobre el centro de la selección
   const b = sel.map(dsBBox),
     cx = (Math.min(...b.map(x => x[0])) + Math.max(...b.map(x => x[2]))) / 2,
@@ -1686,12 +1990,23 @@ function dsPegar() {
     cy = (Math.min(...b.map(x => x[1])) + Math.max(...b.map(x => x[3]))) / 2,
     q = plPuntoActual() || [cx + 20 * dsU(), cy - 20 * dsU()];
   DS_SEL.clear();
+  const nuevo = new Map(),
+    pegados = [];
   DS_PORTA.forEach(o => {
     const el = JSON.parse(JSON.stringify(o));
     dsTrasladar(el, q[0] - cx, q[1] - cy);
     dsCapa(el.capa);
-    DS_SEL.add(dsAgregar(el).id);
+    dsAgregar(el);
+    nuevo.set(o.id, el.id);
+    pegados.push(el);
+    DS_SEL.add(el.id);
   });
+  pegados.forEach(t =>
+    ["c0", "c1"].forEach(c => {
+      if (t[c] && nuevo.has(t[c])) t[c] = nuevo.get(t[c]);
+      else delete t[c];
+    })
+  );
   edCambio();
 }
 function dsTodo() {
@@ -1948,11 +2263,21 @@ function dsResumen() {
     if (el.t === "tub") largo[t] = (largo[t] || 0) + dsLargo(el);
   });
   $("dsN").textContent = D.els.length || "";
+  const sl = dsSueltos(),
+    hayTub = D.els.some(e => e.t === "tub"),
+    s = (n, a, b) => `${n} ${n === 1 ? a : b}`,
+    aviso =
+      sl.sims.length || sl.puntas.length
+        ? `<div class="ds-aviso"><b>Sin conectar:</b> ${[sl.sims.length ? s(sl.sims.length, "artefacto sin tubería", "artefactos sin tubería") : "", sl.puntas.length ? s(sl.puntas.length, "punta de tubería suelta", "puntas de tubería sueltas") : ""].filter(Boolean).join(" · ")}<div><button type="button" data-dsx="elegir">Elegirlos</button>${hayTub ? '<button type="button" data-dsx="auto" title="Conecta las puntas que ya están sobre un artefacto">Conectar automáticamente</button>' : ""}</div></div>`
+        : hayTub
+          ? '<div class="ds-aviso ok">✓ Todas las tuberías y artefactos están conectados</div>'
+          : "";
   const orden = [...Object.keys(DS_CAT), "tub-techo", "tub-piso", "lin", "cir", "txt", "cot", "dir"].filter(
     t => cuenta[t]
   );
   box.innerHTML = orden.length
-    ? orden
+    ? aviso +
+      orden
         .map(
           t =>
             `<button type="button" class="ds-fila" data-dst="${t}" title="Seleccionar todos">${DS_CAT[t] ? (DSU.colTipo ? dsIcono(t).replace('class="ds-ico"', `class="ds-ico" style="color:${plColorDis(DS_COLT[t])}"`) : dsIcono(t)) : `<i class="ds-ico ds-lin${t === "tub-piso" ? " piso" : ""}"></i>`}<span>${dsNomTipo(t)}</span><em>${largo[t] ? plFm(largo[t]) + " m" : cuenta[t]}</em></button>`
@@ -1961,8 +2286,27 @@ function dsResumen() {
     : `<p class="pl-nota">Coloque luminarias, interruptores, tomacorrientes, tableros y tuberías desde las pestañas <b>Insertar</b> y <b>Dibujo</b>. Aquí verá cuántos hay de cada uno y los metros de tubería.</p>`;
 }
 $("dsResumen").addEventListener("click", e => {
-  const b = e.target.closest("[data-dst]");
+  const b = e.target.closest("[data-dst]"),
+    x = e.target.closest("[data-dsx]");
   if (b) dsSelTipo(b.dataset.dst);
+  else if (x && x.dataset.dsx === "auto") {
+    const k = dsConectarAuto();
+    if (k) edCambio();
+    toast(
+      k
+        ? `${k} punta${k > 1 ? "s" : ""} conectada${k > 1 ? "s" : ""}`
+        : "No hay puntas sobre un artefacto: arrastre cada punta suelta hasta su artefacto"
+    );
+  } else if (x) {
+    const sl = dsSueltos();
+    DS_SEL.clear();
+    PL_ASEL.clear();
+    sl.sims.forEach(el => DS_SEL.add(el.id));
+    sl.puntas.forEach(o => DS_SEL.add(o.el.id));
+    PLH.obj = -1;
+    edProps();
+    plSobreDibujar();
+  }
 });
 
 /* ---------- Cinta del editor: íconos de los símbolos, capa actual, escalas, rejilla, enganches y trazo ---------- */
@@ -1987,6 +2331,7 @@ function dsCinta() {
   $("dsAlinear").checked = DSU.alinear;
   $("dsGiro").value = String(DSU.giro || 0);
   $("dsColTipo").checked = DSU.colTipo;
+  $("dsSueltos").checked = DSU.sueltos;
   $("dsTrazo").value = DSU.curva ? "curvo" : "recto";
   document.querySelectorAll("[data-edtg]").forEach(b => {
     const v = b.dataset.edtg;
@@ -2037,6 +2382,11 @@ $("dsGiro").addEventListener("change", e => {
       ? `Giro de ${DSU.giro}° en ${DSU.giro}° (tecla R y pinzamiento redondo)`
       : "Giro libre: el pinzamiento redondo gira a cualquier ángulo; R gira 90°"
   );
+});
+$("dsSueltos").addEventListener("change", e => {
+  DSU.sueltos = e.target.checked;
+  dsGuardarPref();
+  plDibujar();
 });
 $("dsColTipo").addEventListener("change", e => {
   DSU.colTipo = e.target.checked;

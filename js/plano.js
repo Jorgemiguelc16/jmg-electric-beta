@@ -55,7 +55,9 @@ const PLH = {
   lado: 1,
   libre: false,
   // Salida del tablero donde empezó la tubería en curso (su circuito)
-  cirIni: null
+  cirIni: null,
+  // Artefacto donde empieza la tubería en curso
+  conIni: null
 };
 const plBase = $("plBase"),
   plSobre = $("plSobre"),
@@ -245,6 +247,7 @@ function edCerrar() {
 }
 // Un cambio en la copia del editor: entra a su historial de deshacer
 function edCambio() {
+  if (EPL && EPL.dis) dsReconectar();
   const s = edSnap();
   if (ED.hist[ED.hist.length - 1] !== s) {
     ED.hist.push(s);
@@ -809,6 +812,12 @@ function plSobreDibujar() {
       g.lineTo(X + r, Y + r);
       g.moveTo(X + r, Y - r);
       g.lineTo(X - r, Y + r);
+    } else if (k === 9) {
+      g.arc(X, Y, r * 1.1, 0, 2 * Math.PI);
+      g.moveTo(X + r * 0.5, Y);
+      g.arc(X, Y, r * 0.5, 0, 2 * Math.PI);
+      g.fillStyle = verde;
+      g.fill();
     } else if (k === 8) {
       g.arc(X, Y, r, 0, 2 * Math.PI);
       g.moveTo(X + r * 0.35, Y);
@@ -819,7 +828,11 @@ function plSobreDibujar() {
     const sal = PLH.eng[3];
     plEtiqueta(
       g,
-      k === 8 && sal ? `Salida ${sal.cir}${sal.nom ? " · " + sal.nom : ""}` : PL_ENG[k] || "",
+      k === 8 && sal
+        ? `Salida ${sal.cir}${sal.nom ? " · " + sal.nom : ""}`
+        : k === 9 && sal
+          ? `Conectar a: ${sal.nom.toLowerCase()}`
+          : PL_ENG[k] || "",
       X + 12 * d,
       Y + 10 * d,
       verde,
@@ -869,9 +882,10 @@ const PL_ENG = {
   5: "Cercano",
   6: "Perpendicular",
   7: "Intersección",
-  8: "Salida de circuito"
+  8: "Salida de circuito",
+  9: "Conexión"
 };
-const PL_REF = { 1: "fin", 2: "med", 3: "cen", 4: "ins", 5: "cer", 6: "per", 7: "int" };
+const PL_REF = { 1: "fin", 2: "med", 3: "cen", 4: "ins", 5: "cer", 6: "per", 7: "int", 9: "con" };
 const plDistPS = (x, y, ax, ay, bx, by) => {
   const dx = bx - ax,
     dy = by - ay,
@@ -961,6 +975,14 @@ function plEnganche(x, y) {
     oc = new Set(EPL.ocultas),
     sn = PL_MOD.snap,
     vale = k => R[PL_REF[k]] !== false;
+  // Tubería: la punta se conecta al artefacto cercano (en su borde); la salida del tablero va primero
+  if (vale(9)) {
+    const c = dsEngancheCon(x, y, r);
+    if (c) {
+      const sal = dsPuntosEnganche().find(q => q[2] === 8 && Math.hypot(q[0] - x, q[1] - y) < r);
+      return sal || c;
+    }
+  }
   let mejor = null,
     md = r;
   const fuera = plMoviendo(),
@@ -1111,6 +1133,7 @@ function plHerr(h) {
   PLH.bul = [];
   PLH.lado = 1;
   PLH.cirIni = null;
+  PLH.conIni = null;
   plPedir(null);
   // Sin herramienta, el modo es Seleccionar
   document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
@@ -1524,9 +1547,11 @@ plLienzo.addEventListener("pointerup", e => {
   const abajo = PLH.abajo;
   PLH.abajo = null;
   if (PLH.agarre) {
-    const ag = PLH.agarre;
+    const ag = PLH.agarre,
+      eng = PLH.eng;
     PLH.agarre = null;
     PLH.eng = null;
+    if (ag.mov) dsAgarreSoltar(ag, eng);
     return ag.mov ? edCambio() : plSobreDibujar();
   }
   if (PLH.arr) return dsSoltar();

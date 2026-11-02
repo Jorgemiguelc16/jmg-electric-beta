@@ -878,6 +878,36 @@
   background: var(--ws-hover, #dde4ec);
   color: var(--ws-text, #14304f);
 }
+/* Aviso de conexiones en el panel izquierdo */
+.ds-aviso {
+  margin: 6px 8px 4px;
+  padding: 6px 8px;
+  border: 1px solid #f0b37e;
+  border-radius: 4px;
+  background: #fff6ee;
+  color: #8a3b00;
+  font: 11.5px/1.4 var(--f-body);
+}
+.ds-aviso.ok {
+  border-color: #9fd3ab;
+  background: #f0faf2;
+  color: #1f6b33;
+}
+.ds-aviso div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.ds-aviso button {
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: #fff;
+  color: inherit;
+  font: 11px var(--f-body);
+  cursor: pointer;
+}
 /* Menú del clic derecho sobre el plano */
 .ed-menu {
   position: absolute;

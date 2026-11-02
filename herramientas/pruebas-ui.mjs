@@ -917,6 +917,62 @@ prueba("Editor de diseño: menú del clic derecho, paso de giro, color por tipo 
   await clic('[data-ed="aceptar"]');
 });
 
+prueba("Editor de diseño: tuberías conectadas a los artefactos (imán, borde, circuito y mover)", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Tablero con 4 circuitos y dos luminarias en el techo
+  await ev(
+    `(() => { dsAgregar({ t: 'sim', k: 'tab', x: ${OX} + 3, y: ${OY} + 7.9, r: 180, capa: 'E-TABLEROS', nom: 'TG', nc: 4 });
+      dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 2, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' });
+      dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 4.5, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' }); edCambio(); })()`
+  );
+  const [l1, l2] = await J("dsD().els.filter(e => e.k === 'luz').map(e => e.id)");
+  const sal = await J("dsSalidasTab(dsD().els.find(e => e.k === 'tab')).map(o => o.p)");
+  await clic('#editor [data-pl="tubT"]');
+  await clicPlano(sal[0][0], sal[0][1], 0);
+  // Clics cerca (no en el centro) de cada luminaria: el imán los conecta
+  await clicPlano(OX + 2.06, OY + 5.04, 0);
+  await clicPlano(OX + 4.45, OY + 4.97, 0);
+  await teclaE("Escape", "Escape", 27);
+  const t = await J("dsD().els.filter(e => e.t === 'tub')");
+  ok(t.length === 2, `dos tuberías: tablero → luminaria y luminaria → luminaria (${t.length})`);
+  ok(t[0] && t[0].cir === "C-1" && t[0].c1 === l1 && !t[0].c0, "la primera sale de C-1 y llega a la luminaria 1");
+  ok(
+    t[1] && t[1].c0 === l1 && t[1].c1 === l2 && t[1].cir === "C-1",
+    "la segunda une las luminarias, con el mismo circuito"
+  );
+  ok(
+    await ev(`dsD().els.filter(e => e.k === 'luz').every(e => e.cir === 'C-1')`),
+    "las luminarias toman el circuito C-1"
+  );
+  const r = await ev(
+    `(() => { const l = dsD().els.find(e => e.id === '${l1}'), tb = dsD().els.find(e => e.t === 'tub'); const c = dsCentroCon(l); return Math.hypot(tb.pts[tb.pts.length - 2] - c[0], tb.pts[tb.pts.length - 1] - c[1]) / dsRadioCon(l); })()`
+  );
+  ok(Math.abs(r - 1) < 0.02, `la tubería termina en el borde de la luminaria (${r.toFixed(3)} × radio)`);
+  ok(await ev("dsSueltos().puntas.length === 0 && dsSueltos().sims.length === 0"), "nada queda suelto");
+  // Mover la luminaria 2: la punta de la tubería la sigue
+  await ev(`(() => { const l = dsD().els.find(e => e.id === '${l2}'); l.y -= 1.2; edCambio(); })()`);
+  const d = await ev(
+    `(() => { const l = dsD().els.find(e => e.id === '${l2}'), tb = dsD().els.filter(e => e.t === 'tub')[1], c = dsCentroCon(l); return Math.hypot(tb.pts[tb.pts.length - 2] - c[0], tb.pts[tb.pts.length - 1] - c[1]) / dsRadioCon(l); })()`
+  );
+  ok(Math.abs(d - 1) < 0.02, "al mover la luminaria, la tubería la sigue");
+  // Borrar la luminaria 2: la tubería queda con su punta suelta (aviso)
+  await ev(`DS_SEL.clear(); DS_SEL.add('${l2}'); 1`);
+  await teclaE("Delete", "Delete", 46);
+  ok(
+    await ev("dsSueltos().puntas.length === 1 && /Sin conectar/.test($('dsResumen').textContent)"),
+    "punta suelta avisada en el panel"
+  );
+  await ctrlZ();
+  ok(await ev("dsSueltos().puntas.length === 0"), "Ctrl+Z la vuelve a conectar");
+  await clic('[data-ed="aceptar"]');
+  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+  ok(
+    await ev(`PLANO.dis.els.filter(e => e.t === 'tub')[1].c1 === '${l2}'`),
+    "las conexiones se guardan con el proyecto"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();
