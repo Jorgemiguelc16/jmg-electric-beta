@@ -2489,6 +2489,8 @@ $("editor").addEventListener("click", e => {
   }
   if (a === "capas") return capasAbrir();
   if (a === "revisar") return revAbrir();
+  if (a === "lamina") return lamAbrir();
+  if (a === "dxfdis" || a === "dxftodo") return lamDxf(a === "dxftodo");
   if (a === "biblio") return bibAbrir();
   if (a === "fila" || a === "espejo") return dsIniciarCopia(a);
   if (a === "girar") return dsGirar();

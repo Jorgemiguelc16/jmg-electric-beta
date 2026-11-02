@@ -481,6 +481,24 @@ function disValido(v) {
     etq: ["no", "total", "tramo"].includes(v.etq) ? v.etq : "total",
     // Circuito y diámetro escritos sobre cada tubería
     ...(v.cirt === true ? { cirt: true } : {}),
+    // Circuito escrito junto a cada salida
+    ...(v.nsal === true ? { nsal: true } : {}),
+    // Lámina: papel, zona, colores, leyenda, título, número y notas
+    ...(v.lam && typeof v.lam === "object"
+      ? {
+          lam: {
+            tam: ["A4", "A3", "A2", "A1"].includes(v.lam.tam) ? v.lam.tam : "A3",
+            zona:
+              typeof v.lam.zona === "string" && /^(todo|vista|planta:\d{1,3})$/.test(v.lam.zona) ? v.lam.zona : "todo",
+            arq: ["gris", "negro", "color"].includes(v.lam.arq) ? v.lam.arq : "gris",
+            color: v.lam.color === "bn" ? "bn" : "color",
+            ley: v.lam.ley !== false,
+            tit: txt(v.lam.tit, 120),
+            num: txt(v.lam.num, 20),
+            notas: txt(v.lam.notas, 2000)
+          }
+        }
+      : {}),
     // Criterios de la revisión del diseño (editables)
     ...(v.crit && typeof v.crit === "object"
       ? {

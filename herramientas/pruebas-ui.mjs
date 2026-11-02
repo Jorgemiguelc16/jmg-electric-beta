@@ -1199,6 +1199,60 @@ prueba(
   }
 );
 
+prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y circuito en las salidas", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  await ev(
+    `(() => { dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 3, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO', cir: 'C-1' });
+      dsAgregar({ t: 'sim', k: 'toma', x: ${OX} + 2, y: ${OY} + 4, r: 0, capa: 'E-TOMACORRIENTES', cir: 'C-2' });
+      dsAgregar({ t: 'tub', pts: [${OX} + 1, ${OY} + 1, ${OX} + 5, ${OY} + 1], modo: 'techo', capa: 'E-TUBERIAS-TECHO', cond: { f: 1, n: 1, t: true } });
+      EPL.plantas = [{ n: '1er piso', x0: ${OX} - 0.5, y0: ${OY} - 0.5, x1: ${OX} + 10.5, y1: ${OY} + 8.5 }]; edCambio(); })()`
+  );
+  await clic('#editor [data-tab-e="salida"]');
+  await clic('#editor [data-pl="lamina"]');
+  await esperar(150);
+  ok(await ev("!$('lamDlg').hidden && $('laZona').value === 'planta:0'"), "la lámina se abre con la planta encuadrada");
+  const svg = await ev("$('laPrev').innerHTML");
+  ok(
+    /LEYENDA/.test(svg) && /ESCALA 1:50/.test(svg) && /NOTAS/.test(svg) && /IE-01/.test(svg),
+    "lámina con leyenda, escala, notas y rótulo"
+  );
+  ok((await ev("$('laAviso').hidden")) === true, "la planta entra en A3 a 1:50");
+  await poner("#laTam", "A4");
+  await poner("#laEsc", "25");
+  ok(
+    /no entra/.test(await ev("$('laAviso').textContent")) && (await ev("dsD().escala")) === 25,
+    "en A4 a 1:25 avisa que no entra"
+  );
+  await poner("#laEsc", "50");
+  await poner("#laNum", "IE-04");
+  ok((await ev("dsD().lam.num")) === "IE-04" && /IE-04/.test(await ev("$('laPrev').innerHTML")), "número de lámina");
+  await clic('[data-la="cerrar"]');
+  // DXF: se vuelve a leer con el lector de la plataforma, en las mismas coordenadas
+  const r = await J(
+    `(() => { const m = modeloDxf(new TextEncoder().encode(laDxf(false)).buffer); return { capas: Object.keys(m.capas), ext: m.ext, n: m.trazos.length }; })()`
+  );
+  ok(
+    ["E-ALUMBRADO", "E-TOMACORRIENTES", "E-TUBERIAS-TECHO"].every(c => r.capas.includes(c)) &&
+      Math.abs(r.ext[0] - (OX + 1)) < 0.1 &&
+      Math.abs(r.ext[1] - (OY + 1)) < 0.1,
+    `DXF con sus capas y coordenadas reales (${r.ext.map(v => v.toFixed(2)).join(", ")})`
+  );
+  const r2 = await J(
+    `(() => { const m = modeloDxf(new TextEncoder().encode(laDxf(true)).buffer); return m.trazos.length; })()`
+  );
+  ok(r2 > r.n, "DXF con la arquitectura: más trazos");
+  // Circuito en las salidas
+  await ev("(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })($('dsNSal'))");
+  ok((await ev("dsD().nsal")) === true, "circuito en las salidas");
+  await clic('[data-ed="aceptar"]');
+  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+  ok(
+    await ev("PLANO.dis.lam.num === 'IE-04' && PLANO.dis.nsal === true"),
+    "la lámina y la opción se guardan con el proyecto"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

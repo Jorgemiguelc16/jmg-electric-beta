@@ -153,6 +153,77 @@
   overflow: auto;
   background: var(--ws-pane, #fff);
 }
+/* Lámina: opciones a la izquierda y vista previa del papel */
+.la-box {
+  display: flex;
+  flex-direction: column;
+}
+.la-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+.la-op {
+  overflow: auto;
+  padding: 10px 12px;
+  border-right: 1px solid var(--dl-grid2, #c9cfd6);
+  background: var(--dl-head, #f4f6f8);
+}
+.la-op label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+  font: 11.5px var(--f-body);
+  color: var(--dl-ink2, #5f6b77);
+}
+.la-op label.la-chk {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.la-op select,
+.la-op input[type="text"],
+.la-op textarea {
+  padding: 4px 6px;
+  border: 1px solid var(--dl-grid2, #c9cfd6);
+  border-radius: 3px;
+  font: 12px var(--f-body);
+  color: var(--dl-ink, #1b1b1b);
+  background: #fff;
+}
+.la-op textarea {
+  resize: vertical;
+}
+.la-op label.la-chk input {
+  width: auto;
+  flex: none;
+  margin: 0;
+}
+.la-aviso {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border: 1px solid #f0b37e;
+  border-radius: 4px;
+  background: #fff6ee;
+  color: #8a3b00;
+  font: 11.5px/1.4 var(--f-body);
+}
+.la-prev {
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 14px;
+  background: #e9ecef;
+}
+.la-prev svg {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(20, 48, 79, 0.22);
+}
 /* Revisión del diseño */
 .rev-box {
   display: flex;

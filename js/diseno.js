@@ -1353,12 +1353,14 @@ function dsPintar(g) {
   g.setTransform(1, 0, 0, 1, 0, 0);
   for (const el of D.els) {
     if (!dsVis(el)) continue;
+    // Capa del elemento para la lámina y el DXF (el lienzo de grabación la anota)
+    g.capa = el.capa;
     // Color propio del elemento o, si no tiene, el de su capa
     const cap = dsCapaDe(el),
       col = plColorDis(dsColorEl(el, cap));
     if (el.t === "sim") {
       const [X, Y] = plAPant(el.x, el.y);
-      if (X < -40 * u || X > W + 40 * u || Y < -40 * u || Y > H + 40 * u) continue;
+      if (!DS_EXPORT && (X < -40 * u || X > W + 40 * u || Y < -40 * u || Y > H + 40 * u)) continue;
       if (u * 17 < 2.5) {
         g.fillStyle = col;
         g.fillRect(X - 1, Y - 1, 2, 2);
@@ -1366,6 +1368,7 @@ function dsPintar(g) {
       }
       dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, u, col, PL_FONDO, dsGrosor(cap), el.dt);
       if (el.enc) dsDibEnc(g, el, col, s);
+      if (D.nsal && el.cir && el.k !== "tab") dsDibNum(g, el, col, s);
       if (el.k === "tab") dsDibSalidas(g, el, col, u, dsGrosor(cap));
     } else if (el.t === "txt") {
       const hp = el.ht * s;
@@ -1561,6 +1564,20 @@ function dsDibEnc(g, el, col, s) {
   g.strokeText(el.enc, X, Y + hp * 0.2);
   g.fillStyle = col;
   g.fillText(el.enc, X, Y + hp * 0.2);
+  g.restore();
+}
+// Circuito del artefacto (C-1, C-2…) abajo a la derecha, pequeño y derecho (Dibujo › Circuito en las salidas)
+function dsDibNum(g, el, col, s) {
+  const hp = dsMm(1.8) * s;
+  if (hp < 4) return;
+  const b = dsBBox(el),
+    [X, Y] = plAPant(b[2], b[1]);
+  g.save();
+  g.font = `600 ${hp / 0.72}px Arial, sans-serif`;
+  g.textAlign = "left";
+  g.textBaseline = "top";
+  g.fillStyle = col;
+  g.fillText(el.cir, X + hp * 0.2, Y + hp * 0.1);
   g.restore();
 }
 // Grupos con letra de encendido
@@ -3080,6 +3097,8 @@ function dsCinta() {
   $("dsMarcas").checked = DSU.marcas;
   $("dsMarcaEst").value = DSU.marcaEst === "recta" ? "recta" : "incl";
   $("dsCirT").checked = !!(D && D.cirt);
+  $("dsNSal").checked = !!(D && D.nsal);
+  $("dsNSal").disabled = sin;
   $("dsCirT").disabled = sin;
   $("edPolar").value = String(DSU.polarInc);
   $("dsSueltos").checked = DSU.sueltos;
@@ -3153,6 +3172,12 @@ $("dsMarcaEst").addEventListener("change", e => {
   e.target.blur();
   dsGuardarPref();
   plDibujar();
+});
+$("dsNSal").addEventListener("change", e => {
+  if (!dsD()) return;
+  if (e.target.checked) dsD().nsal = true;
+  else delete dsD().nsal;
+  edCambio();
 });
 $("dsCirT").addEventListener("change", e => {
   if (!dsD()) return;
