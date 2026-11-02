@@ -719,6 +719,7 @@ function plPintar() {
 /* ---------- Lienzo superior: selección, enganche, mediciones, encuadres y plantas ---------- */
 const plFm = v => fmt(v * (EPL ? EPL.f : 1), 2);
 function plSobreDibujar() {
+  edAngPoner();
   const g = plSobre.getContext("2d"),
     d = plDpr();
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -1545,7 +1546,7 @@ plLienzo.addEventListener(
   { passive: false }
 );
 plLienzo.addEventListener("pointerdown", e => {
-  if (!PL_MOD || e.target.closest(".pl-cmd, .pl-nav")) return;
+  if (!PL_MOD || e.target.closest(".pl-cmd, .pl-nav, .ed-ang")) return;
   $("edRefs").hidden = true;
   const [X, Y] = plMouse(e);
   if (e.button === 1 || (e.button === 0 && (PL_ESPACIO || PLH.h === "mano"))) {
@@ -1653,9 +1654,8 @@ plLienzo.addEventListener("pointerup", e => {
     PLH.agarre = null;
     PLH.eng = null;
     if (ag.mov) dsAgarreSoltar(ag, eng);
-    // Un clic (sin arrastrar) en el punto de giro: escribir el ángulo exacto
-    if (!ag.mov && ag.t === "giro") return edAnguloExacto(ag.id);
-    if (ag.t === "giro") plOrden();
+    // Un clic (sin arrastrar) en el punto de giro: escribir el ángulo ahí mismo
+    if (!ag.mov && ag.t === "giro") return edAngEditar();
     return ag.mov ? edCambio() : plSobreDibujar();
   }
   if (PLH.arr) return dsSoltar();
@@ -2553,6 +2553,66 @@ function edAnguloExacto(id) {
     toast(`Girado a ${+el.r.toFixed(2)}°`);
   });
 }
+/* Ángulo del símbolo (o texto) elegido, junto a su punto de giro: se ve mientras está elegido y mientras se gira;
+   un clic lo convierte en un campo para escribir el ángulo exacto (Intro aplica, Esc cancela) */
+function edAngSel() {
+  if (PLH.h || DS_SEL.size !== 1 || !dsD()) return null;
+  const el = dsSel()[0];
+  return el && (el.t === "sim" || el.t === "txt") && dsEditable(el) ? el : null;
+}
+function edAngPoner() {
+  const c = $("edAng"),
+    el = edAngSel();
+  if (!el) {
+    c.hidden = true;
+    $("edAngI").hidden = true;
+    $("edAngB").hidden = false;
+    return;
+  }
+  const [gx, gy] = dsPosGiro(el),
+    [X, Y] = plAPant(gx, gy),
+    k = plLienzo.clientWidth / plBase.width;
+  c.hidden = false;
+  c.style.left = X * k + "px";
+  c.style.top = Y * k + "px";
+  c.dataset.id = el.id;
+  if ($("edAngI").hidden) $("edAngB").textContent = `${+(el.r || 0).toFixed(1)}°`;
+}
+function edAngEditar() {
+  const el = edAngSel();
+  if (!el) return;
+  const i = $("edAngI");
+  $("edAngB").hidden = true;
+  i.hidden = false;
+  i.value = String(+(el.r || 0).toFixed(2));
+  i.focus();
+  i.select();
+}
+function edAngFin(aplicar) {
+  const i = $("edAngI");
+  if (i.hidden) return;
+  const el = dsD() && dsD().els.find(e => e.id === $("edAng").dataset.id),
+    g = parseFloat(i.value.replace(",", "."));
+  i.hidden = true;
+  $("edAngB").hidden = false;
+  i.blur();
+  if (aplicar && el && Number.isFinite(g)) {
+    el.r = Math.round((((g % 360) + 360) % 360) * 100) / 100;
+    edCambio();
+  }
+  // Al instante (el dibujo del plano puede esperar al próximo cuadro de la pantalla)
+  edAngPoner();
+}
+$("edAngB").addEventListener("click", edAngEditar);
+$("edAngI").addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === "Escape") {
+    e.preventDefault();
+    edAngFin(e.key === "Enter");
+  }
+  e.stopPropagation();
+});
+$("edAngI").addEventListener("blur", () => edAngFin(true));
+["pointerdown", "wheel"].forEach(t => $("edAng").addEventListener(t, e => e.stopPropagation()));
 // Nombre de un elemento del diseño para el título del menú
 const dsNomEl = el =>
   el.t === "sim"

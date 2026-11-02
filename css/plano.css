@@ -93,6 +93,32 @@
   pointer-events: none;
 }
 /* Línea de indicaciones, como la línea de comandos de los programas de dibujo */
+/* Ángulo del símbolo elegido, junto a su punto de giro: clic para escribirlo */
+.ed-ang {
+  position: absolute;
+  z-index: 3;
+  transform: translate(10px, -50%);
+}
+.ed-ang button,
+.ed-ang input {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, #1f6fd6 45%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ws-pane, #fff) 80%, transparent);
+  color: #1f6fd6;
+  font: 600 11px var(--f-mono);
+  cursor: text;
+}
+.ed-ang button:hover {
+  border-color: #1f6fd6;
+  background: var(--ws-pane, #fff);
+}
+.ed-ang input {
+  width: 64px;
+  outline: none;
+  border-color: #1f6fd6;
+  background: var(--ws-pane, #fff);
+}
 /* Barra de navegación sobre el plano: mano, acercar, alejar, zoom ventana, ajustar, vista anterior */
 .pl-nav {
   position: absolute;

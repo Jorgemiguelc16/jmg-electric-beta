@@ -2099,10 +2099,13 @@ function dsAgarreMover1(ag, q) {
     let a = (Math.atan2(q[1] - el.y, q[0] - el.x) * 180) / Math.PI - (el.t === "sim" ? 90 : 0);
     const paso = PLH.libre ? (DSU.giro ? 0 : 15) : DSU.giro;
     if (paso) a = Math.round(a / paso) * paso;
+    else if (DSU.polar && !PLH.libre) {
+      // Imán: cerca (a menos de 4°) de un múltiplo del ángulo de enganche, se pega a él
+      const inc = DSU.polarInc || 15,
+        ak = Math.round(a / inc) * inc;
+      if (Math.abs(a - ak) < 4) a = ak;
+    }
     el.r = Math.round((((a % 360) + 360) % 360) * 100) / 100;
-    plOrden(
-      `<b>Giro ${+el.r.toFixed(1)}°</b>${paso ? ` · de ${paso}° en ${paso}°` : " · libre"} · suelte para dejarlo · un clic en el punto redondo (sin arrastrar) para escribir el ángulo`
-    );
   } else if (ag.t === "letra") {
     // Corrimiento de la letra en unidades del símbolo: el punto q llevado a las coordenadas del símbolo
     const p = dsPrims(el.k).find(x => dsEsLetra(el.k, x)),

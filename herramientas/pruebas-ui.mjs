@@ -1567,23 +1567,34 @@ prueba(
   }
 );
 
-prueba("Editor de diseño: ángulo exacto con un clic en el punto de giro", async ok => {
+prueba("Editor de diseño: ángulo junto al punto de giro (clic para escribirlo) e imán del giro", async ok => {
   await ejemplo("uni");
   await abrirPlano();
   await ev(
-    `dsAgregar({ t: 'sim', k: 'toma', x: ${OX} + 5, y: ${OY} + 4, r: 0, capa: 'E-TOMACORRIENTES' }); edCambio(); 1`
+    `dsAgregar({ t: "sim", k: "toma", x: ${OX} + 5, y: ${OY} + 4, r: 0, capa: "E-TOMACORRIENTES" }); edCambio(); 1`
   );
   const t = await J("dsD().els.find(e => e.k === 'toma')");
   await clicPlano(t.x, t.y, 0);
-  const g = await J(`dsAgarres(dsD().els.find(e => e.k === 'toma')).find(a => a.t === 'giro')`);
-  await clicPlano(g.x, g.y, 0);
-  ok(
-    await ev("!$('plCmdIn').hidden && $('plCmdL').textContent === 'Ángulo de giro (°)'"),
-    "clic en el punto de giro: pide el ángulo"
+  ok((await ev("!$('edAng').hidden && $('edAngB').textContent")) === "0°", "el ángulo aparece junto al punto de giro");
+  await clic("#edAngB");
+  ok(await ev("!$('edAngI').hidden"), "clic en el ángulo: se puede escribir");
+  await ev(
+    "edAngEditar(); $('edAngI').value = '45'; $('edAngI').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 1"
   );
-  await poner("#plCmdV", "45");
-  await clic("#plCmdOk");
-  ok((await ev("dsD().els.find(e => e.k === 'toma').r")) === 45, "girado a 45° exactos");
+  ok(
+    (await ev("dsD().els.find(e => e.k === 'toma').r")) === 45 && (await ev("$('edAngB').textContent")) === "45°",
+    "girado a 45° exactos"
+  );
+  // Imán: con giro libre y enganche cada 15°, cerca de 59° queda en 60°
+  await ev("DSU.giro = 0; DSU.polar = true; DSU.polarInc = 15; 1");
+  const el = await J("dsD().els.find(e => e.k === 'toma')"),
+    a = ((59 + 90) * Math.PI) / 180,
+    g = await J(`dsAgarres(dsD().els.find(e => e.k === "toma")).find(a => a.t === "giro")`);
+  await arrastrarPlano([g.x, g.y], [el.x + 0.6 * Math.cos(a), el.y + 0.6 * Math.sin(a)]);
+  ok(
+    (await ev("dsD().els.find(e => e.k === 'toma').r")) === 60,
+    `imán: cerca de 59° queda en 60° (${await ev("dsD().els.find(e => e.k === 'toma').r")}°)`
+  );
   await clic('[data-ed="aceptar"]');
 });
 
