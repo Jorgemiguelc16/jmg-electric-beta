@@ -1791,8 +1791,8 @@ function dsVentanaCond(el) {
 }
 // Transportador: círculo con rayitas cada «paso» grados, la del ángulo actual resaltada, y el arco desde 0° hasta él
 // (rastreo polar y giro de símbolos). libre: el ángulo no está enganchado a una rayita
-function dsTransportador(g, X, Y, ang, paso, col, d, libre) {
-  const R = 34 * d,
+function dsTransportador(g, X, Y, ang, paso, col, d, libre, radio = 34) {
+  const R = radio * d,
     p = Math.max(1, paso || 15),
     // Con pasos muy finos, las rayitas cada 15° (si no, no se distinguen)
     pr = p < 5 ? 15 : p;
@@ -2442,17 +2442,41 @@ function dsSobre(g) {
         // El ángulo del símbolo (el mismo de la etiqueta)
         a = ((el.r || 0) * Math.PI) / 180,
         gv = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
-      dsTransportador(g, X, Y, a, paso || 15, gv, d, !paso);
+      // Transportador grande (más que el símbolo), referencia en 0° y la línea del ángulo exacto
+      const Rg = Math.max(70, (dsUk(el.k) * PLV.s * 22) / d),
+        L = (Rg + 40) * d;
+      dsTransportador(g, X, Y, a, paso || 15, gv, d, !paso, Rg);
       g.save();
-      g.globalAlpha = 0.75;
+      g.strokeStyle = gv;
+      g.fillStyle = gv;
+      g.globalAlpha = 0.5;
+      g.lineWidth = 1 * d;
+      g.setLineDash([5 * d, 4 * d]);
+      g.beginPath();
+      g.moveTo(X, Y);
+      g.lineTo(X + L, Y);
+      g.stroke();
+      g.setLineDash([]);
+      g.globalAlpha = 0.95;
+      g.lineWidth = 2 * d;
+      g.beginPath();
+      g.moveTo(X, Y);
+      g.lineTo(X + L * Math.cos(a), Y - L * Math.sin(a));
+      g.stroke();
+      g.beginPath();
+      g.arc(X + L * Math.cos(a), Y - L * Math.sin(a), 3.5 * d, 0, 2 * Math.PI);
+      g.fill();
+      g.restore();
+      g.save();
+      g.globalAlpha = 0.85;
       g.font = `600 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
       plEtiqueta(
         g,
         `${+(el.r || 0).toFixed(1)}°${paso ? ` · de ${paso}° en ${paso}°` : " · libre"}`,
-        X + 48 * d,
-        Y - 10 * d,
+        X + (L + 8 * d) * Math.cos(a),
+        Y - (L + 8 * d) * Math.sin(a),
         gv,
-        "left",
+        Math.cos(a) < -0.3 ? "right" : "left",
         "bottom"
       );
       g.restore();

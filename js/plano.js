@@ -916,7 +916,7 @@ function plEtiqueta(g, t, X, Y, col, ha, va) {
   const d = plDpr(),
     w = g.measureText(t).width + 10 * d,
     h = 18 * d,
-    x = ha === "center" ? X - w / 2 : X,
+    x = ha === "center" ? X - w / 2 : ha === "right" ? X - w : X,
     y = va === "bottom" ? Y - h : Y;
   g.fillStyle = PL_OSCURO ? "rgba(17,25,34,.92)" : "rgba(255,255,255,.92)";
   g.fillRect(x, y, w, h);
