@@ -2100,6 +2100,9 @@ function dsAgarreMover1(ag, q) {
     const paso = PLH.libre ? (DSU.giro ? 0 : 15) : DSU.giro;
     if (paso) a = Math.round(a / paso) * paso;
     el.r = Math.round((((a % 360) + 360) % 360) * 100) / 100;
+    plOrden(
+      `<b>Giro ${+el.r.toFixed(1)}°</b>${paso ? ` · de ${paso}° en ${paso}°` : " · libre"} · suelte para dejarlo · un clic en el punto redondo (sin arrastrar) para escribir el ángulo`
+    );
   } else if (ag.t === "letra") {
     // Corrimiento de la letra en unidades del símbolo: el punto q llevado a las coordenadas del símbolo
     const p = dsPrims(el.k).find(x => dsEsLetra(el.k, x)),
@@ -2431,56 +2434,6 @@ function dsSobre(g) {
       "top"
     );
     g.restore();
-  }
-  // Girar un símbolo con su pinzamiento: transportador alrededor del símbolo con el ángulo exacto
-  const ag = PLH.agarre;
-  if (ag && ag.t === "giro" && ag.mov) {
-    const el = dsD().els.find(e => e.id === ag.id);
-    if (el) {
-      const [X, Y] = plAPant(el.x, el.y),
-        paso = PLH.libre ? (DSU.giro ? 0 : 15) : DSU.giro,
-        // El ángulo del símbolo (el mismo de la etiqueta)
-        a = ((el.r || 0) * Math.PI) / 180,
-        gv = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
-      // Transportador grande (más que el símbolo), referencia en 0° y la línea del ángulo exacto
-      const Rg = Math.max(70, (dsUk(el.k) * PLV.s * 22) / d),
-        L = (Rg + 40) * d;
-      dsTransportador(g, X, Y, a, paso || 15, gv, d, !paso, Rg);
-      g.save();
-      g.strokeStyle = gv;
-      g.fillStyle = gv;
-      g.globalAlpha = 0.5;
-      g.lineWidth = 1 * d;
-      g.setLineDash([5 * d, 4 * d]);
-      g.beginPath();
-      g.moveTo(X, Y);
-      g.lineTo(X + L, Y);
-      g.stroke();
-      g.setLineDash([]);
-      g.globalAlpha = 0.95;
-      g.lineWidth = 2 * d;
-      g.beginPath();
-      g.moveTo(X, Y);
-      g.lineTo(X + L * Math.cos(a), Y - L * Math.sin(a));
-      g.stroke();
-      g.beginPath();
-      g.arc(X + L * Math.cos(a), Y - L * Math.sin(a), 3.5 * d, 0, 2 * Math.PI);
-      g.fill();
-      g.restore();
-      g.save();
-      g.globalAlpha = 0.85;
-      g.font = `600 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
-      plEtiqueta(
-        g,
-        `${+(el.r || 0).toFixed(1)}°${paso ? ` · de ${paso}° en ${paso}°` : " · libre"}`,
-        X + (L + 8 * d) * Math.cos(a),
-        Y - (L + 8 * d) * Math.sin(a),
-        gv,
-        Math.cos(a) < -0.3 ? "right" : "left",
-        "bottom"
-      );
-      g.restore();
-    }
   }
   // Marco de selección: de izquierda a derecha, ventana (lo que queda dentro); al revés, captura (lo que toca)
   const mc = PLH.marco;

@@ -1567,6 +1567,26 @@ prueba(
   }
 );
 
+prueba("Editor de diseño: ángulo exacto con un clic en el punto de giro", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  await ev(
+    `dsAgregar({ t: 'sim', k: 'toma', x: ${OX} + 5, y: ${OY} + 4, r: 0, capa: 'E-TOMACORRIENTES' }); edCambio(); 1`
+  );
+  const t = await J("dsD().els.find(e => e.k === 'toma')");
+  await clicPlano(t.x, t.y, 0);
+  const g = await J(`dsAgarres(dsD().els.find(e => e.k === 'toma')).find(a => a.t === 'giro')`);
+  await clicPlano(g.x, g.y, 0);
+  ok(
+    await ev("!$('plCmdIn').hidden && $('plCmdL').textContent === 'Ángulo de giro (°)'"),
+    "clic en el punto de giro: pide el ángulo"
+  );
+  await poner("#plCmdV", "45");
+  await clic("#plCmdOk");
+  ok((await ev("dsD().els.find(e => e.k === 'toma').r")) === 45, "girado a 45° exactos");
+  await clic('[data-ed="aceptar"]');
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

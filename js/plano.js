@@ -1653,6 +1653,9 @@ plLienzo.addEventListener("pointerup", e => {
     PLH.agarre = null;
     PLH.eng = null;
     if (ag.mov) dsAgarreSoltar(ag, eng);
+    // Un clic (sin arrastrar) en el punto de giro: escribir el ángulo exacto
+    if (!ag.mov && ag.t === "giro") return edAnguloExacto(ag.id);
+    if (ag.t === "giro") plOrden();
     return ag.mov ? edCambio() : plSobreDibujar();
   }
   if (PLH.arr) return dsSoltar();
@@ -2447,6 +2450,8 @@ function edMenuAbrir(e) {
     b("g-90", "Girar 90° a la derecha");
     b("g180", "Girar 180°");
     b("gang", "Girar un ángulo…");
+    if (sel.length === 1 && (sel[0].t === "sim" || sel[0].t === "txt"))
+      b("gexacto", `Ángulo exacto… (ahora ${+(sel[0].r || 0).toFixed(1)}°)`);
     sep();
     if (sel.some(dsConEnc)) b("enc", "Letra de encendido (a, b, c…)…");
     if (sel.some(el => el.dt)) b("letra0", "Letra a su lugar");
@@ -2531,6 +2536,23 @@ function edMenuLista(p, html, fn, fnCambio) {
   edMenuPos(r.left + (X * r.width) / plBase.width + 8, r.top + (Y * r.height) / plBase.height + 8);
   ED_MENU.fn = fn;
 }
+// Ángulo exacto de un símbolo o texto: se escribe en la línea de comandos (0° a 360°, antihorario)
+function edAnguloExacto(id) {
+  const el = dsD() && dsD().els.find(e => e.id === id);
+  if (!el || (el.t !== "sim" && el.t !== "txt")) return;
+  plOrden(
+    '<b>Ángulo exacto</b> · escriba el ángulo y pulse Intro (positivo: antihorario) · <span class="pl-k">Esc</span> cancela'
+  );
+  plPedir("Ángulo de giro (°)", String(+(el.r || 0).toFixed(2)), v => {
+    const g = parseFloat(String(v).replace(",", "."));
+    plPedir(null);
+    plOrden();
+    if (!Number.isFinite(g)) return toast("Escriba el ángulo en grados, por ejemplo 45");
+    el.r = Math.round((((g % 360) + 360) % 360) * 100) / 100;
+    edCambio();
+    toast(`Girado a ${+el.r.toFixed(2)}°`);
+  });
+}
 // Nombre de un elemento del diseño para el título del menú
 const dsNomEl = el =>
   el.t === "sim"
@@ -2565,6 +2587,7 @@ function edMenuAccion(a) {
   if (a === "girar") return dsGirar();
   if (a === "g-90") return dsGirar(-90);
   if (a === "g180") return dsGirar(180);
+  if (a === "gexacto") return edAnguloExacto(sel[0].id);
   if (a === "gang")
     return plPedir("Ángulo de giro (°, positivo: antihorario)", "45", v => {
       const g = parseFloat(String(v).replace(",", "."));
