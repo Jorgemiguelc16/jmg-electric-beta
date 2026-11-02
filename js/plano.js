@@ -358,6 +358,7 @@ function plPreparar() {
 function plMarcoArq(xa, ya, xb, yb, captura, suma) {
   if (!PL_MOD) return;
   if (!suma) PL_ASEL.clear();
+  if (EPL.tenue) return;
   const oc = new Set(EPL.ocultas),
     caja = new Map(),
     toca = new Set();
@@ -1271,7 +1272,7 @@ function plTerminarRecorrido() {
 }
 // Seleccionar: un clic en una línea la elige y muestra sus propiedades; en un lugar vacío, la suelta
 function plSeleccionar(p, suma) {
-  PLH.obj = plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+  PLH.obj = EPL.tenue ? -1 : plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
   if (!suma) PL_ASEL.clear();
   if (PLH.obj >= 0) {
     const n = PL_MOD.trazos[PLH.obj].e;
@@ -1499,7 +1500,7 @@ plLienzo.addEventListener("pointermove", e => {
   const ag = DS_SEL.size ? dsAgarreEn(X, Y) : null,
     r = (6 * plDpr()) / PLV.s,
     id = ag ? null : dsD() ? dsHit(p[0], p[1], r) : null,
-    i = id || ag ? -1 : plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+    i = id || ag || EPL.tenue ? -1 : plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
   plLienzo.classList.toggle("sobre-dis", !!id);
   plLienzo.classList.toggle("sobre-ag", !!ag);
   const agk = ag ? `${ag.id}|${ag.t}|${ag.i}` : "",
@@ -1696,10 +1697,32 @@ new ResizeObserver(() => {
     if (t === "drop") plAbrir(e.dataTransfer.files[0]);
   })
 );
-// Ventanita de enganches de la barra de estado: se abre con ▾ y se cierra al hacer clic fuera
+// Ventanita de enganches: se abre con ▾ (barra de estado), con Puntos de enganche (cinta Medir) o con clic derecho
+// en ENGANCHE, junto al botón; se cierra al hacer clic fuera
+function edRefsAbrir(b, abrir = true) {
+  const v = $("edRefs");
+  v.hidden = !abrir;
+  if (!abrir) return;
+  const ed = $("editor").getBoundingClientRect(),
+    r = b.getBoundingClientRect(),
+    S = parseFloat(getComputedStyle($("ws")).zoom) || 1;
+  if (b.closest(".ed-estado")) Object.assign(v.style, { top: "", left: "", right: "", bottom: "" });
+  else
+    Object.assign(v.style, {
+      top: (r.bottom - ed.top) / S + 4 + "px",
+      left: Math.max(4, (r.left - ed.left) / S) + "px",
+      right: "auto",
+      bottom: "auto"
+    });
+}
+document.querySelector('#editor [data-edtg="plSnap"]').addEventListener("contextmenu", e => {
+  e.preventDefault();
+  edRefsAbrir(e.currentTarget);
+});
 $("editor").addEventListener("click", e => {
-  if (e.target.closest("[data-edrefs]")) {
-    $("edRefs").hidden = !$("edRefs").hidden;
+  const br = e.target.closest("[data-edrefs]");
+  if (br) {
+    edRefsAbrir(br, $("edRefs").hidden);
     return;
   }
   if (!e.target.closest("#edRefs")) $("edRefs").hidden = true;
@@ -1801,6 +1824,228 @@ function plMostrar() {
     plDibujar();
   }
 }
+/* ---------- Menú del clic derecho sobre el plano ----------
+   Sobre un elemento del diseño lo elige (si no estaba elegido) y muestra lo que se puede hacer con lo elegido;
+   sobre la arquitectura, borrar, ocultar o aislar su capa; en un lugar vacío, pegar, seleccionar todo y la vista.
+   Con una herramienta en curso: terminar o cancelar. */
+const ED_MENU = $("edMenu");
+function edMenuAbrir(e) {
+  const [X, Y] = plMouse(e),
+    p = plADib(X, Y),
+    D = dsD();
+  if (!PLH.h && D) {
+    const id = dsHit(p[0], p[1], (6 * plDpr()) / PLV.s);
+    if (id && !DS_SEL.has(id)) {
+      DS_SEL.clear();
+      PL_ASEL.clear();
+      DS_SEL.add(id);
+    } else if (!id && !DS_SEL.size && !EPL.tenue) {
+      // Sobre la arquitectura: si el objeto ya estaba elegido se conserva la selección; si no, se elige solo
+      const i = plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+      if (i < 0 || !PL_ASEL.has(PL_MOD.trazos[i].e)) plSeleccionar(p, false);
+    }
+    edProps();
+    plSobreDibujar();
+  }
+  const sel = D ? dsSel().filter(dsEditable) : [],
+    na = PL_ASEL.size,
+    it = [];
+  const b = (a, t, k, on = true) =>
+      it.push(
+        `<button type="button" data-edm="${a}" role="menuitem"${on ? "" : " disabled"}><span>${t}</span>${k ? `<kbd>${k}</kbd>` : ""}</button>`
+      ),
+    sep = () => it.length && !/<hr>$/.test(it[it.length - 1]) && it.push("<hr>"),
+    tit = t => it.push(`<div class="ed-mt">${t}</div>`);
+  if (PLH.h) {
+    b("terminar", "Terminar", "Intro", PLH.pts.length > 1 || PLH.h === "rec");
+    b("cancelar", "Cancelar la herramienta", "Esc");
+    if (PLH.h.startsWith("col:")) b("girar", `Girar ${DSU.giro || 90}° a la izquierda`, "R");
+  } else if (sel.length) {
+    tit(sel.length > 1 ? `${sel.length} elementos del diseño` : dsNomEl(sel[0]));
+    b("copiar", "Copiar", "Ctrl+C");
+    b("cortar", "Cortar", "Ctrl+X");
+    b("pegar", "Pegar", "Ctrl+V", DS_PORTA.length > 0);
+    b("duplicar", "Duplicar");
+    b("borrar", "Borrar", "Supr");
+    sep();
+    b("girar", `Girar ${DSU.giro || 90}° a la izquierda`, "R");
+    b("g-90", "Girar 90° a la derecha");
+    b("g180", "Girar 180°");
+    b("gang", "Girar un ángulo…");
+    sep();
+    if (sel.some(el => el.dt)) b("letra0", "Letra a su lugar");
+    if (sel.some(el => el.col)) b("colcapa", "Quitar el color propio");
+    b(
+      "acapa",
+      `Pasar a la capa actual (${esc(D.actual)})`,
+      "",
+      sel.some(el => el.capa !== D.actual)
+    );
+    b("similares", "Seleccionar todos los de este tipo");
+    b("encuadrar", "Acercar a lo elegido");
+    if (sel.length === 1 && sel[0].k === "tab") b("tablero", "Circuitos del tablero…");
+    if (edProps.oculto) b("props", "Mostrar propiedades");
+    if (na) {
+      sep();
+      b("borrarArq", `Borrar también ${na} objeto${na > 1 ? "s" : ""} de la arquitectura`);
+    }
+  } else if (na) {
+    const t = PLH.obj >= 0 ? PL_MOD.trazos[PLH.obj] : null;
+    tit(`Arquitectura · ${na} objeto${na > 1 ? "s" : ""}`);
+    b("borrar", "Borrar (se oculta; el DXF no cambia)", "Supr");
+    if (t) {
+      b("ocultar", `Ocultar la capa ${esc(t.capa)}`);
+      b("aislar", `Aislar la capa ${esc(t.capa)}`);
+    }
+    b("soltar", "Soltar la selección", "Esc");
+  } else {
+    b("pegar", "Pegar", "Ctrl+V", DS_PORTA.length > 0);
+    b("todo", "Seleccionar todo el diseño", "Ctrl+A", !!(D && D.els.length));
+    b("biblio", "Biblioteca de símbolos…", "B");
+    sep();
+    b("ajustar", "Ajustar a la pantalla");
+    if (EPL.ocultas.length) b("mostrar", "Mostrar todas las capas");
+    if (PL_BORR.size)
+      b(
+        "restaurar",
+        `Restaurar ${PL_BORR.size} objeto${PL_BORR.size > 1 ? "s" : ""} borrado${PL_BORR.size > 1 ? "s" : ""}`
+      );
+  }
+  ED_MENU.innerHTML = it.join("");
+  ED_MENU.hidden = false;
+  // Junto al cursor y dentro del editor (la escala del espacio de trabajo cambia el tamaño en pantalla)
+  const ed = $("editor").getBoundingClientRect(),
+    S = parseFloat(getComputedStyle($("ws")).zoom) || 1,
+    w = ED_MENU.offsetWidth,
+    h = ED_MENU.offsetHeight,
+    x = (e.clientX - ed.left) / S,
+    y = (e.clientY - ed.top) / S;
+  ED_MENU.style.left = Math.max(2, Math.min(x, ed.width / S - w - 4)) + "px";
+  ED_MENU.style.top = Math.max(2, y + h > ed.height / S - 4 ? y - h : y) + "px";
+}
+const edMenuCerrar = () => (ED_MENU.hidden = true);
+// Nombre de un elemento del diseño para el título del menú
+const dsNomEl = el =>
+  el.t === "sim"
+    ? esc(DS_CAT[el.k] ? DS_CAT[el.k].n : el.k)
+    : { tub: "Tubería", lin: "Línea", txt: "Texto", cir: "Círculo", cot: "Cota", dir: "Directriz" }[el.t] || "Elemento";
+function edMenuAccion(a) {
+  edMenuCerrar();
+  const sel = dsD() ? dsSel().filter(dsEditable) : [];
+  if (a === "terminar") return PLH.h === "rec" ? plTerminarRecorrido() : dsTerminar();
+  if (a === "cancelar" || a === "soltar") {
+    if (a === "cancelar") return plHerr(null);
+    PL_ASEL.clear();
+    PLH.obj = -1;
+    edProps();
+    return plSobreDibujar();
+  }
+  if (a === "copiar") return dsCopiar();
+  if (a === "cortar") return edBorrar(true);
+  if (a === "pegar") return dsPegar();
+  if (a === "duplicar") {
+    dsCopiar();
+    return dsPegar();
+  }
+  if (a === "borrar") return edBorrar(false);
+  if (a === "borrarArq") {
+    DS_SEL.clear();
+    return edBorrar(false);
+  }
+  if (a === "girar") return dsGirar();
+  if (a === "g-90") return dsGirar(-90);
+  if (a === "g180") return dsGirar(180);
+  if (a === "gang")
+    return plPedir("Ángulo de giro (°, positivo: antihorario)", "45", v => {
+      const g = parseFloat(String(v).replace(",", "."));
+      plPedir(null);
+      if (!Number.isFinite(g) || !g) return toast("Escriba un ángulo en grados, distinto de cero");
+      dsGirar(g);
+    });
+  if (a === "letra0" || a === "colcapa") {
+    sel.forEach(el => delete el[a === "colcapa" ? "col" : "dt"]);
+    return edCambio();
+  }
+  if (a === "acapa") {
+    sel.forEach(el => (el.capa = dsD().actual));
+    return edCambio();
+  }
+  if (a === "similares") return sel.length && dsSelTipo(dsTipo(sel[0]));
+  if (a === "encuadrar") {
+    const bb = sel.map(dsBBox),
+      x0 = Math.min(...bb.map(q => q[0])),
+      y0 = Math.min(...bb.map(q => q[1])),
+      x1 = Math.max(...bb.map(q => q[2])),
+      y1 = Math.max(...bb.map(q => q[3])),
+      m = Math.max(x1 - x0, y1 - y0, 1) * 0.4;
+    return plVer(x0 - m, y0 - m, x1 + m, y1 + m);
+  }
+  if (a === "tablero") return tabAbrir(sel[0].id);
+  if (a === "props") {
+    edProps.oculto = false;
+    edPanGuardar();
+    return plPanel();
+  }
+  if (a === "ocultar" || a === "aislar") {
+    const capa = PL_MOD.trazos[PLH.obj].capa;
+    EPL.ocultas =
+      a === "ocultar" ? [...new Set([...EPL.ocultas, capa])] : Object.keys(PL_MOD.capas).filter(n => n !== capa);
+    PL_ASEL.clear();
+    PLH.obj = -1;
+    plPreparar();
+    edCambio();
+    return toast(
+      a === "ocultar"
+        ? `Capa ${capa} oculta`
+        : `Solo se ve la capa ${capa}: «Mostrar todas las capas» con clic derecho en un lugar vacío`
+    );
+  }
+  if (a === "todo") return dsTodo();
+  if (a === "biblio") return bibAbrir();
+  if (a === "ajustar") return plAjustar();
+  if (a === "mostrar") {
+    EPL.ocultas = [];
+    plPreparar();
+    return edCambio();
+  }
+  if (a === "restaurar") {
+    delete EPL.borr;
+    plPreparar();
+    return edCambio();
+  }
+}
+plLienzo.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  if (!PL_MOD || !EPL || PLH.pan) return;
+  $("edRefs").hidden = true;
+  edMenuAbrir(e);
+});
+ED_MENU.addEventListener("click", e => {
+  const b = e.target.closest("[data-edm]");
+  if (b && !b.disabled) edMenuAccion(b.dataset.edm);
+});
+ED_MENU.addEventListener("contextmenu", e => e.preventDefault());
+// Se cierra al hacer clic fuera, con Esc, con la rueda o al salir del editor
+addEventListener(
+  "pointerdown",
+  e => {
+    if (!ED_MENU.hidden && !e.target.closest("#edMenu")) edMenuCerrar();
+  },
+  true
+);
+addEventListener(
+  "keydown",
+  e => {
+    if (!ED_MENU.hidden && e.key === "Escape") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      edMenuCerrar();
+    }
+  },
+  true
+);
+plLienzo.addEventListener("wheel", edMenuCerrar, { passive: true });
+
 /* Paneles del editor, como los del espacio de trabajo: el ancho se cambia arrastrando su borde (doble clic: el de
    siempre), se cierran con × (y se vuelven a abrir en Vista › Paneles) y se recuerdan en este navegador */
 const ED_PAN = { izq: { el: "plLado", w: null }, der: { el: "edProp", w: null } },
@@ -1986,6 +2231,11 @@ $("plVacioB").addEventListener("click", () => $("plArchivo").click());
 $("plTenue").addEventListener("change", e => {
   if (!EPL) return;
   EPL.tenue = e.target.checked;
+  // Atenuado: solo se trabaja el diseño eléctrico; se suelta lo elegido de la arquitectura
+  if (EPL.tenue) {
+    PL_ASEL.clear();
+    PLH.obj = -1;
+  }
   PL_COL.clear();
   edCambio();
 });

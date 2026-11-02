@@ -68,7 +68,7 @@ function capasRender() {
         `<td class="ca-c"><input type="checkbox" data-caf="vis"${oc.has(n) ? "" : " checked"} aria-label="Visible"></td>` +
         `<td class="ca-c" title="La arquitectura es una referencia: no se mueve"><input type="checkbox" checked disabled aria-label="Bloqueada"></td>` +
         `<td><i class="ca-sw" style="background:${plColor(c.col)}"></i></td><td class="ca-lt">${c.lt === "CONTINUOUS" ? "Continua" : esc(c.lt.toLowerCase())}</td>` +
-        `<td class="ca-lt">Fino</td><td class="ca-or">Arquitectura (DXF)</td><td class="ca-n">${c.n}</td></tr>`
+        `<td class="ca-lt">Fino</td><td class="ca-or"${c.on ? "" : ' title="Esta capa está apagada o congelada en el archivo DXF: el autor del plano la dejó oculta"'}>Arquitectura (DXF)${c.on ? "" : " · <b>apagada en el archivo</b>"}</td><td class="ca-n">${c.n}</td></tr>`
       );
     })
     .join("");

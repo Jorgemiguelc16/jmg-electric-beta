@@ -813,6 +813,9 @@
 }
 .ed-refs label {
   display: flex;
+  flex-direction: row;
+  font-size: 12px;
+  color: inherit;
   align-items: center;
   gap: 7px;
   padding: 2px 0;
@@ -874,6 +877,55 @@
 .ed-x:hover {
   background: var(--ws-hover, #dde4ec);
   color: var(--ws-text, #14304f);
+}
+/* Menú del clic derecho sobre el plano */
+.ed-menu {
+  position: absolute;
+  z-index: 8;
+  min-width: 210px;
+  padding: 4px 0;
+  background: var(--ws-pane, #fff);
+  color: var(--ws-text, #1f2a36);
+  border: 1px solid var(--ws-line, #d6dde6);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(20, 48, 79, 0.22);
+  font: 12px var(--f-body);
+}
+.ed-menu button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 5px 12px 5px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-menu button:hover:not(:disabled) {
+  background: var(--ws-sel, #dde9f6);
+}
+.ed-menu button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ed-menu kbd {
+  font: 10.5px var(--f-mono);
+  color: var(--ws-text2, #66737f);
+}
+.ed-menu hr {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--ws-line, #d6dde6);
+}
+.ed-menu .ed-mt {
+  padding: 4px 14px 3px;
+  font: 600 10px var(--f-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ws-text2, #66737f);
 }
 /* Color propio de un elemento del diseño */
 .ds-colr {

@@ -867,6 +867,56 @@ prueba(
   }
 );
 
+prueba("Editor de diseño: menú del clic derecho, paso de giro, color por tipo y plano atenuado", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  await ev(
+    `(() => { ['toma', 'toma1'].forEach((k, i) => dsAgregar({ t: 'sim', k, x: ${OX} + 2 + i * 1.5, y: ${OY} + 4, r: 0, capa: DS_SIS[DS_CAT[k].s].capa })); edCambio(); })()`
+  );
+  ok(
+    await ev("dsColorEl(dsD().els[0], dsCapaDe(dsD().els[0])) !== dsColorEl(dsD().els[1], dsCapaDe(dsD().els[1]))"),
+    "con color por tipo, dos tomacorrientes distintos tienen colores distintos"
+  );
+  // Clic derecho sobre el tomacorriente: lo elige y abre el menú
+  const [X, Y] = await J(
+    `(() => { const [X, Y] = plAPant(${OX + 2}, ${OY + 4}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+  );
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: X,
+    y: Y,
+    button: "right",
+    buttons: 2,
+    clickCount: 1
+  });
+  await cdp("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: X,
+    y: Y,
+    button: "right",
+    buttons: 0,
+    clickCount: 1
+  });
+  await esperar(80);
+  ok(await ev("!$('edMenu').hidden && DS_SEL.size === 1"), "el clic derecho elige el símbolo y abre el menú");
+  await clic('#edMenu [data-edm="g180"]');
+  ok((await ev("dsSel()[0].r")) === 180 && (await ev("$('edMenu').hidden")), "Girar 180° desde el menú");
+  // Paso de giro de 45°: la tecla R gira 45°
+  await poner("#dsGiro", "45");
+  await teclaE("r", "KeyR", 82);
+  ok((await ev("dsSel()[0].r")) === 225, "con paso de 45°, R gira 45°");
+  await poner("#dsGiro", "0");
+  // Plano atenuado: la arquitectura no se elige
+  await teclaE("Escape", "Escape", 27);
+  await clic("#plTenue");
+  await clicPlano(OX + 10, OY + 3, 0);
+  ok((await ev("PL_ASEL.size")) === 0 && (await ev("PLH.obj")) === -1, "con el plano atenuado, el muro no se elige");
+  await clic("#plTenue");
+  await clicPlano(OX + 10, OY + 3, 0);
+  ok((await ev("PL_ASEL.size")) === 1, "sin atenuar, sí se elige");
+  await clic('[data-ed="aceptar"]');
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

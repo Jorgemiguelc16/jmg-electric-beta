@@ -218,6 +218,30 @@ const DS_CAT = Object.fromEntries(
     }
   ])
 );
+// Color por tipo de símbolo (opción de la vista, criterio de la plataforma; la norma no fija colores): dentro de
+// cada grupo, un color distinto para cada tipo, en el orden del catálogo
+const DS_PAL = [
+  "#c62828",
+  "#ef6c00",
+  "#6a1b9a",
+  "#0277bd",
+  "#2e7d32",
+  "#00838f",
+  "#ad1457",
+  "#6d4c41",
+  "#9e9d24",
+  "#283593",
+  "#d84315",
+  "#00695c"
+];
+const DS_COLT = {};
+DS_GRUPOS.forEach(g =>
+  Object.keys(DS_CAT)
+    .filter(k => DS_CAT[k].g === g)
+    .forEach((k, i) => (DS_COLT[k] = DS_PAL[i % DS_PAL.length]))
+);
+// Color con que se dibuja un elemento: el suyo, el de su tipo (si está activado) o el de su capa
+const dsColorEl = (el, cap) => el.col || (DSU.colTipo && el.t === "sim" && DS_COLT[el.k]) || cap.col;
 const DS_LT = { cont: "Continua", trazos: "Trazos", punto: "Trazo y punto" };
 // Grosores de línea de las capas (mm); 0 es el fino de siempre (una línea normal, sin grosor), como en AutoCAD
 const DS_GROSORES = [0, 0.25, 0.35, 0.5, 0.7, 1];
@@ -299,7 +323,10 @@ const DSU = {
   ref: { fin: true, med: true, cen: true, ins: true, cer: true, per: true, int: true },
   sens: 12,
   alinear: true,
-  curva: true
+  curva: true,
+  // Cada tipo de símbolo con su color; paso del giro (0: libre)
+  colTipo: true,
+  giro: 0
 };
 try {
   const g = JSON.parse(localStorage.getItem("jmg-electric-editor-rejilla") || "{}");
@@ -847,7 +874,7 @@ function dsPintar(g) {
     if (!dsVis(el)) continue;
     // Color propio del elemento o, si no tiene, el de su capa
     const cap = dsCapaDe(el),
-      col = plColorDis(el.col || cap.col);
+      col = plColorDis(dsColorEl(el, cap));
     if (el.t === "sim") {
       const [X, Y] = plAPant(el.x, el.y);
       if (X < -40 * u || X > W + 40 * u || Y < -40 * u || Y > H + 40 * u) continue;
@@ -1106,7 +1133,8 @@ function dsAgarreMover(ag, q) {
   } else if (ag.t === "giro") {
     // El pinzamiento está arriba del símbolo (a 90° de su eje) o al final del texto (sobre su eje)
     let a = (Math.atan2(q[1] - el.y, q[0] - el.x) * 180) / Math.PI - (el.t === "sim" ? 90 : 0);
-    if (PLH.libre) a = Math.round(a / 15) * 15;
+    const paso = PLH.libre ? (DSU.giro ? 0 : 15) : DSU.giro;
+    if (paso) a = Math.round(a / paso) * paso;
     el.r = Math.round((((a % 360) + 360) % 360) * 100) / 100;
   } else if (ag.t === "letra") {
     // Corrimiento de la letra en unidades del símbolo: el punto q llevado a las coordenadas del símbolo
@@ -1171,23 +1199,26 @@ function dsSobre(g) {
     caliente = "#e5484d";
   D.els.forEach(el => {
     if (!DS_SEL.has(el.id) && el.id !== PLH.dsSobre) return;
+    // Resaltado suave: el contorno del propio elemento, como un halo, sin rectángulos (más tenue bajo el cursor)
     const sel = DS_SEL.has(el.id);
-    g.strokeStyle = selc;
-    g.globalAlpha = sel ? 1 : 0.55;
-    g.lineWidth = (sel ? 1.5 : 1.2) * d;
-    g.setLineDash([5 * d, 3 * d]);
-    if (el.t === "sim" || el.t === "txt") {
+    g.globalAlpha = sel ? 0.32 : 0.18;
+    if (el.t === "sim") {
+      const [X, Y] = plAPant(el.x, el.y);
+      dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, dsU() * PLV.s, selc, null, 5 * d, el.dt);
+    } else if (el.t === "txt") {
       const b = dsBBox(el),
         [a, c] = plAPant(b[0], b[3]),
-        [e, f] = plAPant(b[2], b[1]),
-        m = 3 * d;
-      g.strokeRect(a - m, c - m, e - a + 2 * m, f - c + 2 * m);
+        [e, f] = plAPant(b[2], b[1]);
+      g.fillStyle = selc;
+      g.fillRect(a - 2 * d, c - 2 * d, e - a + 4 * d, f - c + 4 * d);
     } else {
+      g.strokeStyle = selc;
+      g.lineWidth = 6 * d;
+      g.lineCap = g.lineJoin = "round";
       g.beginPath();
       dsLineas(el).forEach(p => plRuta(g, p, false));
       g.stroke();
     }
-    g.setLineDash([]);
     g.globalAlpha = 1;
     if (!sel || DS_SEL.size > 30) return;
     // Pinzamientos: cuadrados en vértices e inserción; rombos en el medio de los tramos (curvan) y en la cota
@@ -1202,6 +1233,7 @@ function dsSobre(g) {
         const [Xi, Yi] = plAPant(el.x, el.y);
         g.save();
         g.strokeStyle = selc;
+        g.globalAlpha = 0.5;
         g.setLineDash([3 * d, 2 * d]);
         g.beginPath();
         g.moveTo(Xi, Yi);
@@ -1262,7 +1294,7 @@ function dsSobre(g) {
       Y,
       (((al ? al.r : PLH.rot) || 0) * Math.PI) / 180,
       dsU() * PLV.s,
-      plColorDis(dsCapa(DS_SIS[DS_CAT[k].s].capa).col),
+      plColorDis(dsColorEl({ t: "sim", k }, dsCapa(DS_SIS[DS_CAT[k].s].capa))),
       PL_FONDO
     );
     g.globalAlpha = 1;
@@ -1608,9 +1640,9 @@ function dsMarco(mc) {
   edProps();
   plSobreDibujar();
 }
-function dsGirar() {
+function dsGirar(ang = DSU.giro || 90) {
   if (PLH.h && PLH.h.startsWith("col:")) {
-    PLH.rot = (PLH.rot + 90) % 360;
+    PLH.rot = (((PLH.rot + ang) % 360) + 360) % 360;
     return plSobreDibujar();
   }
   const sel = dsSel().filter(dsEditable);
@@ -1619,14 +1651,20 @@ function dsGirar() {
   const b = sel.map(dsBBox),
     cx = (Math.min(...b.map(x => x[0])) + Math.max(...b.map(x => x[2]))) / 2,
     cy = (Math.min(...b.map(x => x[1])) + Math.max(...b.map(x => x[3]))) / 2,
-    rot = (x, y) => [cx - (y - cy), cy + (x - cx)];
+    co = Math.cos((ang * Math.PI) / 180),
+    si = Math.sin((ang * Math.PI) / 180),
+    rot = (x, y) => [cx + (x - cx) * co - (y - cy) * si, cy + (x - cx) * si + (y - cy) * co],
+    recto = ang % 90 === 0,
+    cuarto = Math.abs(ang % 180) === 90;
   sel.forEach(el => {
-    if (el.t === "sim" || el.t === "txt") el.r = ((el.r || 0) + 90) % 360;
+    if (el.t === "sim" || el.t === "txt") el.r = Math.round((((((el.r || 0) + ang) % 360) + 360) % 360) * 100) / 100;
     else if (el.t === "cir") [el.x, el.y] = sel.length > 1 ? rot(el.x, el.y) : [el.x, el.y];
     else if (el.t === "cot") {
       el.a = rot(...el.a);
       el.b = rot(...el.b);
-      if (el.modo !== "alin") el.modo = el.modo === "h" ? "v" : "h";
+      // A 90° la cota horizontal pasa a vertical; a otros ángulos queda alineada con sus puntos
+      if (!recto) el.modo = "alin";
+      else if (cuarto && el.modo !== "alin") el.modo = el.modo === "h" ? "v" : "h";
     } else {
       const q = [];
       for (let i = 0; i < el.pts.length; i += 2) q.push(...rot(el.pts[i], el.pts[i + 1]));
@@ -1716,7 +1754,7 @@ function dsProps(c) {
         )
       )
       .join("")}</datalist>`,
-    acciones = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="girar">Girar 90°</button><button type="button" class="btn sec sm" data-dsa="copiar">Copiar</button><button type="button" class="btn sec sm ed-del" data-dsa="borrar">Borrar</button></div>`,
+    acciones = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="girar">Girar ${DSU.giro || 90}°</button><button type="button" class="btn sec sm" data-dsa="copiar">Copiar</button><button type="button" class="btn sec sm ed-del" data-dsa="borrar">Borrar</button></div>`,
     curvas = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="curvo" title="Todos los tramos en arco">Curvar</button><button type="button" class="btn sec sm" data-dsa="recto" title="Todos los tramos rectos">Enderezar</button><button type="button" class="btn sec sm" data-dsa="invertir" title="Los arcos al otro lado">Invertir curvas</button></div>`;
   if (sel.length > 1) {
     const cuenta = {};
@@ -1832,7 +1870,7 @@ function dsProps(c) {
       `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices.</p>` +
       curvas;
   }
-  const color = `<label class="ed-pf ed-pc"><span>Color</span><span class="ds-colr"><input type="color" data-dsp="col" value="${el.col || cap.col}" title="Color propio de este elemento"><button type="button" class="btn sec sm" data-dsa="colcapa"${el.col ? "" : " disabled"} title="Vuelve al color de su capa">Por capa</button></span></label>`,
+  const color = `<label class="ed-pf ed-pc"><span>Color</span><span class="ds-colr"><input type="color" data-dsp="col" value="${dsColorEl(el, cap)}" title="Color propio de este elemento"><button type="button" class="btn sec sm" data-dsa="colcapa"${el.col ? "" : " disabled"} title="Quita el color propio: vuelve al color de su tipo (si está activado en Vista) o al de su capa">Quitar color propio</button></span></label>`,
     letra = el.dt
       ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="letra0">Letra a su lugar</button></div>`
       : "";
@@ -1917,7 +1955,7 @@ function dsResumen() {
     ? orden
         .map(
           t =>
-            `<button type="button" class="ds-fila" data-dst="${t}" title="Seleccionar todos">${DS_CAT[t] ? dsIcono(t) : `<i class="ds-ico ds-lin${t === "tub-piso" ? " piso" : ""}"></i>`}<span>${dsNomTipo(t)}</span><em>${largo[t] ? plFm(largo[t]) + " m" : cuenta[t]}</em></button>`
+            `<button type="button" class="ds-fila" data-dst="${t}" title="Seleccionar todos">${DS_CAT[t] ? (DSU.colTipo ? dsIcono(t).replace('class="ds-ico"', `class="ds-ico" style="color:${plColorDis(DS_COLT[t])}"`) : dsIcono(t)) : `<i class="ds-ico ds-lin${t === "tub-piso" ? " piso" : ""}"></i>`}<span>${dsNomTipo(t)}</span><em>${largo[t] ? plFm(largo[t]) + " m" : cuenta[t]}</em></button>`
         )
         .join("")
     : `<p class="pl-nota">Coloque luminarias, interruptores, tomacorrientes, tableros y tuberías desde las pestañas <b>Insertar</b> y <b>Dibujo</b>. Aquí verá cuántos hay de cada uno y los metros de tubería.</p>`;
@@ -1947,6 +1985,8 @@ function dsCinta() {
   $("dsForz").checked = DSU.forz;
   $("dsPaso").value = String(DSU.paso);
   $("dsAlinear").checked = DSU.alinear;
+  $("dsGiro").value = String(DSU.giro || 0);
+  $("dsColTipo").checked = DSU.colTipo;
   $("dsTrazo").value = DSU.curva ? "curvo" : "recto";
   document.querySelectorAll("[data-edtg]").forEach(b => {
     const v = b.dataset.edtg;
@@ -1985,6 +2025,23 @@ $("dsForz").addEventListener("change", () => dsAlternarRejilla("forz"));
 $("dsPaso").addEventListener("change", e => {
   DSU.paso = DS_PASOS.includes(+e.target.value) ? +e.target.value : 0.5;
   dsGuardarPref();
+  plDibujar();
+});
+$("dsGiro").addEventListener("change", e => {
+  DSU.giro = [0, 1, 5, 15, 30, 45, 90].includes(+e.target.value) ? +e.target.value : 0;
+  // Suelta el foco: así la tecla R actúa enseguida sobre el plano
+  e.target.blur();
+  dsGuardarPref();
+  toast(
+    DSU.giro
+      ? `Giro de ${DSU.giro}° en ${DSU.giro}° (tecla R y pinzamiento redondo)`
+      : "Giro libre: el pinzamiento redondo gira a cualquier ángulo; R gira 90°"
+  );
+});
+$("dsColTipo").addEventListener("change", e => {
+  DSU.colTipo = e.target.checked;
+  dsGuardarPref();
+  dsResumen();
   plDibujar();
 });
 $("dsAlinear").addEventListener("change", e => {
