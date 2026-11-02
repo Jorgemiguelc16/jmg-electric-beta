@@ -2513,11 +2513,13 @@ function dsCotaNueva(q) {
 }
 
 /* ---------- Herramientas: colocar símbolos y dibujar ---------- */
-const dsEsHerr = h => !!h && (h.startsWith("col:") || !!DS_HERR[h] || h === "fila" || h === "espejo" || h === "blq");
+const dsEsHerr = h =>
+  !!h && (h.startsWith("col:") || !!DS_HERR[h] || ["fila", "espejo", "blq", "rep", "rmur"].includes(h));
 function dsOrden(h, n) {
   const libre = ` · <span class="pl-k">Mayús</span> sin enganche`;
   if (h === "fila")
     return `<b>Copiar en fila</b> (${PLH.copia ? PLH.copia.n : 0} copias) · ${n ? "Punto de la primera copia: la separación (escriba la distancia o haga clic)" : "Punto base"}${libre} · <span class="pl-k">Esc</span> salir`;
+  if (h === "rep" || h === "rmur") return dpOrdenRep(h, n);
   if (h === "blq")
     return `<b>Bloque «${esc(PLH.blq ? PLH.blq.n : "")}»</b> · clic para colocarlo (su centro va en el cursor) · puede colocar varios${libre} · <span class="pl-k">Esc</span> terminar`;
   if (h === "espejo")
@@ -2561,6 +2563,7 @@ function dsPunto(p) {
   const h = PLH.h;
   if (h === "fila" || h === "espejo") return dsPuntoCopia(p);
   if (h === "blq") return dpColocarBloque(p);
+  if (h === "rep" || h === "rmur") return dpPuntoRep(p);
   if (h === "ley" || h === "cua") {
     if (h === "cua" && !dsD().els.some(e => e.k === "tab" && e.nc)) {
       plHerr(null);
@@ -4276,6 +4279,10 @@ function bibElegir(k) {
   if (!DS_CAT[k]) return;
   biUsado(k);
   bibCerrar();
+  if (PLH.h === "rep" || PLH.h === "rmur") {
+    PLH.repK = k;
+    return plOrden();
+  }
   DS_SEL.clear();
   plHerr("col:" + k);
 }

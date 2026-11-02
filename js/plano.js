@@ -800,7 +800,7 @@ function plSobreDibujar() {
     g.fillRect(a, b, c - a, e - b);
     g.strokeStyle = azul;
     g.strokeRect(a, b, c - a, e - b);
-  } else if (pts.length && !["planta", "zventana", "lamzona"].includes(PLH.h)) {
+  } else if (pts.length && !["planta", "zventana", "lamzona", "rep", "rmur"].includes(PLH.h)) {
     const todo = PLH.med ? pts : q ? [...pts, q] : pts;
     g.strokeStyle = acento;
     g.lineWidth = 2 * d;
@@ -1133,7 +1133,15 @@ function plPuntoActual() {
   if (u && $("plOrto").checked && !PLH.eng) {
     if (Math.abs(p[0] - u[0]) > Math.abs(p[1] - u[1])) p = [p[0], u[1]];
     else p = [u[0], p[1]];
-  } else if (u && DSU.polar && !PLH.eng && !PLH.libre && (PLH.h || PLH.arr)) {
+  } else if (
+    u &&
+    DSU.polar &&
+    !PLH.eng &&
+    !PLH.libre &&
+    (PLH.h || PLH.arr) &&
+    PLH.h !== "rep" &&
+    !(PLH.h === "rmur" && PLH.pts.length > 1)
+  ) {
     // Rastreo polar: cerca de un múltiplo del ángulo elegido, el cursor se alinea a esa dirección
     const dx = p[0] - u[0],
       dy = p[1] - u[1],
@@ -1287,6 +1295,7 @@ function plAceptarPedido() {
   if (fn) fn($("plCmdV").value.trim());
 }
 $("plCmdOk").addEventListener("click", plAceptarPedido);
+$("plCmdV").addEventListener("input", () => (PLH.h === "rep" || PLH.h === "rmur") && plSobreDibujar());
 $("plCmdV").addEventListener("keydown", e => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -2122,6 +2131,8 @@ const ED_CMD = {
   VE: ["versiones", "Versiones"],
   PLA: ["plantillas", "Plantillas"],
   BU: ["buscar", "Buscar en el plano"],
+  REP: ["rep", "Repartir en ambiente"],
+  RM: ["rmur", "A lo largo del muro"],
   MET: ["metrado", "Metrado del diseño"],
   CU: ["cua", "Cuadro de circuitos"],
   PRE: ["presentar", "Presentación"]
@@ -2168,6 +2179,7 @@ function edEjecutar(c) {
   if (a === "buscar") return buAbrir();
   if (a === "metrado") return metAbrir();
   if (a === "presentar") return edPresentar(true);
+  if (a === "rep" || a === "rmur") return dpIniciarRep(a);
   if (a.startsWith("col:") || DS_HERR[a]) DS_SEL.clear();
   plHerr(a);
   toast(x[1]);
@@ -2469,6 +2481,8 @@ function edMenuAbrir(e) {
     } else if (sel.length === 1 && dsConecta(sel[0])) {
       ED_MENU.ctx = { el: sel[0] };
       b("salmenu", "Sacar tubería ▸");
+      b("reprep", "Repartir este en un ambiente…");
+      b("repmur", "Este a lo largo de un muro…");
       sep();
     }
     b("copiar", "Copiar", "Ctrl+C");
@@ -2686,6 +2700,10 @@ function edMenuAccion(a) {
   }
   if (a.startsWith("salsel:") && ctx && ctx.tb)
     return edMenuRecorrido({ tb: ctx.tb, o: dsSalidasTab(ctx.tb)[+a.slice(7)] });
+  if ((a === "reprep" || a === "repmur") && ctx && ctx.el) {
+    edMenuCerrar();
+    return dpIniciarRep(a === "reprep" ? "rep" : "rmur", ctx.el.k);
+  }
   if (a.startsWith("tub:") && ctx) {
     edMenuCerrar();
     return dsSacarTub(ctx, a.slice(4));
@@ -3002,6 +3020,7 @@ $("editor").addEventListener("click", e => {
   if (a === "plantillas") return plaAbrir();
   if (a === "versiones") return verAbrir();
   if (a === "ruta") return dpRuta();
+  if (a === "rep" || a === "rmur") return dpIniciarRep(a);
   if (a === "metrado") return metAbrir();
   if (a === "buscar") return buAbrir();
   if (a === "presentar") return edPresentar(true);

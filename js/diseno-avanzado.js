@@ -875,8 +875,188 @@ $("metDlg").addEventListener("keydown", e => {
   e.stopPropagation();
 });
 
+/* ---------- Repartir en un ambiente y a lo largo de un muro ----------
+   Repartir: dos esquinas del ambiente y filas × columnas (se propone una cantidad con unos 2.5 m entre artefactos,
+   criterio editable al escribir); cada artefacto queda en el centro de su parte del ambiente.
+   A lo largo del muro: inicio y fin sobre el muro, un clic del lado del ambiente y la cantidad (o «c/3» para cada
+   3 m); los de pared se encajan y giran contra el muro. El símbolo: el elegido o el último usado (B cambia). */
+function dpIniciarRep(h, k) {
+  plHerr(h);
+  PLH.repK =
+    k ||
+    (dsSel()[0] && dsSel()[0].t === "sim" ? dsSel()[0].k : null) ||
+    biRecientes()[0] ||
+    (h === "rep" ? "luz" : "toma");
+  DS_SEL.clear();
+  plOrden();
+}
+function dpOrdenRep(h, n) {
+  const c = DS_CAT[PLH.repK] || DS_CAT.luz,
+    t =
+      h === "rep"
+        ? n
+          ? "Esquina opuesta del ambiente"
+          : "Una esquina del ambiente"
+        : n === 0
+          ? "Inicio sobre el muro"
+          : n === 1
+            ? "Fin sobre el muro"
+            : "Clic del lado del ambiente";
+  return `<b>${h === "rep" ? "Repartir en ambiente" : "A lo largo del muro"}</b> · ${esc(c.n)} · ${t} · <span class="pl-k">B</span> cambia el símbolo · <span class="pl-k">Esc</span> salir`;
+}
+// Posiciones (y giros) de los artefactos que se van a colocar
+function dpPosRep(nf, nc) {
+  const P = PLH.pts,
+    k = PLH.repK,
+    out = [];
+  if (PLH.h === "rep") {
+    const [a, b] = P,
+      x0 = Math.min(a[0], b[0]),
+      y0 = Math.min(a[1], b[1]),
+      w = Math.abs(b[0] - a[0]),
+      hh = Math.abs(b[1] - a[1]);
+    for (let i = 0; i < nf; i++)
+      for (let j = 0; j < nc; j++)
+        out.push({ x: x0 + ((j + 0.5) * w) / nc, y: y0 + hh - ((i + 0.5) * hh) / nf, r: PLH.rot || 0 });
+    return out;
+  }
+  const [a, b, lado] = P,
+    dx = b[0] - a[0],
+    dy = b[1] - a[1],
+    L = Math.hypot(dx, dy) || 1,
+    // Del muro hacia el ambiente: el lado del tercer clic
+    s = Math.sign((lado[1] - a[1]) * dx - (lado[0] - a[0]) * dy) || 1,
+    nx = (-dy / L) * s,
+    ny = (dx / L) * s,
+    vA = DSU.alinear;
+  DSU.alinear = true;
+  for (let i = 0; i < nf; i++) {
+    const t = (i + 0.5) / nf,
+      p = [a[0] + dx * t + (nx * 0.05) / EPL.f, a[1] + dy * t + (ny * 0.05) / EPL.f],
+      al = DS_CAT[k] && DS_CAT[k].m ? dsAlinear(k, p) : null;
+    out.push(
+      al
+        ? { x: al.x, y: al.y, r: al.r }
+        : { x: p[0], y: p[1], r: Math.round(((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360) }
+    );
+  }
+  DSU.alinear = vA;
+  return out;
+}
+function dpPuntoRep(p) {
+  PLH.pts.push(p);
+  const h = PLH.h,
+    n = PLH.pts.length;
+  if (h === "rep" && n === 2) {
+    const [a, b] = PLH.pts,
+      w = Math.abs(b[0] - a[0]) * EPL.f,
+      hh = Math.abs(b[1] - a[1]) * EPL.f;
+    if (w * PLV.s < 0.01 || hh * PLV.s < 0.01) {
+      PLH.pts = [];
+      return plOrden();
+    }
+    const nc = Math.max(1, Math.round(w / 2.5)),
+      nf = Math.max(1, Math.round(hh / 2.5));
+    PLH.repN = [nf, nc];
+    plOrden(`<b>Repartir en ambiente</b> · ${fmt(w, 2)} × ${fmt(hh, 2)} m`);
+    return plPedir("Filas × columnas (criterio: cada 2.5 m)", `${nf}x${nc}`, v => {
+      const m = /^\s*(\d+)\s*[x×*]\s*(\d+)\s*$/i.exec(String(v)) || /^\s*(\d+)\s*$/.exec(String(v));
+      plPedir(null);
+      if (!m) return toast("Escriba filas × columnas, por ejemplo 2x3");
+      const f = Math.min(30, Math.max(1, +m[1])),
+        c = Math.min(30, Math.max(1, m[2] ? +m[2] : 1));
+      dpColocarRep(dpPosRep(f, c));
+    });
+  }
+  if (h === "rmur" && n === 3) {
+    const [a, b] = PLH.pts,
+      L = Math.hypot(b[0] - a[0], b[1] - a[1]) * EPL.f;
+    if (L < 0.05) {
+      PLH.pts = [];
+      return plOrden();
+    }
+    const nd = Math.max(1, Math.round(L / 3));
+    PLH.repN = [nd, 1];
+    plOrden(`<b>A lo largo del muro</b> · ${fmt(L, 2)} m`);
+    return plPedir("Cantidad (o c/3 para uno cada 3 m)", String(nd), v => {
+      const s = String(v).trim().replace(",", "."),
+        m = /^c\s*\/\s*([\d.]+)$/i.exec(s),
+        q = m ? Math.max(1, Math.round(L / Math.max(0.2, parseFloat(m[1])))) : parseInt(s, 10);
+      plPedir(null);
+      if (!(q >= 1)) return toast("Escriba la cantidad (por ejemplo 4) o la separación (por ejemplo c/3)");
+      dpColocarRep(dpPosRep(Math.min(100, q), 1));
+    });
+  }
+  plOrden();
+  plSobreDibujar();
+}
+function dpColocarRep(pos) {
+  const k = PLH.repK,
+    c = DS_CAT[k];
+  if (!c) return;
+  const capa = DS_SIS[c.s].capa;
+  dsCapa(capa);
+  DS_SEL.clear();
+  pos.forEach(p => DS_SEL.add(dsAgregar({ t: "sim", k, x: p.x, y: p.y, r: p.r || 0, capa }).id));
+  PLH.pts = [];
+  PLH.repN = null;
+  edCambio();
+  plOrden();
+  toast(`${pos.length} × ${c.n.toLowerCase()} colocados · siga con otro ambiente o Esc para terminar`);
+}
+// Vista previa: el rectángulo o la línea del muro, y los artefactos donde quedarían
+function dpSobreRep(g, q, d) {
+  const h = PLH.h;
+  if ((h !== "rep" && h !== "rmur") || !q || !PLH.pts.length || !DS_CAT[PLH.repK]) return;
+  const gv = PL_OSCURO ? "#8fc1f0" : "#1f6fd6",
+    P = PLH.pts;
+  g.save();
+  g.strokeStyle = gv;
+  g.lineWidth = 1.2 * d;
+  g.setLineDash([6 * d, 4 * d]);
+  const pts = [...P, ...(P.length < (h === "rep" ? 2 : 3) ? [q] : [])],
+    [a, b] = [plAPant(...pts[0]), pts[1] ? plAPant(...pts[1]) : null];
+  if (h === "rep" && b) g.strokeRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
+  if (h === "rmur" && b) {
+    g.beginPath();
+    g.moveTo(...a);
+    g.lineTo(...b);
+    g.stroke();
+  }
+  g.setLineDash([]);
+  // Fantasmas con la cantidad propuesta (o la que se está escribiendo)
+  const tmp = PLH.pts;
+  if (pts.length >= (h === "rep" ? 2 : 3)) {
+    PLH.pts = pts;
+    let nf, nc;
+    if (h === "rep") {
+      const w = Math.abs(pts[1][0] - pts[0][0]) * EPL.f,
+        hh = Math.abs(pts[1][1] - pts[0][1]) * EPL.f;
+      [nf, nc] = PLH.repN || [Math.max(1, Math.round(hh / 2.5)), Math.max(1, Math.round(w / 2.5))];
+      const m = !$("plCmdIn").hidden && /^\s*(\d+)\s*[x×*]\s*(\d+)\s*$/i.exec($("plCmdV").value);
+      if (m) [nf, nc] = [Math.min(30, +m[1]), Math.min(30, +m[2])];
+    } else {
+      const L = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) * EPL.f,
+        v = !$("plCmdIn").hidden ? $("plCmdV").value.trim() : "",
+        m = /^c\s*\/\s*([\d.]+)$/i.exec(v.replace(",", "."));
+      nf = m
+        ? Math.max(1, Math.round(L / Math.max(0.2, parseFloat(m[1]))))
+        : parseInt(v, 10) || (PLH.repN ? PLH.repN[0] : Math.max(1, Math.round(L / 3)));
+      nc = 1;
+    }
+    g.globalAlpha = 0.5;
+    dpPosRep(Math.min(100, nf), nc).forEach(p => {
+      const [X, Y] = plAPant(p.x, p.y);
+      dsDibSim(g, PLH.repK, X, Y, ((p.r || 0) * Math.PI) / 180, dsUk(PLH.repK) * PLV.s, gv, null, plDpr());
+    });
+  }
+  PLH.pts = tmp;
+  g.restore();
+}
+
 /* ---------- Lienzo superior: bloque que se va a colocar y comparación con una versión ---------- */
 function dpSobre(g, q, d) {
+  dpSobreRep(g, q, d);
   const gv = PL_OSCURO ? "#8fc1f0" : "#1f6fd6";
   if (PLH.h === "blq" && PLH.blq && q) {
     g.save();

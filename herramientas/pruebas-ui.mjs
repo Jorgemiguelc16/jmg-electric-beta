@@ -1681,6 +1681,42 @@ prueba("Editor de diseño: salidas del tablero precisas y clic derecho para saca
   await clic('[data-ed="aceptar"]');
 });
 
+prueba("Editor de diseño: repartir en un ambiente y a lo largo de un muro", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Repartir luminarias en la sala (de 0 a 6 m en x, de 0 a 8 m en y): 2 × 3
+  await ev("biUsado('luz'); 1");
+  await clic('#editor [data-pl="rep"]');
+  ok((await ev("PLH.h")) === "rep" && (await ev("PLH.repK")) === "luz", "Repartir con la luminaria");
+  await clicPlano(OX + 0.2, OY + 0.2, 0);
+  await clicPlano(OX + 5.8, OY + 7.8, 0);
+  ok(!(await ev("$('plCmdIn').hidden")), `propone filas × columnas (${await ev("$('plCmdV').value")})`);
+  await poner("#plCmdV", "2x3");
+  await clic("#plCmdOk");
+  const l = await J(
+    "dsD().els.filter(e => e.k === 'luz').map(e => [+(e.x - " + OX + ").toFixed(2), +(e.y - " + OY + ").toFixed(2)])"
+  );
+  ok(
+    l.length === 6 && l.some(p => Math.abs(p[0] - 1.13) < 0.05 && Math.abs(p[1] - 5.85) < 0.05),
+    `6 luminarias repartidas (${JSON.stringify(l.slice(0, 2))})`
+  );
+  await teclaE("Escape", "Escape", 27);
+  // Tomacorrientes a lo largo del muro inferior (y = 0), del lado de adentro, cada 3 m
+  await ev("dpIniciarRep('rmur', 'toma'); 1");
+  await clicPlano(OX + 0, OY + 0, 0);
+  await clicPlano(OX + 6, OY + 0, 0);
+  await clicPlano(OX + 3, OY + 2, 0);
+  await poner("#plCmdV", "c/3");
+  await clic("#plCmdOk");
+  const t = await J("dsD().els.filter(e => e.k === 'toma')");
+  ok(
+    t.length === 2 && t.every(e => e.y > OY && e.y - OY < 0.4),
+    `2 tomacorrientes encajados en el muro, adentro (${t.map(e => (e.y - OY).toFixed(2)).join(", ")})`
+  );
+  await teclaE("Escape", "Escape", 27);
+  await clic('[data-ed="aceptar"]');
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();
