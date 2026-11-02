@@ -340,7 +340,20 @@ function planoValido(v) {
     ...(Array.isArray(v.borr) && v.borr.length
       ? { borr: [...new Set(v.borr.filter(i => Number.isInteger(i) && i >= 0 && i < 1e7))].slice(0, 500000) }
       : {}),
-    dis: disValido(v.dis)
+    dis: disValido(v.dis),
+    // Versiones guardadas del diseño (para comparar o restaurar)
+    ...(Array.isArray(v.vers) && v.vers.length
+      ? {
+          vers: v.vers
+            .filter(x => x && typeof x === "object" && x.dis)
+            .slice(-15)
+            .map(x => ({
+              n: txt(x.n, 60) || "Versión",
+              f: typeof x.f === "string" ? x.f.slice(0, 40) : "",
+              dis: disValido(x.dis)
+            }))
+        }
+      : {})
   };
 }
 /* Diseño eléctrico dibujado sobre el plano (js/diseno.js): capas, capa actual, elementos y escala de impresión,
@@ -393,6 +406,8 @@ function disValido(v) {
           ...cir,
           // Letra de encendido (qué interruptor enciende qué luminaria: a, b, c…)
           ...(typeof e.enc === "string" && /^[a-z0-9]{1,3}$/.test(e.enc) ? { enc: e.enc } : {}),
+          // Montante: la canalización vertical par en otra planta
+          ...(typeof e.mon === "string" && /^d[0-9]{1,7}$/.test(e.mon) ? { mon: e.mon } : {}),
           // Tablero del circuito del artefacto (lo hereda de la tubería que llega a él)
           ...(e.k !== "tab" && typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {}),
           // Tablero: nombre, número de circuitos y descripción de cada uno

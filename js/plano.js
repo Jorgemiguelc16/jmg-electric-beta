@@ -1701,7 +1701,9 @@ addEventListener("keydown", e => {
   if (!ED.abierto || document.querySelector(".welcome:not([hidden])")) return;
   const k = e.key.toLowerCase(),
     ctrl = e.ctrlKey || e.metaKey,
-    enCampo = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+    // Un campo de una ventana ya cerrada (oculto) no cuenta: las teclas vuelven al plano
+    enCampo =
+      /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement.offsetParent !== null;
   // Deshacer y rehacer del editor (el del proyecto no actúa mientras el editor está abierto)
   if (ctrl && (k === "z" || k === "y")) {
     if (enCampo) return;
@@ -1761,6 +1763,10 @@ addEventListener("keydown", e => {
     // suelta la selección
     if (PLH.h === "rec" && !PLH.med && PLH.pts.length > 1) return plTerminarRecorrido();
     if (dsTerminar()) return;
+    if (DP_COMP && !PLH.h) {
+      DP_COMP = null;
+      return plSobreDibujar();
+    }
     if (PLH.h) return plHerr(null);
     if (DS_SEL.size || PLH.obj >= 0 || PL_ASEL.size) {
       DS_SEL.clear();
@@ -1895,7 +1901,7 @@ function plPanel() {
   $("plPlantas").innerHTML = P.length
     ? P.map(
         (p, i) =>
-          `<div class="pl-fila" data-plp="${i}"><button type="button" class="pl-nom" data-plv="${i}" title="Ver la planta">${esc(p.n)}</button><span class="pl-dim">${plFm(p.x1 - p.x0)} × ${plFm(p.y1 - p.y0)} m</span><button type="button" class="pl-x" data-plq="${i}" title="Quitar la planta (el dibujo no cambia)" aria-label="Quitar la planta">×</button></div>`
+          `<div class="pl-fila" data-plp="${i}"><button type="button" class="pl-nom" data-plv="${i}" title="Ver la planta">${esc(p.n)}</button><span class="pl-dim">${(n => (n ? n + " elem. · " : ""))(dsD() ? dsD().els.filter(el => dpPlantaEl(el) === i).length : 0)}${plFm(p.x1 - p.x0)} × ${plFm(p.y1 - p.y0)} m</span><button type="button" class="pl-x" data-plq="${i}" title="Quitar la planta (el dibujo no cambia)" aria-label="Quitar la planta">×</button></div>`
       ).join("")
     : `<p class="pl-nota">Encuadre cada planta del edificio con <b>Encuadrar planta</b>: así se ve con un clic.</p>`;
 }
@@ -2010,7 +2016,11 @@ const ED_CMD = {
   TA: ["col:tab", "Tablero"],
   LU: ["col:luz", "Salida de alumbrado"],
   TO: ["col:toma", "Tomacorriente"],
-  IN: ["col:int", "Interruptor"]
+  IN: ["col:int", "Interruptor"],
+  BL: ["bloque", "Guardar como bloque"],
+  RU: ["ruta", "Ruta automática"],
+  VE: ["versiones", "Versiones"],
+  PLA: ["plantillas", "Plantillas"]
 };
 function edComando(letra) {
   plPedir(
@@ -2046,6 +2056,10 @@ function edEjecutar(c) {
   if (a === "zprev") return plVistaAnterior();
   if (a === "capas") return capasAbrir();
   if (a === "revisar") return revAbrir();
+  if (a === "bloque") return dpGuardarBloque();
+  if (a === "ruta") return dpRuta();
+  if (a === "versiones") return verAbrir();
+  if (a === "plantillas") return plaAbrir();
   if (a.startsWith("col:") || DS_HERR[a]) DS_SEL.clear();
   plHerr(a);
   toast(x[1]);
@@ -2155,6 +2169,12 @@ function edMenuAbrir(e) {
       "",
       sel.some(el => el.capa !== D.actual)
     );
+    if (sel.filter(dsConecta).length >= (sel.some(el => el.k === "tab") ? 1 : 2))
+      b("ruta", "Unir con tuberías (ruta automática)");
+    b("bloque", "Guardar como bloque…");
+    if (EPL.plantas.length > 1) b("aplanta", "Copiar a otra planta…");
+    if (sel.length === 1 && DP_PAR[sel[0].k] && EPL.plantas.length > 1) b("montante", "Crear montante a otra planta…");
+    if (sel.length === 1 && sel[0].mon) b("irmon", "Ir al otro extremo del montante");
     b("similares", "Seleccionar todos los de este tipo");
     b("encuadrar", "Acercar a lo elegido");
     if (sel.length === 1 && sel[0].k === "tab") b("tablero", "Circuitos del tablero…");
@@ -2293,6 +2313,11 @@ function edMenuAccion(a) {
     return plVer(x0 - m, y0 - m, x1 + m, y1 + m);
   }
   if (a === "tablero") return tabAbrir(sel[0].id);
+  if (a === "ruta") return dpRuta();
+  if (a === "bloque") return dpGuardarBloque();
+  if (a === "aplanta") return dpCopiarAPlanta();
+  if (a === "montante") return dpMontante();
+  if (a === "irmon") return dpIrMontante();
   if (a === "ventana") return elAbrir(sel[0].id);
   if (a === "props") {
     edProps.oculto = false;
@@ -2516,6 +2541,9 @@ $("editor").addEventListener("click", e => {
   }
   if (a === "capas") return capasAbrir();
   if (a === "revisar") return revAbrir();
+  if (a === "plantillas") return plaAbrir();
+  if (a === "versiones") return verAbrir();
+  if (a === "ruta") return dpRuta();
   if (a === "lamina") return lamAbrir();
   if (a === "dxfdis" || a === "dxftodo") return lamDxf(a === "dxftodo");
   if (a === "biblio") return bibAbrir();

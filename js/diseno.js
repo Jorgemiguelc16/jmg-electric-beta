@@ -2191,6 +2191,8 @@ function dsSobre(g) {
     dsDibLeyenda(g, { x: q[0], y: q[1], tit: "LEYENDA" }, PL_OSCURO ? "#8fc1f0" : "#1f6fd6", PLV.s, plDpr());
     g.restore();
   }
+  // Bloque que se va a colocar y comparación con una versión
+  dpSobre(g, q, d);
   // Rastreo polar: la guía desde el punto anterior y su ángulo
   if (PLH.polar && q) {
     const { u, ang } = PLH.polar,
@@ -2259,11 +2261,13 @@ function dsCotaNueva(q) {
 }
 
 /* ---------- Herramientas: colocar símbolos y dibujar ---------- */
-const dsEsHerr = h => !!h && (h.startsWith("col:") || !!DS_HERR[h] || h === "fila" || h === "espejo");
+const dsEsHerr = h => !!h && (h.startsWith("col:") || !!DS_HERR[h] || h === "fila" || h === "espejo" || h === "blq");
 function dsOrden(h, n) {
   const libre = ` · <span class="pl-k">Mayús</span> sin enganche`;
   if (h === "fila")
     return `<b>Copiar en fila</b> (${PLH.copia ? PLH.copia.n : 0} copias) · ${n ? "Punto de la primera copia: la separación (escriba la distancia o haga clic)" : "Punto base"}${libre} · <span class="pl-k">Esc</span> salir`;
+  if (h === "blq")
+    return `<b>Bloque «${esc(PLH.blq ? PLH.blq.n : "")}»</b> · clic para colocarlo (su centro va en el cursor) · puede colocar varios${libre} · <span class="pl-k">Esc</span> terminar`;
   if (h === "espejo")
     return `<b>Espejo</b> · ${n ? "Segundo punto de la línea de reflexión" : "Primer punto de la línea de reflexión"}${libre} · <span class="pl-k">Esc</span> salir`;
   if (h.startsWith("col:")) {
@@ -2303,6 +2307,7 @@ function dsAgregar(el) {
 function dsPunto(p) {
   const h = PLH.h;
   if (h === "fila" || h === "espejo") return dsPuntoCopia(p);
+  if (h === "blq") return dpColocarBloque(p);
   if (h === "ley") {
     dsCapa(DS_SIS.txt.capa);
     DS_SEL.clear();
@@ -3162,7 +3167,15 @@ function dsResumen() {
   }
   const cuenta = {},
     largo = {};
-  D.els.forEach(el => {
+  // Filtro por planta (con dos o más plantas encuadradas)
+  const P = EPL.plantas,
+    f = $("dsPlF");
+  if (DP_F >= P.length) DP_F = -1;
+  f.hidden = P.length < 2;
+  f.innerHTML =
+    `<option value="-1">Todas</option>` + P.map((p, i) => `<option value="${i}">${esc(p.n)}</option>`).join("");
+  f.value = String(DP_F);
+  dpFiltrar(D.els).forEach(el => {
     const t = dsTipo(el);
     cuenta[t] = (cuenta[t] || 0) + 1;
     if (el.t === "tub") largo[t] = (largo[t] || 0) + dsLargo(el);
@@ -3195,6 +3208,11 @@ function dsResumen() {
         .join("")
     : `<p class="pl-nota">Coloque luminarias, interruptores, tomacorrientes, tableros y tuberías desde las pestañas <b>Insertar</b> y <b>Dibujo</b>. Aquí verá cuántos hay de cada uno y los metros de tubería.</p>`;
 }
+$("dsPlF").addEventListener("change", e => {
+  DP_F = +e.target.value;
+  e.target.blur();
+  dsResumen();
+});
 $("dsResumen").addEventListener("click", e => {
   const b = e.target.closest("[data-dst]"),
     x = e.target.closest("[data-dsx]");
@@ -3691,6 +3709,7 @@ function dsVerificar() {
     sinCond.map(e => e.id),
     "Clic en el medio de la tubería para elegir sus conductores."
   );
+  dpVerificar(add);
   return out;
 }
 const REV_VW = ventanaMovil(document.querySelector("#revDlg .vw"), "jmg-electric-revision", {
@@ -3845,6 +3864,9 @@ function bibRender() {
     (rec.length
       ? `<button type="button" data-big="rec"${BI_GRUPO === "rec" ? ' class="on"' : ""}>Usados hace poco<i>${rec.length}</i></button>`
       : "") +
+    (dpBloques().length
+      ? `<button type="button" data-big="blq"${BI_GRUPO === "blq" ? ' class="on"' : ""}>Mis bloques<i>${dpBloques().length}</i></button>`
+      : "") +
     DS_GRUPOS.map(g => {
       const n = cuenta(g);
       return n
@@ -3856,7 +3878,8 @@ function bibRender() {
     bloque = (tit, ks) =>
       ks.length ? `<h4>${esc(tit)}</h4><div class="bi-lista">${ks.map(tarjeta).join("")}</div>` : "";
   let h;
-  if (BI_GRUPO === "rec") h = bloque("Usados hace poco", rec);
+  if (BI_GRUPO === "blq") h = dpTarjetasBloques("");
+  else if (BI_GRUPO === "rec") h = bloque("Usados hace poco", rec);
   else if (BI_GRUPO)
     h = bloque(
       BI_GRUPO,
@@ -3865,6 +3888,7 @@ function bibRender() {
   else
     h =
       bloque("Usados hace poco", rec) +
+      dpTarjetasBloques(q) +
       DS_GRUPOS.map(g =>
         bloque(
           g,
@@ -3894,8 +3918,19 @@ $("bibDlg").addEventListener("click", e => {
   const s = e.target.closest("[data-bik]"),
     g = e.target.closest("[data-big]"),
     b = e.target.closest("[data-bi]"),
-    ed = e.target.closest("[data-bie]");
+    ed = e.target.closest("[data-bie]"),
+    bx = e.target.closest("[data-blqx]"),
+    bq = e.target.closest("[data-blq]");
   if (ed) return siAbrir(ed.dataset.bie);
+  if (bx) {
+    const L = dpBloques(),
+      n = L[+bx.dataset.blqx] && L[+bx.dataset.blqx].n;
+    L.splice(+bx.dataset.blqx, 1);
+    dpGuardarBloques(L);
+    toast(`Bloque «${n}» eliminado`);
+    return bibRender();
+  }
+  if (bq) return dpUsarBloque(+bq.dataset.blq);
   if (s) return bibElegir(s.dataset.bik);
   if (g) {
     BI_GRUPO = g.dataset.big;

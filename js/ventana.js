@@ -94,7 +94,14 @@ const VW_BORDES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"]
   .join("");
 document.querySelectorAll(".vw").forEach(b => b.insertAdjacentHTML("beforeend", VW_BORDES));
 // El fondo de la página queda fijo mientras haya alguna ventana o diálogo abierto
-const vwFondo = () => document.body.classList.toggle("wl-open", !!document.querySelector(".welcome:not([hidden])"));
+// Fondo oscuro mientras hay una ventana abierta; al cerrarse, el foco sale de ella (si no, sus teclas seguirían
+// atrapadas en un campo oculto)
+const vwFondo = () => {
+  document.body.classList.toggle("wl-open", !!document.querySelector(".welcome:not([hidden])"));
+  const a = document.activeElement,
+    w = a && a.closest && a.closest(".welcome");
+  if (w && w.hidden) a.blur();
+};
 /* Copia del proyecto actual para una vista previa: los datos de estado() con sus listas copiadas, de modo que
    la ventana pueda cambiarlas sin tocar el proyecto. Se calcula con calcular(), que no lee la pantalla. */
 function copiaProyecto() {

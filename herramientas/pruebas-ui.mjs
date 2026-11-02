@@ -1323,6 +1323,97 @@ prueba(
   }
 );
 
+prueba("Editor de diseño: plantas y montantes, bloques, plantillas, ruta automática y versiones", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  await ev(
+    `(() => { EPL.plantas = [{ n: '1er piso', x0: ${OX}, y0: ${OY}, x1: ${OX} + 10, y1: ${OY} + 8 }, { n: '2do piso', x0: ${OX} + 20, y0: ${OY}, x1: ${OX} + 30, y1: ${OY} + 8 }];
+      dsAgregar({ t: 'sim', k: 'tab', x: ${OX} + 3, y: ${OY} + 7.9, r: 180, capa: 'E-TABLEROS', nom: 'TG', nc: 4 });
+      ['luz', 'luz', 'luz'].forEach((k, i) => dsAgregar({ t: 'sim', k, x: ${OX} + 2 + i * 2.5, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' }));
+      dsAgregar({ t: 'sim', k: 'subida', x: ${OX} + 9, y: ${OY} + 1, r: 0, capa: 'E-CANALIZACION' }); edCambio(); })()`
+  );
+  // Ruta automática: tablero y tres luminarias
+  await ev("DS_SEL.clear(); dsD().els.filter(e => e.k === 'tab' || e.k === 'luz').forEach(e => DS_SEL.add(e.id)); 1");
+  await clic('#editor [data-pl="ruta"]');
+  await esperar(80);
+  await clic('#edMenu [data-edm="sal:0"]');
+  const t = await J("dsD().els.filter(e => e.t === 'tub')");
+  ok(
+    t.length === 3 && t.every(x => x.cir === "C-1" && x.modo === "techo"),
+    `ruta: 3 tuberías del C-1 en techo (${t.length})`
+  );
+  ok(await ev("dsSueltos().sims.filter(e => e.k === 'luz').length === 0"), "todas las luminarias quedan conectadas");
+  // Plantas: copiar la primera luminaria al 2do piso; montante de la subida
+  await ev("DS_SEL.clear(); DS_SEL.add(dsD().els.find(e => e.k === 'luz').id); dpCopiarAPlanta(); 1");
+  await clic('#edMenu [data-edm="sal:1"]');
+  ok(
+    await ev(`dsD().els.some(e => e.k === 'luz' && Math.abs(e.x - (${OX} + 22)) < 1e-6)`),
+    "copiada a la misma posición del 2do piso"
+  );
+  await ev("DS_SEL.clear(); DS_SEL.add(dsD().els.find(e => e.k === 'subida').id); dpMontante(); 1");
+  await clic('#edMenu [data-edm="sal:1"]');
+  const mb = await J("dsD().els.find(e => e.k === 'bajada')"),
+    ms = await J("dsD().els.find(e => e.k === 'subida')");
+  ok(
+    mb && mb.mon === ms.id && ms.mon === mb.id && Math.abs(mb.x - (OX + 29)) < 1e-6,
+    "montante: bajada en el 2do piso, enlazada"
+  );
+  await ev("DP_F = 1; dsResumen(); 1");
+  ok(
+    /Salida de alumbrado/.test(await ev("$('dsResumen').textContent")) &&
+      !/Tablero/.test(await ev("$('dsResumen').textContent")),
+    "resumen del 2do piso"
+  );
+  await ev("DP_F = -1; dsResumen(); 1");
+  // Bloques: guardar dos luminarias y colocarlas
+  await ev(
+    "localStorage.removeItem(DP_BLQ); DS_SEL.clear(); dsD().els.filter(e => e.k === 'luz').slice(0, 2).forEach(e => DS_SEL.add(e.id)); dpGuardarBloque(); 1"
+  );
+  await poner("#plCmdV", "Dos luces");
+  await clic("#plCmdOk");
+  ok(
+    (await ev("dpBloques()[0].n")) === "Dos luces" && (await ev("dpBloques()[0].els.length")) === 2,
+    "bloque guardado en metros"
+  );
+  await ev("bibAbrir(); BI_GRUPO = 'blq'; bibRender(); 1");
+  ok(/Dos luces/.test(await ev("$('biRejilla').textContent")), "aparece en Mis bloques");
+  await clic('#biRejilla [data-blq="0"]');
+  ok((await ev("PLH.h")) === "blq", "herramienta para colocar el bloque");
+  await ev("plAjustar(); 1");
+  const n0 = await ev("dsD().els.length");
+  await clicPlano(OX + 5, OY + 2, 0);
+  ok((await ev("dsD().els.length")) === n0 + 2, "el bloque se coloca");
+  await teclaE("Escape", "Escape", 27);
+  // Versiones: guardar, cambiar y comparar
+  await ev("verAbrir(); 1");
+  await poner("#verNom", "Entrega 1");
+  await clic("#verDlg [data-vg]");
+  ok((await ev("EPL.vers.length")) === 1, "versión guardada");
+  await ev(`dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 8, y: ${OY} + 3, r: 0, capa: 'E-ALUMBRADO' }); edCambio(); 1`);
+  await clic('#verDlg [data-ver="c0"]');
+  ok((await ev("DP_COMP && DP_COMP.add.size")) === 1, "comparar: 1 elemento agregado");
+  await teclaE("Escape", "Escape", 27);
+  ok((await ev("DP_COMP")) === null, "Esc deja de comparar");
+  // Plantillas: aplicar la de vivienda y guardar una propia
+  await ev("plaAbrir(); 1");
+  await clic('#plaLista [data-pla="b0"]');
+  ok(
+    (await ev("dsD().lams.length")) === 2 && (await ev("dsD().lams[1].num")) === "IE-02",
+    "plantilla Vivienda: IE-01 e IE-02"
+  );
+  await ev("localStorage.removeItem(DP_PLA); plaAbrir(); 1");
+  await poner("#plaNom", "Mi estilo");
+  await clic("#plaDlg [data-plg]");
+  ok((await ev("dpPlantillas()[0].n")) === "Mi estilo", "plantilla propia guardada");
+  await clic('[data-plc="cerrar"]');
+  await clic('[data-ed="aceptar"]');
+  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+  ok(
+    await ev("PLANO.vers.length === 1 && PLANO.dis.els.some(e => e.mon)"),
+    "versiones y montantes se guardan con el proyecto"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

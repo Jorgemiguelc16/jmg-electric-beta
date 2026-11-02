@@ -353,6 +353,36 @@
   font: 600 9px var(--f-body);
   color: #c77d2e;
 }
+/* Plantillas y versiones */
+.pla-h {
+  margin: 10px 4px 4px;
+  font: 600 10.5px var(--f-body);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #66737f;
+}
+.pla-b {
+  display: flex;
+  gap: 4px;
+}
+#plaDlg .ca-barra input,
+#verDlg .ca-barra input {
+  flex: 1;
+  width: auto;
+}
+/* Resumen del panel izquierdo por planta */
+.pl-f {
+  margin-left: auto;
+  max-width: 110px;
+  padding: 1px 4px;
+  border: 1px solid var(--ws-line, #d6dde6);
+  border-radius: 3px;
+  background: var(--ws-pane, #fff);
+  color: var(--ws-text, #1f2a36);
+  font: 11px var(--f-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
 /* Revisión del diseño */
 .rev-box {
   display: flex;
