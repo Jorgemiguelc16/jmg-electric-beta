@@ -375,10 +375,15 @@ const DSU = {
   marcaEst: "incl",
   polar: true,
   polarInc: 45,
-  // Fondo del plano: temperatura (0 blanco, 100 cálido) y brillo (%); cinta plegada
+  // Fondo del plano: base (según el tema, blanco, papel, gris, grafito o negro), temperatura (−50 fría a 100 cálida)
+  // y brillo (%); cinta plegada; barra de navegación (visible, horizontal y posición en % del plano)
+  fondo: "tema",
   calido: 0,
   brillo: 100,
-  cintaMin: false
+  cintaMin: false,
+  nav: true,
+  navH: false,
+  navPos: null
 };
 try {
   const g = JSON.parse(localStorage.getItem("jmg-electric-editor-rejilla") || "{}");
@@ -1919,7 +1924,8 @@ function plColorDis(h) {
   let v = plRgb(h);
   const l = plLum(v);
   if (!PL_OSCURO && l > 0.8) v = [38, 48, 60];
-  else if (PL_OSCURO && l < 0.25) v = v.map(x => x + (210 - x) * 0.6);
+  // Sobre un fondo oscuro, los colores oscuros del diseño se aclaran para leerse bien
+  else if (PL_OSCURO && l < 0.55) v = v.map(x => x + (235 - x) * (l < 0.25 ? 0.6 : 0.42));
   return plHex(v);
 }
 
@@ -3357,6 +3363,7 @@ function dsCinta() {
   $("dsMarcas").checked = DSU.marcas;
   $("dsMarcaEst").value = DSU.marcaEst === "recta" ? "recta" : "incl";
   $("dsCalido").value = String(DSU.calido || 0);
+  $("dsNav").checked = DSU.nav !== false;
   $("dsBrillo").value = String(DSU.brillo || 100);
   $("dsCirT").checked = !!(D && D.cirt);
   $("dsNSal").checked = !!(D && D.nsal);
@@ -3428,6 +3435,11 @@ $("dsColor").addEventListener("change", e => {
   dsGuardarPref();
   dsResumen();
   plDibujar();
+});
+$("dsNav").addEventListener("change", e => {
+  DSU.nav = e.target.checked;
+  dsGuardarPref();
+  plNavPoner();
 });
 ["dsCalido", "dsBrillo"].forEach(id =>
   $(id).addEventListener("input", e => {
@@ -3582,22 +3594,60 @@ $("simDlg").addEventListener("keydown", e => {
   e.stopPropagation();
 });
 
-/* ---------- Fondo del plano: temperatura y brillo (Vista) ---------- */
+/* ---------- Fondo del plano: base, temperatura y brillo (Vista › Fondo del plano) ----------
+   Solo la vista del plano en la pantalla de cada usuario (las láminas y el DXF no cambian). Sobre un fondo oscuro,
+   la arquitectura y el diseño se aclaran solos para leerse bien. */
+const DS_FONDOS = {
+  tema: ["Según el tema", null],
+  blanco: ["Blanco", [255, 255, 255]],
+  papel: ["Papel", [246, 238, 220]],
+  gris: ["Gris claro", [228, 231, 235]],
+  gris2: ["Gris medio", [178, 184, 191]],
+  azul: ["Azul noche", [24, 34, 52]],
+  grafito: ["Grafito", [42, 46, 52]],
+  negro: ["Negro", [12, 13, 16]]
+};
+function dsFondoColor(base) {
+  const t = Math.max(-50, Math.min(100, DSU.calido || 0)) / 100,
+    b = Math.max(60, Math.min(130, DSU.brillo || 100)) / 100;
+  // Cálida: menos azul y algo menos verde; fría: menos rojo
+  const f = t >= 0 ? [1, 1 - 0.05 * t, 1 - 0.16 * t] : [1 + 0.12 * t, 1 + 0.03 * t, 1];
+  return base.map((x, i) => {
+    const v = x * f[i];
+    // Brillo: oscurece hacia el negro o aclara hacia el blanco
+    return Math.max(0, Math.min(255, b <= 1 ? v * b : v + (255 - v) * (b - 1) * 1.4));
+  });
+}
 function dsFondo() {
   const L = plLienzo;
   L.style.backgroundColor = "";
-  const base = (getComputedStyle(L).backgroundColor.match(/\d+/g) || [255, 255, 255]).slice(0, 3).map(Number);
-  // Solo con el tema claro: del blanco al tono cálido (papel) y más o menos brillo
-  if (plLum(base) > 0.5 && (DSU.calido || DSU.brillo < 100)) {
-    const k = (DSU.calido || 0) / 100,
-      b = (DSU.brillo || 100) / 100,
-      calido = [246, 233, 204],
-      v = base.map((x, i) => (x + (calido[i] - x) * k) * b);
-    L.style.backgroundColor = plHex(v);
-  }
+  const p = DS_FONDOS[DSU.fondo] || DS_FONDOS.tema,
+    base = p[1] || (getComputedStyle(L).backgroundColor.match(/\d+/g) || [255, 255, 255]).slice(0, 3).map(Number);
+  if (p[1] || DSU.calido || DSU.brillo !== 100) L.style.backgroundColor = plHex(dsFondoColor(base));
   plTema();
   plDibujar();
+  dsFondoLista();
 }
+// Muestras de la ventanita del fondo
+function dsFondoLista() {
+  const L = $("fonLista");
+  if (!L) return;
+  const tema = (getComputedStyle(document.documentElement).getPropertyValue("--ws-doc") || "#ffffff").trim();
+  L.innerHTML = Object.entries(DS_FONDOS)
+    .map(
+      ([k, [n, c]]) =>
+        `<button type="button" data-fon="${k}"${DSU.fondo === k ? ' class="on"' : ""}><i style="background:${c ? plHex(c) : tema}"></i>${n}</button>`
+    )
+    .join("");
+}
+$("edFondo").addEventListener("click", e => {
+  const b = e.target.closest("[data-fon]");
+  if (!b) return;
+  if (b.dataset.fon === "cerrar") return ($("edFondo").hidden = true);
+  DSU.fondo = b.dataset.fon;
+  dsGuardarPref();
+  dsFondo();
+});
 
 /* ---------- Ventana de propiedades (doble clic en un elemento) ---------- */
 const EL_VW = ventanaMovil(document.querySelector("#elDlg .vw"), "jmg-electric-propiedades", {

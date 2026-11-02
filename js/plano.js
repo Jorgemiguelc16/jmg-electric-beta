@@ -231,6 +231,7 @@ function edAbrir(conArchivo) {
   $("edNom").textContent = $("p_nombre").value.trim() || "Proyecto sin nombre";
   dsFondo();
   edCinta();
+  plNavPoner();
   PLH.obj = -1;
   plHerr(null);
   if (!EPL) {
@@ -831,8 +832,10 @@ function plSobreDibujar() {
       r = 6 * d,
       k = PLH.eng[2],
       verde = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
+    g.save();
+    g.globalAlpha = 0.75;
     g.strokeStyle = verde;
-    g.lineWidth = 2 * d;
+    g.lineWidth = 1.4 * d;
     g.beginPath();
     if (k === 2) {
       g.moveTo(X, Y - r);
@@ -877,7 +880,9 @@ function plSobreDibujar() {
       g.arc(X, Y, r * 0.35, 0, 2 * Math.PI);
     } else g.rect(X - r, Y - r, 2 * r, 2 * r);
     g.stroke();
-    g.font = `500 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
+    // Nombre del enganche: pequeño y casi transparente, para que no tape el dibujo
+    g.globalAlpha = 0.6;
+    g.font = `500 ${10 * d}px "IBM Plex Sans", Arial, sans-serif`;
     const sal = PLH.eng[3];
     plEtiqueta(
       g,
@@ -894,6 +899,7 @@ function plSobreDibujar() {
       "left",
       "top"
     );
+    g.restore();
   }
 }
 function plTrazo(g, p, cerrado) {
@@ -1875,6 +1881,7 @@ $("editor").addEventListener("click", e => {
     return;
   }
   if (!e.target.closest("#edRefs")) $("edRefs").hidden = true;
+  if (!e.target.closest('#edFondo, [data-pl="fondo"]')) $("edFondo").hidden = true;
 });
 // Enganche y orto: casilla en la cinta (Medir) y botón en la barra de estado, siempre iguales
 function edAlternar(id, aviso = true) {
@@ -1986,6 +1993,73 @@ $("editor").addEventListener("dblclick", e => {
   if (e.target.closest("[data-tab-e]")) edCinta(true);
 });
 document.querySelector("#editor [data-edplegar]").addEventListener("click", () => edCinta(true));
+
+/* ---------- Barra de navegación sobre el plano: visible, orientación y posición (preferencias del usuario) ---------- */
+function plNavPoner() {
+  const n = $("plNav"),
+    p = DSU.navPos;
+  n.hidden = DSU.nav === false;
+  n.classList.toggle("horiz", !!DSU.navH);
+  n.classList.toggle("libre", !!p);
+  if (p) {
+    const W = plLienzo.clientWidth,
+      H = plLienzo.clientHeight,
+      w = n.offsetWidth,
+      h = n.offsetHeight;
+    n.style.left = Math.max(2, Math.min(W - w - 2, p[0] * W)) + "px";
+    n.style.top = Math.max(2, Math.min(H - h - 2, p[1] * H)) + "px";
+    n.style.right = "auto";
+  } else n.style.left = n.style.top = n.style.right = "";
+}
+$("plNav").addEventListener("click", e => {
+  const b = e.target.closest("[data-navg]");
+  if (!b) return;
+  if (b.dataset.navg === "ocultar") {
+    DSU.nav = false;
+    toast("Barra de navegación oculta: se vuelve a mostrar en Vista › Barra de navegación");
+  } else DSU.navH = !DSU.navH;
+  dsGuardarPref();
+  dsCinta();
+  plNavPoner();
+});
+{
+  const asa = document.querySelector("#plNav .pl-nav-asa");
+  asa.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const n = $("plNav"),
+      S = parseFloat(getComputedStyle($("ws")).zoom) || 1,
+      r0 = n.getBoundingClientRect(),
+      dx = (e.clientX - r0.left) / S,
+      dy = (e.clientY - r0.top) / S;
+    try {
+      asa.setPointerCapture(e.pointerId);
+    } catch (_) {}
+    n.classList.add("drag");
+    const mv = ev => {
+      const r = plLienzo.getBoundingClientRect();
+      DSU.navPos = [
+        ((ev.clientX - r.left) / S - dx) / plLienzo.clientWidth,
+        ((ev.clientY - r.top) / S - dy) / plLienzo.clientHeight
+      ];
+      plNavPoner();
+    };
+    const up = () => {
+      n.classList.remove("drag");
+      removeEventListener("pointermove", mv);
+      removeEventListener("pointerup", up);
+      dsGuardarPref();
+    };
+    addEventListener("pointermove", mv);
+    addEventListener("pointerup", up);
+  });
+  asa.addEventListener("dblclick", () => {
+    DSU.navPos = null;
+    dsGuardarPref();
+    plNavPoner();
+  });
+}
+new ResizeObserver(() => ED.abierto && plNavPoner()).observe(plLienzo);
 
 /* ---------- Comandos por teclado ----------
    Como la línea de comandos de AutoCAD: se escribe el comando y se pulsa Intro; Intro sin herramienta repite el
@@ -2531,6 +2605,22 @@ $("editor").addEventListener("click", e => {
   if (!b || b.disabled) return;
   const a = b.dataset.pl;
   if (a === "abrir") return $("plArchivo").click();
+  if (a === "fondo") {
+    const v = $("edFondo");
+    v.hidden = !v.hidden;
+    if (v.hidden) return;
+    dsFondoLista();
+    const ed = $("editor").getBoundingClientRect(),
+      r = b.getBoundingClientRect(),
+      S = parseFloat(getComputedStyle($("ws")).zoom) || 1;
+    Object.assign(v.style, {
+      top: (r.bottom - ed.top) / S + 4 + "px",
+      left: Math.max(4, Math.min((r.left - ed.left) / S, ed.width / S - 290)) + "px",
+      right: "auto",
+      bottom: "auto"
+    });
+    return;
+  }
   if (a === "panel" || a === "props") {
     if (a === "panel") plPanel.oculto = !plPanel.oculto;
     else edProps.oculto = !edProps.oculto;
@@ -2583,6 +2673,7 @@ $("editor").addEventListener("click", e => {
   if (!PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
   if (a === "ajustar") plAjustar();
   else if (a === "fondo0") {
+    DSU.fondo = "tema";
     DSU.calido = 0;
     DSU.brillo = 100;
     dsGuardarPref();

@@ -1445,6 +1445,41 @@ prueba("Proyectos en la base de datos del navegador y respaldo con el plano DXF"
   );
 });
 
+prueba("Editor de diseño: fondo del plano, barra de navegación y nombres de la cinta", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Los nombres de los grupos de la cinta caben dentro de la cinta
+  const corte = await J(
+    "(() => { const r = document.querySelector('#editor .ed-ribbon').getBoundingClientRect(); return [...document.querySelectorAll('#editor [data-rib-e=\"inicio\"] .gl')].filter(g => g.getBoundingClientRect().bottom > r.bottom + 0.5).length; })()"
+  );
+  ok(corte === 0, `los nombres de los grupos se ven completos (${corte} cortados)`);
+  // Fondo del plano: ventanita, fondo grafito (oscuro) y restablecer
+  await clic('#editor [data-tab-e="vista"]');
+  await clic('#editor [data-pl="fondo"]');
+  ok(
+    await ev("!$('edFondo').hidden && $('fonLista').querySelectorAll('[data-fon]').length === 8"),
+    "ventanita con 8 fondos"
+  );
+  await clic('#fonLista [data-fon="grafito"]');
+  ok(
+    (await ev("PL_OSCURO")) === true && (await ev("DSU.fondo")) === "grafito",
+    "fondo grafito: el plano pasa a oscuro"
+  );
+  await poner("#dsCalido", "-40");
+  ok((await ev("DSU.calido")) === -40, "temperatura fría");
+  await clic('#edFondo [data-pl="fondo0"]');
+  ok((await ev("PL_OSCURO")) === false && (await ev("DSU.fondo")) === "tema", "Restablecer: según el tema");
+  // Barra de navegación: horizontal, ocultar y volver a mostrar
+  await clic('#plNav [data-navg="girar"]');
+  ok(await ev("$('plNav').classList.contains('horiz')"), "barra horizontal");
+  await clic('#plNav [data-navg="ocultar"]');
+  ok(await ev("$('plNav').hidden && !$('dsNav').checked"), "barra oculta");
+  await ev("(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })($('dsNav'))");
+  ok(await ev("!$('plNav').hidden"), "Vista › Barra de navegación la vuelve a mostrar");
+  await ev("DSU.navH = false; DSU.navPos = null; dsGuardarPref(); plNavPoner(); 1");
+  await clic('[data-ed="aceptar"]');
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();
