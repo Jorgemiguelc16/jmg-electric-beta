@@ -1135,7 +1135,9 @@ function plPuntoActual() {
       inc = (DSU.polarInc * Math.PI) / 180,
       a = Math.atan2(dy, dx),
       ak = Math.round(a / inc) * inc;
-    if (dist * PLV.s > 12 * plDpr() && Math.abs(Math.sin(a - ak)) * dist * PLV.s < 7 * plDpr()) {
+    // Imán: a menos de 14 píxeles de la dirección, o a menos de 3° de ella
+    const da = Math.abs(Math.atan2(Math.sin(a - ak), Math.cos(a - ak)));
+    if (dist * PLV.s > 10 * plDpr() && (Math.sin(da) * dist * PLV.s < 14 * plDpr() || da < (3 * Math.PI) / 180)) {
       const l = dist * Math.cos(a - ak);
       p = [u[0] + l * Math.cos(ak), u[1] + l * Math.sin(ak)];
       PLH.polar = { u, ang: ak };

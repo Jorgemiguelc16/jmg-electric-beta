@@ -1789,6 +1789,47 @@ function dsVentanaCond(el) {
     }
   );
 }
+// Transportador: círculo con rayitas cada «paso» grados, la del ángulo actual resaltada, y el arco desde 0° hasta él
+// (rastreo polar y giro de símbolos). libre: el ángulo no está enganchado a una rayita
+function dsTransportador(g, X, Y, ang, paso, col, d, libre) {
+  const R = 34 * d,
+    p = Math.max(1, paso || 15),
+    // Con pasos muy finos, las rayitas cada 15° (si no, no se distinguen)
+    pr = p < 5 ? 15 : p;
+  g.save();
+  g.strokeStyle = col;
+  g.fillStyle = col;
+  g.globalAlpha = 0.35;
+  g.lineWidth = 1 * d;
+  g.beginPath();
+  g.arc(X, Y, R, 0, 2 * Math.PI);
+  g.stroke();
+  for (let a = 0; a < 360; a += pr) {
+    const t = (a * Math.PI) / 180,
+      l = a % 90 === 0 ? 9 * d : a % 45 === 0 ? 7 * d : 4 * d;
+    g.beginPath();
+    g.moveTo(X + R * Math.cos(t), Y - R * Math.sin(t));
+    g.lineTo(X + (R + l) * Math.cos(t), Y - (R + l) * Math.sin(t));
+    g.stroke();
+  }
+  // Arco de 0° al ángulo actual y la rayita actual, resaltados
+  const n = ((ang % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  g.globalAlpha = 0.85;
+  g.lineWidth = 2 * d;
+  g.beginPath();
+  g.arc(X, Y, R * 0.55, 0, -n, true);
+  g.stroke();
+  g.beginPath();
+  g.moveTo(X + (R - 6 * d) * Math.cos(n), Y - (R - 6 * d) * Math.sin(n));
+  g.lineTo(X + (R + 12 * d) * Math.cos(n), Y - (R + 12 * d) * Math.sin(n));
+  g.stroke();
+  if (!libre) {
+    g.beginPath();
+    g.arc(X + R * Math.cos(n), Y - R * Math.sin(n), 3 * d, 0, 2 * Math.PI);
+    g.fill();
+  }
+  g.restore();
+}
 // Texto breve con los datos de un elemento (información al pasar el cursor)
 function dsInfoEl(el) {
   const f = EPL.f;
@@ -2339,34 +2380,83 @@ function dsSobre(g) {
       g.restore();
     }
   }
-  // Rastreo polar: la guía desde el punto anterior y su ángulo
+  // Rastreo polar: transportador en el punto anterior, la guía en la dirección exacta y el imán en el cursor
   if (PLH.polar && q) {
     const { u, ang } = PLH.polar,
       [X0, Y0] = plAPant(u[0], u[1]),
+      [Xq, Yq] = plAPant(q[0], q[1]),
       L = 4000 * d,
-      gv = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
+      gv = PL_OSCURO ? "#7ee08a" : "#1f8a3a",
+      deg = Math.round(((((ang * 180) / Math.PI) % 360) + 360) % 360);
+    dsTransportador(g, X0, Y0, ang, DSU.polarInc, gv, d);
     g.save();
     g.strokeStyle = gv;
-    g.globalAlpha = 0.7;
+    // Guía: firme hasta el cursor, a trazos más allá
+    g.globalAlpha = 0.85;
+    g.lineWidth = 1.2 * d;
+    g.beginPath();
+    g.moveTo(X0, Y0);
+    g.lineTo(Xq, Yq);
+    g.stroke();
+    g.globalAlpha = 0.45;
     g.lineWidth = 1 * d;
     g.setLineDash([6 * d, 4 * d]);
     g.beginPath();
-    g.moveTo(X0, Y0);
+    g.moveTo(Xq, Yq);
     g.lineTo(X0 + L * Math.cos(ang), Y0 - L * Math.sin(ang));
     g.stroke();
+    g.setLineDash([]);
+    // Imán: rombo en el punto que toma el cursor
+    g.globalAlpha = 0.9;
+    g.lineWidth = 1.5 * d;
+    const r = 5 * d;
+    g.beginPath();
+    g.moveTo(Xq, Yq - r);
+    g.lineTo(Xq + r, Yq);
+    g.lineTo(Xq, Yq + r);
+    g.lineTo(Xq - r, Yq);
+    g.closePath();
+    g.stroke();
     g.restore();
-    const [Xq, Yq] = plAPant(q[0], q[1]),
-      deg = Math.round(((((ang * 180) / Math.PI) % 360) + 360) % 360);
-    g.font = `500 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
+    g.save();
+    g.globalAlpha = 0.75;
+    g.font = `600 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
     plEtiqueta(
       g,
-      `Polar ${deg}° · ${plFm(Math.hypot(q[0] - u[0], q[1] - u[1]))} m`,
+      `${deg}° · ${plFm(Math.hypot(q[0] - u[0], q[1] - u[1]))} m`,
       Xq + 12 * d,
       Yq + 10 * d,
       gv,
       "left",
       "top"
     );
+    g.restore();
+  }
+  // Girar un símbolo con su pinzamiento: transportador alrededor del símbolo con el ángulo exacto
+  const ag = PLH.agarre;
+  if (ag && ag.t === "giro" && ag.mov) {
+    const el = dsD().els.find(e => e.id === ag.id);
+    if (el) {
+      const [X, Y] = plAPant(el.x, el.y),
+        paso = PLH.libre ? (DSU.giro ? 0 : 15) : DSU.giro,
+        // El ángulo del símbolo (el mismo de la etiqueta)
+        a = ((el.r || 0) * Math.PI) / 180,
+        gv = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
+      dsTransportador(g, X, Y, a, paso || 15, gv, d, !paso);
+      g.save();
+      g.globalAlpha = 0.75;
+      g.font = `600 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
+      plEtiqueta(
+        g,
+        `${+(el.r || 0).toFixed(1)}°${paso ? ` · de ${paso}° en ${paso}°` : " · libre"}`,
+        X + 48 * d,
+        Y - 10 * d,
+        gv,
+        "left",
+        "bottom"
+      );
+      g.restore();
+    }
   }
   // Marco de selección: de izquierda a derecha, ventana (lo que queda dentro); al revés, captura (lo que toca)
   const mc = PLH.marco;
