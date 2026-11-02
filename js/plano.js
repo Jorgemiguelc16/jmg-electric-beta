@@ -57,7 +57,9 @@ const PLH = {
   // Salida del tablero donde empezó la tubería en curso (su circuito)
   cirIni: null,
   // Artefacto donde empieza la tubería en curso
-  conIni: null
+  conIni: null,
+  // Guía del rastreo polar
+  polar: null
 };
 const plBase = $("plBase"),
   plSobre = $("plSobre"),
@@ -247,7 +249,10 @@ function edCerrar() {
 }
 // Un cambio en la copia del editor: entra a su historial de deshacer
 function edCambio() {
-  if (EPL && EPL.dis) dsReconectar();
+  if (EPL && EPL.dis) {
+    dsReconectar();
+    dsPropagarCircuitos();
+  }
   const s = edSnap();
   if (ED.hist[ED.hist.length - 1] !== s) {
     ED.hist.push(s);
@@ -812,6 +817,10 @@ function plSobreDibujar() {
       g.lineTo(X + r, Y + r);
       g.moveTo(X + r, Y - r);
       g.lineTo(X - r, Y + r);
+    } else if (k === 10) {
+      g.rect(X - r * 1.3, Y - r * 0.8, r * 2.6, r * 1.6);
+      g.moveTo(X - r * 1.3, Y + r * 0.8);
+      g.lineTo(X + r * 1.3, Y - r * 0.8);
     } else if (k === 9) {
       g.arc(X, Y, r * 1.1, 0, 2 * Math.PI);
       g.moveTo(X + r * 0.5, Y);
@@ -832,7 +841,9 @@ function plSobreDibujar() {
         ? `Salida ${sal.cir}${sal.nom ? " · " + sal.nom : ""}`
         : k === 9 && sal
           ? `Conectar a: ${sal.nom.toLowerCase()}`
-          : PL_ENG[k] || "",
+          : k === 10 && sal
+            ? `Clic: elegir la salida de ${sal.nom}`
+            : PL_ENG[k] || "",
       X + 12 * d,
       Y + 10 * d,
       verde,
@@ -883,9 +894,10 @@ const PL_ENG = {
   6: "Perpendicular",
   7: "Intersección",
   8: "Salida de circuito",
-  9: "Conexión"
+  9: "Conexión",
+  10: "Tablero"
 };
-const PL_REF = { 1: "fin", 2: "med", 3: "cen", 4: "ins", 5: "cer", 6: "per", 7: "int", 9: "con" };
+const PL_REF = { 1: "fin", 2: "med", 3: "cen", 4: "ins", 5: "cer", 6: "per", 7: "int", 9: "con", 10: "con" };
 const plDistPS = (x, y, ax, ay, bx, by) => {
   const dx = bx - ax,
     dy = by - ay,
@@ -979,7 +991,11 @@ function plEnganche(x, y) {
   if (vale(9)) {
     const c = dsEngancheCon(x, y, r);
     if (c) {
-      const sal = dsPuntosEnganche().find(q => q[2] === 8 && Math.hypot(q[0] - x, q[1] - y) < r);
+      // Sobre el cuerpo del tablero: el menú de sus salidas; fuera de él, la salida más cercana
+      if (c[2] === 10 && dsTableroEn(x, y, 0)) return c;
+      const sal = dsPuntosEnganche()
+        .filter(q => q[2] === 8 && Math.hypot(q[0] - x, q[1] - y) < r)
+        .sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y))[0];
       return sal || c;
     }
   }
@@ -1057,9 +1073,23 @@ function plPuntoActual() {
     PLH.pts[PLH.pts.length - 1] ||
     (PLH.arr && PLH.arr.base) ||
     (PLH.agarre && !["m", "o", "giro", "letra"].includes(PLH.agarre.t) ? [PLH.agarre.x, PLH.agarre.y] : null);
+  PLH.polar = null;
   if (u && $("plOrto").checked && !PLH.eng) {
     if (Math.abs(p[0] - u[0]) > Math.abs(p[1] - u[1])) p = [p[0], u[1]];
     else p = [u[0], p[1]];
+  } else if (u && DSU.polar && !PLH.eng && !PLH.libre && (PLH.h || PLH.arr)) {
+    // Rastreo polar: cerca de un múltiplo del ángulo elegido, el cursor se alinea a esa dirección
+    const dx = p[0] - u[0],
+      dy = p[1] - u[1],
+      dist = Math.hypot(dx, dy),
+      inc = (DSU.polarInc * Math.PI) / 180,
+      a = Math.atan2(dy, dx),
+      ak = Math.round(a / inc) * inc;
+    if (dist * PLV.s > 12 * plDpr() && Math.abs(Math.sin(a - ak)) * dist * PLV.s < 7 * plDpr()) {
+      const l = dist * Math.cos(a - ak);
+      p = [u[0] + l * Math.cos(ak), u[1] + l * Math.sin(ak)];
+      PLH.polar = { u, ang: ak };
+    }
   }
   return p;
 }
@@ -1597,7 +1627,7 @@ plLienzo.addEventListener("dblclick", e => {
   }
 });
 // Herramientas que aceptan una longitud escrita (desde el último punto, en la dirección del cursor)
-const PL_CON_LONG = ["dist", "rec", "lin", "pol", "rect", "cir", "tubT", "tubP"];
+const PL_CON_LONG = ["dist", "rec", "lin", "pol", "rect", "cir", "tubT", "tubP", "fila"];
 function plLongitudEscrita(tecla) {
   plPedir(
     PLH.h === "cir" ? "Radio (m)" : "Longitud del tramo (m)",
@@ -1700,6 +1730,9 @@ addEventListener("keydown", e => {
   } else if (e.key === "F3" || e.key === "F8") {
     e.preventDefault();
     edAlternar(e.key === "F3" ? "plSnap" : "plOrto");
+  } else if (e.key === "F10") {
+    e.preventDefault();
+    dsAlternarRejilla("polar", true);
   } else if (e.key === "F7" || e.key === "F9") {
     e.preventDefault();
     dsAlternarRejilla(e.key === "F7" ? "rej" : "forz", true);
@@ -1858,6 +1891,7 @@ function edMenuAbrir(e) {
   const [X, Y] = plMouse(e),
     p = plADib(X, Y),
     D = dsD();
+  ED_MENU.p = p;
   if (!PLH.h && D) {
     const id = dsHit(p[0], p[1], (6 * plDpr()) / PLV.s);
     if (id && !DS_SEL.has(id)) {
@@ -1891,6 +1925,8 @@ function edMenuAbrir(e) {
     b("cortar", "Cortar", "Ctrl+X");
     b("pegar", "Pegar", "Ctrl+V", DS_PORTA.length > 0);
     b("duplicar", "Duplicar");
+    b("fila", "Copiar en fila…");
+    b("espejo", "Espejo…");
     b("borrar", "Borrar", "Supr");
     sep();
     b("girar", `Girar ${DSU.giro || 90}° a la izquierda`, "R");
@@ -1898,6 +1934,7 @@ function edMenuAbrir(e) {
     b("g180", "Girar 180°");
     b("gang", "Girar un ángulo…");
     sep();
+    if (sel.some(dsConEnc)) b("enc", "Letra de encendido (a, b, c…)…");
     if (sel.some(el => el.dt)) b("letra0", "Letra a su lugar");
     if (sel.some(el => el.col)) b("colcapa", "Quitar el color propio");
     b(
@@ -1927,6 +1964,7 @@ function edMenuAbrir(e) {
     b("pegar", "Pegar", "Ctrl+V", DS_PORTA.length > 0);
     b("todo", "Seleccionar todo el diseño", "Ctrl+A", !!(D && D.els.length));
     b("biblio", "Biblioteca de símbolos…", "B");
+    b("ley", "Insertar la leyenda aquí", "", !!(D && D.els.length));
     sep();
     b("ajustar", "Ajustar a la pantalla");
     if (EPL.ocultas.length) b("mostrar", "Mostrar todas las capas");
@@ -1948,14 +1986,40 @@ function edMenuAbrir(e) {
   ED_MENU.style.left = Math.max(2, Math.min(x, ed.width / S - w - 4)) + "px";
   ED_MENU.style.top = Math.max(2, y + h > ed.height / S - 4 ? y - h : y) + "px";
 }
-const edMenuCerrar = () => (ED_MENU.hidden = true);
+const edMenuCerrar = () => {
+  ED_MENU.hidden = true;
+  ED_MENU.fn = null;
+};
+// Posición del menú: junto a un punto de la pantalla y dentro del editor
+function edMenuPos(cx, cy) {
+  const ed = $("editor").getBoundingClientRect(),
+    S = parseFloat(getComputedStyle($("ws")).zoom) || 1,
+    w = ED_MENU.offsetWidth,
+    h = ED_MENU.offsetHeight,
+    x = (cx - ed.left) / S,
+    y = (cy - ed.top) / S;
+  ED_MENU.style.left = Math.max(2, Math.min(x, ed.width / S - w - 4)) + "px";
+  ED_MENU.style.top = Math.max(2, y + h > ed.height / S - 4 ? y - h : y) + "px";
+}
+// Menú con opciones propias junto a un punto del dibujo; fn recibe el número de la opción elegida (data-edm="sal:n")
+function edMenuLista(p, html, fn) {
+  ED_MENU.innerHTML = html;
+  ED_MENU.hidden = false;
+  const [X, Y] = plAPant(p[0], p[1]),
+    r = plBase.getBoundingClientRect();
+  edMenuPos(r.left + (X * r.width) / plBase.width + 8, r.top + (Y * r.height) / plBase.height + 8);
+  ED_MENU.fn = fn;
+}
 // Nombre de un elemento del diseño para el título del menú
 const dsNomEl = el =>
   el.t === "sim"
     ? esc(DS_CAT[el.k] ? DS_CAT[el.k].n : el.k)
     : { tub: "Tubería", lin: "Línea", txt: "Texto", cir: "Círculo", cot: "Cota", dir: "Directriz" }[el.t] || "Elemento";
 function edMenuAccion(a) {
+  const fn = ED_MENU.fn;
   edMenuCerrar();
+  if (a.startsWith("sal:")) return fn && fn(+a.slice(4));
+  if (a.startsWith("tablero:")) return tabAbrir(a.slice(8));
   const sel = dsD() ? dsSel().filter(dsEditable) : [];
   if (a === "terminar") return PLH.h === "rec" ? plTerminarRecorrido() : dsTerminar();
   if (a === "cancelar" || a === "soltar") {
@@ -1991,6 +2055,16 @@ function edMenuAccion(a) {
     sel.forEach(el => delete el[a === "colcapa" ? "col" : "dt"]);
     return edCambio();
   }
+  if (a === "enc")
+    return plPedir("Letra de encendido (vacío: quitar)", sel.find(dsConEnc).enc || "a", v => {
+      plPedir(null);
+      const l = String(v)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")
+        .slice(0, 3);
+      sel.filter(dsConEnc).forEach(el => (l ? (el.enc = l) : delete el.enc));
+      edCambio();
+    });
   if (a === "acapa") {
     sel.forEach(el => (el.capa = dsD().actual));
     return edCambio();
@@ -2027,6 +2101,15 @@ function edMenuAccion(a) {
   }
   if (a === "todo") return dsTodo();
   if (a === "biblio") return bibAbrir();
+  if (a === "fila" || a === "espejo") return dsIniciarCopia(a);
+  if (a === "ley") {
+    const q = ED_MENU.p || plPuntoActual();
+    if (!q) return;
+    dsCapa(DS_SIS.txt.capa);
+    DS_SEL.clear();
+    DS_SEL.add(dsAgregar({ t: "ley", x: q[0], y: q[1], tit: "LEYENDA", capa: DS_SIS.txt.capa }).id);
+    return edCambio();
+  }
   if (a === "ajustar") return plAjustar();
   if (a === "mostrar") {
     EPL.ocultas = [];
@@ -2186,7 +2269,7 @@ $("editor").addEventListener("click", e => {
   }
   if (tg) {
     const v = tg.dataset.edtg;
-    return v === "rej" || v === "forz" ? dsAlternarRejilla(v, false) : edAlternar(v, false);
+    return v === "rej" || v === "forz" || v === "polar" ? dsAlternarRejilla(v, v === "polar") : edAlternar(v, false);
   }
   const b = e.target.closest("[data-pl]");
   if (!b || b.disabled) return;
@@ -2211,6 +2294,7 @@ $("editor").addEventListener("click", e => {
   }
   if (a === "capas") return capasAbrir();
   if (a === "biblio") return bibAbrir();
+  if (a === "fila" || a === "espejo") return dsIniciarCopia(a);
   if (a === "girar") return dsGirar();
   if (a === "borrar") return edBorrar(false);
   if (a === "copiar") {

@@ -957,6 +957,23 @@
   text-transform: uppercase;
   color: var(--ws-text2, #66737f);
 }
+/* Conductores de la tubería: fases, neutro y tierra */
+.ds-cond {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ds-cond select {
+  width: auto;
+}
+.ds-cond label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: inherit;
+}
 /* Color propio de un elemento del diseño */
 .ds-colr {
   display: flex;

@@ -241,7 +241,18 @@ DS_GRUPOS.forEach(g =>
     .forEach((k, i) => (DS_COLT[k] = DS_PAL[i % DS_PAL.length]))
 );
 // Color con que se dibuja un elemento: el suyo, el de su tipo (si está activado) o el de su capa
-const dsColorEl = (el, cap) => el.col || (DSU.colTipo && el.t === "sim" && DS_COLT[el.k]) || cap.col;
+// Color de un circuito: C-1, C-2… con los colores de la paleta, en orden
+const dsColCir = cir => {
+  const m = /(\d+)/.exec(cir || "");
+  let i = m ? +m[1] - 1 : 0;
+  if (!m) for (const ch of String(cir)) i += ch.charCodeAt(0);
+  return DS_PAL[((i % DS_PAL.length) + DS_PAL.length) % DS_PAL.length];
+};
+const dsColorEl = (el, cap) =>
+  el.col ||
+  (DSU.color === "tipo" && el.t === "sim" && DS_COLT[el.k]) ||
+  (DSU.color === "cir" && el.cir && (el.t === "sim" || el.t === "tub") && dsColCir(el.cir)) ||
+  cap.col;
 const DS_LT = { cont: "Continua", trazos: "Trazos", punto: "Trazo y punto" };
 // Grosores de línea de las capas (mm); 0 es el fino de siempre (una línea normal, sin grosor), como en AutoCAD
 const DS_GROSORES = [0, 0.25, 0.35, 0.5, 0.7, 1];
@@ -262,7 +273,8 @@ const DS_HERR = {
   tubP: "Tubería en piso",
   cotA: "Cota alineada",
   cotL: "Cota lineal",
-  dir: "Directriz"
+  dir: "Directriz",
+  ley: "Leyenda"
 };
 Object.keys(DS_HERR).forEach(k => (PL_NOMH[k] = DS_HERR[k]));
 const dsEsTub = h => h === "tubT" || h === "tubP";
@@ -325,14 +337,23 @@ const DSU = {
   alinear: true,
   curva: true,
   // Cada tipo de símbolo con su color; paso del giro (0: libre)
-  colTipo: true,
+  color: "tipo",
   giro: 0,
   // Marcar lo que no está conectado
-  sueltos: true
+  sueltos: true,
+  // Marcas de conductores en las tuberías; rastreo polar y su ángulo
+  marcas: true,
+  polar: true,
+  polarInc: 45
 };
 try {
   const g = JSON.parse(localStorage.getItem("jmg-electric-editor-rejilla") || "{}");
   Object.assign(DSU, g, { ref: { ...DSU.ref, ...(g.ref || {}) } });
+  // Antes: casilla «Color por tipo de símbolo»
+  if (g.colTipo === false && !g.color) DSU.color = "capa";
+  delete DSU.colTipo;
+  if (!["capa", "tipo", "cir"].includes(DSU.color)) DSU.color = "tipo";
+  if (![15, 30, 45, 90].includes(DSU.polarInc)) DSU.polarInc = 45;
 } catch (e) {}
 function dsGuardarPref() {
   try {
@@ -690,7 +711,122 @@ const dsCaja = pts => {
     ys = pts.filter((v, i) => i % 2 === 1);
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
 };
+/* ---------- Leyenda automática ----------
+   Tabla con lo que usa el diseño: cada símbolo (con su dibujo, nombre y código de la Norma DGE), las tuberías en
+   techo y en piso y los conductores con marca. Se arma sola con los elementos del diseño; medidas en el papel (mm). */
+const DS_LEY = { w: [16, 84, 20], tit: 7, cab: 5, fila: 9, txt: 2.2 };
+function dsFilasLey() {
+  const D = dsD(),
+    usados = new Set(),
+    tubs = { techo: false, piso: false },
+    cond = { f: false, n: false, t: false };
+  D.els.forEach(el => {
+    if (el.t === "sim" && DS_CAT[el.k]) usados.add(el.k);
+    if (el.t === "tub") {
+      tubs[el.modo === "piso" ? "piso" : "techo"] = true;
+      if (el.cond) {
+        if (el.cond.f) cond.f = true;
+        if (el.cond.n) cond.n = true;
+        if (el.cond.t) cond.t = true;
+      }
+    }
+  });
+  const out = Object.keys(DS_CAT)
+    .filter(k => usados.has(k))
+    .map(k => ({ k, n: DS_CAT[k].n, c: DS_CAT[k].c }));
+  if (tubs.techo) out.push({ tub: "techo", n: "Tubería empotrada en techo o pared", c: "" });
+  if (tubs.piso) out.push({ tub: "piso", n: "Tubería empotrada en piso", c: "" });
+  if (cond.f) out.push({ cond: { f: 1 }, n: "Conductor de fase", c: "" });
+  if (cond.n) out.push({ cond: { n: true }, n: "Conductor neutro", c: "09-93-01" });
+  if (cond.t) out.push({ cond: { t: true }, n: "Conductor de protección (tierra)", c: "09-93-02" });
+  return out;
+}
+// Tamaño de la leyenda en el dibujo
+function dsTamLey() {
+  const m = dsMm(1),
+    L = DS_LEY,
+    n = Math.max(1, dsFilasLey().length);
+  return [(L.w[0] + L.w[1] + L.w[2]) * m, (L.tit + L.cab + n * L.fila) * m];
+}
+function dsDibLeyenda(g, el, col, s, lw) {
+  const m = dsMm(1),
+    L = DS_LEY,
+    filas = dsFilasLey(),
+    [W, H] = dsTamLey(),
+    P = (a, b) => plAPant(el.x + a * m, el.y - b * m),
+    hp = L.txt * m * s,
+    x1 = L.w[0],
+    x2 = L.w[0] + L.w[1],
+    xw = W / m;
+  g.save();
+  g.strokeStyle = col;
+  g.fillStyle = col;
+  g.lineWidth = lw;
+  g.setLineDash([]);
+  const linea = (a, b, c, d) => {
+    const [X0, Y0] = P(a, b),
+      [X1, Y1] = P(c, d);
+    g.beginPath();
+    g.moveTo(X0, Y0);
+    g.lineTo(X1, Y1);
+    g.stroke();
+  };
+  // Texto que se achica si no cabe en su columna (ancho en mm)
+  const texto = (t, a, b, al, peso = "", ancho = 0) => {
+    if (hp < 3) return;
+    const [X, Y] = P(a, b);
+    g.font = `${peso}${hp / 0.72}px Arial, sans-serif`;
+    const w = g.measureText(t).width,
+      max = ancho * m * s;
+    if (ancho && w > max) g.font = `${peso}${((hp / 0.72) * max) / w}px Arial, sans-serif`;
+    g.textAlign = al;
+    g.textBaseline = "middle";
+    g.fillStyle = col;
+    g.fillText(t, X, Y);
+  };
+  const [X0, Y0] = P(0, 0);
+  g.strokeRect(X0, Y0, W * s, H * s);
+  linea(0, L.tit, xw, L.tit);
+  linea(0, L.tit + L.cab, xw, L.tit + L.cab);
+  linea(x1, L.tit, x1, H / m);
+  linea(x2, L.tit, x2, H / m);
+  texto(el.tit || "LEYENDA", xw / 2, L.tit / 2, "center", "700 ");
+  texto("SÍMBOLO", x1 / 2, L.tit + L.cab / 2, "center", "600 ");
+  texto("DESCRIPCIÓN", x1 + 2, L.tit + L.cab / 2, "left", "600 ");
+  texto("CÓDIGO DGE", (x2 + xw) / 2, L.tit + L.cab / 2, "center", "600 ", L.w[2] - 2);
+  filas.forEach((f, i) => {
+    const y = L.tit + L.cab + i * L.fila,
+      yc = y + L.fila / 2;
+    if (i) linea(0, y, xw, y);
+    texto(f.n, x1 + 2, yc, "left", "", L.w[1] - 4);
+    if (f.c) texto(f.c, (x2 + xw) / 2, yc, "center", "", L.w[2] - 2);
+    const [Xc, Yc] = P(x1 / 2, yc);
+    if (f.k) {
+      const c = plColorDis(dsColorEl({ t: "sim", k: f.k }, dsCapa(DS_SIS[DS_CAT[f.k].s].capa)));
+      dsDibSim(g, f.k, Xc, Yc, 0, Math.min(dsU() * s, ((L.fila - 2) * m * s) / 20), c, PL_FONDO, lw);
+    } else {
+      // Muestra de tubería (continua o a trazos) o de conductor con su marca
+      const a = el.x + 2 * m,
+        b = el.x + (x1 - 2) * m,
+        yy = el.y - yc * m,
+        mt = { pts: [a, yy, b, yy], cond: f.cond };
+      g.save();
+      g.strokeStyle = col;
+      if (f.tub === "piso") g.setLineDash([dsMm(3) * s, dsMm(1.5) * s]);
+      g.beginPath();
+      plRuta(g, mt.pts, false);
+      g.stroke();
+      g.restore();
+      if (f.cond) dsMarcas(g, mt, col, s, lw, 0.5);
+    }
+  });
+  g.restore();
+}
 function dsBBox(el) {
+  if (el.t === "ley") {
+    const [W, H] = dsTamLey();
+    return [el.x, el.y - H, el.x + W, el.y];
+  }
   if (el.t === "sim") {
     const b = dsBBs(el.k);
     return dsCaja(
@@ -734,6 +870,10 @@ function dsDistSeg(p, x, y) {
 // Líneas que forman un elemento (para tocarlo, engancharse y encajar símbolos en él)
 function dsLineas(el) {
   if (el.t === "lin" || el.t === "tub") return [dsCurva(el)];
+  if (el.t === "ley") {
+    const b = dsBBox(el);
+    return [[b[0], b[1], b[2], b[1], b[2], b[3], b[0], b[3], b[0], b[1]]];
+  }
   if (el.t === "cot") {
     const G = dsCotaGeo(el);
     return [[...G.pa, ...G.pb]];
@@ -773,7 +913,7 @@ function dsHit(x, y, r) {
         bb = dsBBs(el.k),
         t = r / u;
       if (a >= bb[0] - t && a <= bb[2] + t && b >= bb[1] - t && b <= bb[3] + t) return el.id;
-    } else if (el.t === "txt") {
+    } else if (el.t === "txt" || el.t === "ley") {
       const b = dsBBox(el);
       if (x >= b[0] - r && x <= b[2] + r && y >= b[1] - r && y <= b[3] + r) return el.id;
     } else {
@@ -795,7 +935,8 @@ function dsPuntosEnganche(lista) {
   if (!D) return out;
   for (const el of lista || D.els) {
     if (!dsVis(el)) continue;
-    if (el.t === "sim" || el.t === "txt") {
+    if (el.t === "ley") out.push([el.x, el.y, 4]);
+    else if (el.t === "sim" || el.t === "txt") {
       out.push([el.x, el.y, 4]);
       // Salidas de circuito del tablero (tipo 8), con su circuito
       if (el.k === "tab")
@@ -865,6 +1006,34 @@ const dsRadioCon = el => {
   return (f.r || Math.max(f.w, f.h)) * dsU();
 };
 const dsConecta = el => !!(el && el.t === "sim" && el.k !== "tab" && DS_CAT[el.k] && dsVis(el));
+// Tablero bajo el punto (dentro de su rectángulo, con r de tolerancia)
+function dsTableroEn(x, y, r) {
+  return (
+    (dsD() ? dsD().els : []).find(el => {
+      if (el.t !== "sim" || el.k !== "tab" || !dsVis(el)) return false;
+      const [a, b] = dsALocal(el, x, y),
+        bb = dsBBs("tab"),
+        t = r / dsU();
+      return a >= bb[0] - t && a <= bb[2] + t && b >= bb[1] - t && b <= bb[3] + t;
+    }) || null
+  );
+}
+// Invierte el sentido de una tubería (para que empiece en el tablero)
+function dsInvertirTub(el) {
+  const q = [];
+  for (let i = el.pts.length - 2; i >= 0; i -= 2) q.push(el.pts[i], el.pts[i + 1]);
+  el.pts = q;
+  if (el.b)
+    el.b = el.b
+      .slice(0, el.pts.length / 2 - 1)
+      .reverse()
+      .map(k => -k);
+  const c0 = el.c0;
+  if (el.c1) el.c0 = el.c1;
+  else delete el.c0;
+  if (c0) el.c1 = c0;
+  else delete el.c1;
+}
 // Artefacto que atrae un punto (x, y), con r de tolerancia
 function dsArtefactoEn(x, y, r) {
   let mejor = null,
@@ -896,7 +1065,11 @@ function dsEngancheCon(x, y, r) {
   const cx = dsContextoCon();
   if (!cx) return null;
   const el = dsArtefactoEn(x, y, r);
-  if (!el) return null;
+  if (!el) {
+    // Sobre el tablero (al dibujar una tubería): un clic muestra sus salidas para elegir una
+    const tb = dsEsTub(PLH.h) && dsTableroEn(x, y, r);
+    return tb ? [tb.x, tb.y, 10, { tabla: tb.id, nom: tb.nom || "el tablero" }] : null;
+  }
   const p = cx.ref ? dsBorde(el, cx.ref[0], cx.ref[1]) : dsCentroCon(el);
   return [p[0], p[1], 9, { con: el.id, nom: DS_CAT[el.k].n }];
 }
@@ -905,7 +1078,7 @@ function dsHeredar(t) {
   if (!t.cir) return;
   ["c0", "c1"].forEach(c => {
     const s = t[c] && dsD().els.find(e => e.id === t[c]);
-    if (s && !s.cir) {
+    if (s && s.k !== "tab" && !s.cir) {
       s.cir = t.cir;
       if (t.tab) s.tab = t.tab;
     }
@@ -927,12 +1100,47 @@ function dsReconectar() {
         // Una tubería que se arrastra sola (sin su artefacto) se desconecta al soltarla
         if (PLH.arr && DS_SEL.has(t.id) && !DS_SEL.has(s.id)) return;
         const i = c === "c0" ? 0 : n - 1,
-          j = c === "c0" ? 1 : n - 2,
-          p = dsBorde(s, t.pts[2 * j], t.pts[2 * j + 1]);
+          j = c === "c0" ? 1 : n - 2;
+        let p;
+        if (s.k === "tab") {
+          // En el tablero: la salida de su circuito (si el tablero ya no la tiene, se suelta)
+          const o = dsSalidasTab(s).find(q => q.n === t.cir);
+          if (!o) return delete t[c];
+          p = o.p;
+        } else p = dsBorde(s, t.pts[2 * j], t.pts[2 * j + 1]);
         t.pts[2 * i] = p[0];
         t.pts[2 * i + 1] = p[1];
       });
   });
+}
+// El circuito se propaga por lo conectado: de la tubería a sus artefactos y de ellos a las tuberías sin circuito
+function dsPropagarCircuitos() {
+  const D = dsD();
+  if (!D) return;
+  const por = new Map(D.els.map(e => [e.id, e])),
+    tubs = D.els.filter(e => e.t === "tub" && (e.c0 || e.c1));
+  for (let vuelta = 0, cambio = true; cambio && vuelta < 50; vuelta++) {
+    cambio = false;
+    tubs.forEach(t => {
+      const ss = [t.c0, t.c1].map(id => por.get(id)).filter(s => s && s.k !== "tab");
+      if (t.cir)
+        ss.forEach(s => {
+          if (!s.cir) {
+            s.cir = t.cir;
+            if (t.tab) s.tab = t.tab;
+            cambio = true;
+          }
+        });
+      else {
+        const s = ss.find(x => x.cir);
+        if (s) {
+          t.cir = s.cir;
+          if (s.tab) t.tab = s.tab;
+          cambio = true;
+        }
+      }
+    });
+  }
 }
 // Tuberías que se mueven o giran sin su artefacto: dejan de estar conectadas a él
 function dsDesligar(sel) {
@@ -990,9 +1198,24 @@ function dsConectarAuto() {
   if (!D) return 0;
   let k = 0;
   const tol = dsMm(1);
+  // Puntas sobre una salida de tablero: la tubería queda saliendo de ella
+  const sal = D.els.filter(e => e.k === "tab").flatMap(tb => dsSalidasTab(tb).map(o => ({ ...o, tb })));
+  const salEn = (x, y) => sal.find(o => Math.hypot(o.p[0] - x, o.p[1] - y) < tol * 3);
   D.els.forEach(t => {
     if (t.t !== "tub") return;
     const n = t.pts.length;
+    if (!t.c0 || !t.c1) {
+      const a = !t.c0 && salEn(t.pts[0], t.pts[1]),
+        b = !a && !t.c1 && salEn(t.pts[n - 2], t.pts[n - 1]);
+      if (b) dsInvertirTub(t);
+      const o = a || b;
+      if (o) {
+        t.c0 = o.tb.id;
+        t.tab = o.tb.id;
+        t.cir = o.n;
+        k++;
+      }
+    }
     if (!t.c0 && !t.tab) {
       const s = dsArtefactoEn(t.pts[0], t.pts[1], tol);
       if (s && s.id !== t.c1) {
@@ -1112,6 +1335,7 @@ function dsPintar(g) {
         continue;
       }
       dsDibSim(g, el.k, X, Y, ((el.r || 0) * Math.PI) / 180, u, col, PL_FONDO, dsGrosor(cap), el.dt);
+      if (el.enc) dsDibEnc(g, el, col, s);
       if (el.k === "tab") dsDibSalidas(g, el, col, u, dsGrosor(cap));
     } else if (el.t === "txt") {
       const hp = el.ht * s;
@@ -1126,7 +1350,8 @@ function dsPintar(g) {
       g.textBaseline = "alphabetic";
       g.fillText(el.s, 0, 0);
       g.restore();
-    } else if (el.t === "cot") dsDibCota(g, el, col, s, dsGrosor(cap));
+    } else if (el.t === "ley") dsDibLeyenda(g, el, col, s, dsGrosor(cap));
+    else if (el.t === "cot") dsDibCota(g, el, col, s, dsGrosor(cap));
     else if (el.t === "dir") dsDibDir(g, el, col, s, dsGrosor(cap));
     else {
       g.strokeStyle = col;
@@ -1140,6 +1365,7 @@ function dsPintar(g) {
       g.stroke();
       g.setLineDash([]);
       if (el.t === "tub" && D.etq !== "no") dsEtiquetasTub(g, el, col, s);
+      if (el.t === "tub" && el.cond && DSU.marcas) dsMarcas(g, el, col, s, dsGrosor(cap));
     }
   }
   g.restore();
@@ -1175,6 +1401,80 @@ function dsEtiquetasTub(g, el, col, s) {
   if (dsD().etq === "tramo") T.forEach(t => etq(t, `${fmt(t.L * EPL.f, 2)} m`));
   else if (T.length) etq(T[Math.floor((T.length - 1) / 2)], `${fmt(dsLargo(el) * EPL.f, 2)} m`);
 }
+/* Marcas de conductores sobre la tubería (Norma DGE): una raya oblicua por fase; el neutro con un punto en su
+   extremo (09-93-01) y la tierra con un tope (09-93-02). Van juntas, a un tercio del recorrido (en el medio está
+   la longitud). Medidas en el papel (mm), como los textos. */
+function dsMarcas(g, el, col, s, lw, frac = 0.33) {
+  const c = el.cond,
+    tipos = [...Array(c.f || 0).fill("f"), ...(c.n ? ["n"] : []), ...(c.t ? ["t"] : [])];
+  if (!tipos.length || dsMm(1) * s < 1.2) return;
+  // Punto a un tercio del largo y dirección de la tubería allí
+  const P = dsCurva(el);
+  let tot = 0;
+  for (let i = 2; i < P.length; i += 2) tot += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]);
+  let falta = tot * frac,
+    pt = [P[0], P[1]],
+    ang = 0;
+  for (let i = 2; i < P.length; i += 2) {
+    const l = Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]);
+    ang = Math.atan2(P[i + 1] - P[i - 1], P[i] - P[i - 2]);
+    if (l >= falta) {
+      pt = [P[i - 2] + ((P[i] - P[i - 2]) * falta) / l, P[i - 1] + ((P[i + 1] - P[i - 1]) * falta) / l];
+      break;
+    }
+    falta -= l;
+  }
+  const m = dsMm(1),
+    ux = Math.cos(ang),
+    uy = Math.sin(ang),
+    // Del papel (a lo largo, a través) al lienzo
+    aP = (a, b) => plAPant(pt[0] + (a * ux - b * uy) * m, pt[1] + (a * uy + b * ux) * m),
+    sep = 1.1;
+  g.save();
+  g.strokeStyle = col;
+  g.fillStyle = col;
+  g.lineWidth = lw;
+  g.setLineDash([]);
+  tipos.forEach((t, k) => {
+    const a = (k - (tipos.length - 1) / 2) * sep,
+      [x0, y0] = aP(a - 0.5, -1.3),
+      [x1, y1] = aP(a + 0.5, 1.3);
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.lineTo(x1, y1);
+    if (t === "t") {
+      const [x2, y2] = aP(a + 1.3, 1.3);
+      g.lineTo(x2, y2);
+    }
+    g.stroke();
+    if (t === "n") {
+      g.beginPath();
+      g.arc(x1, y1, 0.38 * m * s, 0, 2 * Math.PI);
+      g.fill();
+    }
+  });
+  g.restore();
+}
+// Letra de encendido (a, b, c…) junto al artefacto, arriba a la izquierda, siempre derecha
+function dsDibEnc(g, el, col, s) {
+  const hp = dsMm(2.2) * s;
+  if (hp < 4) return;
+  const b = dsBBox(el),
+    [X, Y] = plAPant(b[0], b[3]);
+  g.save();
+  g.font = `italic 600 ${hp / 0.72}px Arial, sans-serif`;
+  g.textAlign = "right";
+  g.textBaseline = "bottom";
+  g.lineJoin = "round";
+  g.lineWidth = 3 * plDpr();
+  g.strokeStyle = PL_FONDO;
+  g.strokeText(el.enc, X, Y + hp * 0.2);
+  g.fillStyle = col;
+  g.fillText(el.enc, X, Y + hp * 0.2);
+  g.restore();
+}
+// Grupos con letra de encendido
+const dsConEnc = el => el.t === "sim" && DS_CAT[el.k] && ["Iluminación", "Interruptores"].includes(DS_CAT[el.k].g);
 /* Salidas de circuito del tablero (ventana Tablero, doble clic): un trazo corto desde el frente del tablero (el lado
    opuesto al muro) hasta el punto de conexión, con su nombre (C-1, C-2…). Hasta 10 por fila; desde la 11, otra fila
    más adelante y corrida medio paso, para que los trazos no se crucen. En unidades del símbolo y en el dibujo. */
@@ -1213,6 +1513,8 @@ function dsDibSalidas(g, el, col, u, lw) {
   g.strokeStyle = col;
   g.lineWidth = lw;
   S.forEach(o => {
+    const co = DSU.color === "cir" && !el.col ? plColorDis(dsColCir(o.n)) : col;
+    g.strokeStyle = co;
     const [x0, y0] = aPant(o.a, o.b0),
       [x1, y1] = aPant(o.a, o.b + 1),
       [xc, yc] = aPant(o.a, o.b);
@@ -1237,7 +1539,7 @@ function dsDibSalidas(g, el, col, u, lw) {
     g.font = `600 ${ht / 0.72}px Arial, sans-serif`;
     g.textAlign = der ? "left" : "right";
     g.textBaseline = "middle";
-    g.fillStyle = col;
+    g.fillStyle = co;
     g.fillText(o.n, 0, 0);
     g.restore();
   });
@@ -1299,6 +1601,7 @@ function dsPosGiro(el) {
   return dsAMundo(el, 0, DS_BB[el.k][1] - 7);
 }
 function dsAgarres(el) {
+  if (el.t === "ley") return [{ t: "ins", x: el.x, y: el.y }];
   if (el.t === "sim" || el.t === "txt") {
     const out = [{ t: "ins", x: el.x, y: el.y }],
       [gx, gy] = dsPosGiro(el);
@@ -1539,7 +1842,7 @@ function dsSobre(g) {
   if (DS_HERR[h] && PLH.pts.length && q) {
     let pts = PLH.pts;
     const ini = dsEsTub(h) && PLH.conIni && dsD().els.find(e => e.id === PLH.conIni);
-    if (ini) {
+    if (ini && ini.k !== "tab") {
       const sg = pts[1] || q;
       pts = [dsBorde(ini, sg[0], sg[1]), ...pts.slice(1)];
     }
@@ -1586,6 +1889,79 @@ function dsSobre(g) {
       plEtiqueta(g, (h === "cir" ? "R " : "") + plFm(L) + " m", X, Y - 8 * d, col, "center", "bottom");
     }
   }
+  // Copiar en fila o espejo: fantasma de las copias y la línea de los dos puntos
+  if ((h === "fila" || h === "espejo") && PLH.copia && PLH.pts.length && q) {
+    const a = PLH.pts[0],
+      lista = dsD().els.filter(el => PLH.copia.ids.includes(el.id)),
+      gv = PL_OSCURO ? "#8fc1f0" : "#1f6fd6",
+      [Xa, Ya] = plAPant(a[0], a[1]),
+      [Xq, Yq] = plAPant(q[0], q[1]);
+    g.save();
+    g.strokeStyle = gv;
+    g.lineWidth = 1 * d;
+    g.setLineDash([6 * d, 4 * d]);
+    g.beginPath();
+    if (h === "espejo") {
+      const L = Math.hypot(Xq - Xa, Yq - Ya) || 1,
+        ex = ((Xq - Xa) / L) * 4000 * d,
+        ey = ((Yq - Ya) / L) * 4000 * d;
+      g.moveTo(Xa - ex, Ya - ey);
+      g.lineTo(Xa + ex, Ya + ey);
+    } else {
+      g.moveTo(Xa, Ya);
+      g.lineTo(Xq, Yq);
+    }
+    g.stroke();
+    g.setLineDash([]);
+    g.globalAlpha = 0.45;
+    const dx = q[0] - a[0],
+      dy = q[1] - a[1],
+      L = Math.hypot(dx, dy);
+    if (L > 1e-9)
+      lista.forEach(el => {
+        if (h === "fila")
+          for (let k = 1; k <= Math.min(PLH.copia.n, 60); k++)
+            dsFantasma(g, el, o => dsTrasladar(o, dx * k, dy * k), gv);
+        else dsFantasma(g, el, o => dsReflejar(o, a, dx / L, dy / L), gv);
+      });
+    g.restore();
+  }
+  // Leyenda que se va a colocar
+  if (h === "ley" && q) {
+    g.save();
+    g.globalAlpha = 0.5;
+    dsDibLeyenda(g, { x: q[0], y: q[1], tit: "LEYENDA" }, PL_OSCURO ? "#8fc1f0" : "#1f6fd6", PLV.s, plDpr());
+    g.restore();
+  }
+  // Rastreo polar: la guía desde el punto anterior y su ángulo
+  if (PLH.polar && q) {
+    const { u, ang } = PLH.polar,
+      [X0, Y0] = plAPant(u[0], u[1]),
+      L = 4000 * d,
+      gv = PL_OSCURO ? "#7ee08a" : "#1f8a3a";
+    g.save();
+    g.strokeStyle = gv;
+    g.globalAlpha = 0.7;
+    g.lineWidth = 1 * d;
+    g.setLineDash([6 * d, 4 * d]);
+    g.beginPath();
+    g.moveTo(X0, Y0);
+    g.lineTo(X0 + L * Math.cos(ang), Y0 - L * Math.sin(ang));
+    g.stroke();
+    g.restore();
+    const [Xq, Yq] = plAPant(q[0], q[1]),
+      deg = Math.round(((((ang * 180) / Math.PI) % 360) + 360) % 360);
+    g.font = `500 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
+    plEtiqueta(
+      g,
+      `Polar ${deg}° · ${plFm(Math.hypot(q[0] - u[0], q[1] - u[1]))} m`,
+      Xq + 12 * d,
+      Yq + 10 * d,
+      gv,
+      "left",
+      "top"
+    );
+  }
   // Marco de selección: de izquierda a derecha, ventana (lo que queda dentro); al revés, captura (lo que toca)
   const mc = PLH.marco;
   if (mc && mc.mov) {
@@ -1625,9 +2001,13 @@ function dsCotaNueva(q) {
 }
 
 /* ---------- Herramientas: colocar símbolos y dibujar ---------- */
-const dsEsHerr = h => !!h && (h.startsWith("col:") || !!DS_HERR[h]);
+const dsEsHerr = h => !!h && (h.startsWith("col:") || !!DS_HERR[h] || h === "fila" || h === "espejo");
 function dsOrden(h, n) {
   const libre = ` · <span class="pl-k">Mayús</span> sin enganche`;
+  if (h === "fila")
+    return `<b>Copiar en fila</b> (${PLH.copia ? PLH.copia.n : 0} copias) · ${n ? "Punto de la primera copia: la separación (escriba la distancia o haga clic)" : "Punto base"}${libre} · <span class="pl-k">Esc</span> salir`;
+  if (h === "espejo")
+    return `<b>Espejo</b> · ${n ? "Segundo punto de la línea de reflexión" : "Primer punto de la línea de reflexión"}${libre} · <span class="pl-k">Esc</span> salir`;
   if (h.startsWith("col:")) {
     const c = DS_CAT[h.slice(4)];
     return `<b>${c.n}</b> <span class="pl-cod">DGE ${c.c}</span> · clic para colocar${c.m && DSU.alinear ? " (se encaja en el muro)" : ""} · <span class="pl-k">R</span> girar${libre} · <span class="pl-k">Esc</span> terminar`;
@@ -1652,7 +2032,8 @@ function dsOrden(h, n) {
         : n === 1
           ? "Segundo punto"
           : "Posición de la línea de cota (arriba o abajo: horizontal; a un lado: vertical)",
-    dir: n ? "Dónde va el texto" : "Punta de la flecha"
+    dir: n ? "Dónde va el texto" : "Punta de la flecha",
+    ley: "Esquina superior izquierda de la leyenda"
   };
   return `<b>${DS_HERR[h]}</b> · ${T[h]}${libre} · <span class="pl-k">Esc</span> salir`;
 }
@@ -1663,6 +2044,14 @@ function dsAgregar(el) {
 }
 function dsPunto(p) {
   const h = PLH.h;
+  if (h === "fila" || h === "espejo") return dsPuntoCopia(p);
+  if (h === "ley") {
+    dsCapa(DS_SIS.txt.capa);
+    DS_SEL.clear();
+    DS_SEL.add(dsAgregar({ t: "ley", x: p[0], y: p[1], tit: "LEYENDA", capa: DS_SIS.txt.capa }).id);
+    edCambio();
+    return plHerr(null);
+  }
   if (h.startsWith("col:")) {
     const k = h.slice(4),
       c = DS_CAT[k],
@@ -1758,15 +2147,28 @@ function dsPunto(p) {
 }
 // Punto de una tubería: si empieza en un artefacto queda conectada a él; si llega a otro, esa tubería termina en
 // su borde y empieza otra desde él (con el mismo circuito), como se cablea de una salida a la siguiente
-function dsPuntoTub(p) {
-  const eng = PLH.eng,
-    con = eng && eng[2] === 9 ? eng[3].con : null,
+function dsPuntoTub(p, engX) {
+  const eng = engX || PLH.eng;
+  // Clic sobre el tablero: se elige la salida en un menú y la tubería empieza o termina en ella
+  if (eng && eng[2] === 10) {
+    const tb = dsD().els.find(e => e.id === eng[3].tabla);
+    return (
+      tb &&
+      dsElegirSalida(tb, p, o => {
+        dsPuntoTub(o.p, [o.p[0], o.p[1], 8, { cir: o.n, tab: tb.id, nom: tb.nom || "" }]);
+        plSobreDibujar();
+      })
+    );
+  }
+  const con = eng && eng[2] === 9 ? eng[3].con : null,
     D = dsD();
   if (!PLH.pts.length) {
     PLH.pts.push(p);
     PLH.conIni = con;
-    if (eng && eng[2] === 8) PLH.cirIni = eng[3];
-    else if (con) {
+    if (eng && eng[2] === 8) {
+      PLH.cirIni = eng[3];
+      PLH.conIni = eng[3].tab;
+    } else if (con) {
       // Empieza en un artefacto que ya tiene circuito: la tubería lo toma
       const s = D.els.find(e => e.id === con),
         tb = s && s.tab && D.els.find(e => e.id === s.tab);
@@ -1782,11 +2184,17 @@ function dsPuntoTub(p) {
   // El inicio en un artefacto: a su borde, hacia este punto
   if (PLH.pts.length === 1 && PLH.conIni) {
     const s = D.els.find(e => e.id === PLH.conIni);
-    if (s) PLH.pts[0] = dsBorde(s, p[0], p[1]);
+    if (s && s.k !== "tab") PLH.pts[0] = dsBorde(s, p[0], p[1]);
   }
   PLH.pts.push(p);
   (PLH.bul = PLH.bul || []).push(dsBulNuevo());
-  if (eng && eng[2] === 8 && !PLH.cirIni) PLH.cirIni = eng[3];
+  // Llega a una salida del tablero: la tubería termina allí y queda saliendo del tablero (se invierte)
+  if (eng && eng[2] === 8 && PLH.conIni !== eng[3].tab) {
+    PLH.cirIni = eng[3];
+    const t = dsTerminar(null, eng[3].tab);
+    if (t) toast(`Tubería conectada a la salida ${t.cir}${eng[3].nom ? " del tablero " + eng[3].nom : ""}`);
+    return plOrden();
+  }
   if (con) {
     const t = dsTerminar(con),
       s = D.els.find(e => e.id === con);
@@ -1801,8 +2209,141 @@ function dsPuntoTub(p) {
   plOrden();
   plSobreDibujar();
 }
+// Menú con las salidas del tablero, junto al punto p (cada una con su descripción y si ya tiene tubería)
+function dsElegirSalida(tb, p, fn) {
+  const S = dsSalidasTab(tb);
+  if (!S.length) {
+    toast(`${tb.nom || "El tablero"} aún no tiene circuitos: defínalos en su ventana`);
+    return tabAbrir(tb.id);
+  }
+  const usada = new Set(
+    dsD()
+      .els.filter(e => e.t === "tub" && e.c0 === tb.id)
+      .map(e => e.cir)
+  );
+  edMenuLista(
+    p,
+    `<div class="ed-mt">Salidas de ${esc(tb.nom || "tablero")}</div>` +
+      S.map(
+        o =>
+          `<button type="button" data-edm="sal:${o.i}" role="menuitem"><span><b style="color:${plColorDis(dsColCir(o.n))}">${o.n}</b>${o.d ? " · " + esc(o.d) : ""}</span>${usada.has(o.n) ? "<kbd>en uso</kbd>" : ""}</button>`
+      ).join("") +
+      `<hr><button type="button" data-edm="tablero:${tb.id}" role="menuitem"><span>Circuitos del tablero…</span></button>`,
+    i => fn(S[i])
+  );
+}
+/* ---------- Copiar en fila y espejo ---------- */
+// Copia los elementos con una transformación; las conexiones entre los copiados se conservan, las demás se quitan
+function dsClonar(lista, tr) {
+  const nuevo = new Map(),
+    out = [];
+  lista.forEach(o => {
+    const el = JSON.parse(JSON.stringify(o));
+    tr(el);
+    dsAgregar(el);
+    nuevo.set(o.id, el.id);
+    out.push(el);
+  });
+  out.forEach(t =>
+    ["c0", "c1"].forEach(c => {
+      if (t[c] && nuevo.has(t[c])) t[c] = nuevo.get(t[c]);
+      else delete t[c];
+    })
+  );
+  return out;
+}
+// Refleja un elemento respecto de la línea por a con dirección unitaria (ux, uy)
+function dsReflejar(el, a, ux, uy) {
+  const R = (x, y) => {
+      const dx = x - a[0],
+        dy = y - a[1],
+        k = dx * ux + dy * uy;
+      return [a[0] + 2 * k * ux - dx, a[1] + 2 * k * uy - dy];
+    },
+    th = (Math.atan2(uy, ux) * 180) / Math.PI;
+  if (el.pts) {
+    const q = [];
+    for (let i = 0; i < el.pts.length; i += 2) q.push(...R(el.pts[i], el.pts[i + 1]));
+    el.pts = q;
+    if (el.b) el.b = el.b.map(k => -k);
+  } else if (el.a) {
+    el.a = R(...el.a);
+    el.b = R(...el.b);
+    el.o = -el.o;
+    if (Math.abs(Math.sin((th * Math.PI) / 90)) > 1e-6) el.modo = "alin";
+  } else {
+    [el.x, el.y] = R(el.x, el.y);
+    if (el.t === "sim" || el.t === "txt") el.r = Math.round(((((2 * th - (el.r || 0)) % 360) + 360) % 360) * 100) / 100;
+    delete el.dt;
+  }
+}
+// Inicia Copiar en fila (pide el número de copias) o Espejo, con lo seleccionado
+function dsIniciarCopia(h) {
+  const sel = dsSel().filter(dsEditable);
+  if (!sel.length) return toast("Elija primero lo que quiere copiar");
+  const ids = sel.map(el => el.id);
+  if (h === "espejo") {
+    plHerr("espejo");
+    PLH.copia = { ids };
+    return plOrden();
+  }
+  plPedir("Número de copias", "3", v => {
+    const n = Math.round(parseFloat(v));
+    plPedir(null);
+    if (!(n >= 1 && n <= 200)) return toast("Escriba un número de copias entre 1 y 200");
+    plHerr("fila");
+    PLH.copia = { ids, n };
+    plOrden();
+  });
+}
+function dsPuntoCopia(p) {
+  const h = PLH.h;
+  PLH.pts.push(p);
+  if (PLH.pts.length < 2) return plOrden();
+  const [a, b] = PLH.pts,
+    c = PLH.copia,
+    lista = c ? dsD().els.filter(el => c.ids.includes(el.id)) : [];
+  if (!lista.length || Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-9) {
+    PLH.pts = [];
+    return plOrden();
+  }
+  let nuevos = [];
+  if (h === "fila") {
+    for (let k = 1; k <= c.n; k++)
+      nuevos = nuevos.concat(dsClonar(lista, el => dsTrasladar(el, (b[0] - a[0]) * k, (b[1] - a[1]) * k)));
+    toast(`${c.n} copia${c.n > 1 ? "s" : ""} en fila, a ${plFm(Math.hypot(b[0] - a[0], b[1] - a[1]))} m`);
+  } else {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    nuevos = dsClonar(lista, el => dsReflejar(el, a, (b[0] - a[0]) / L, (b[1] - a[1]) / L));
+    toast("Copia en espejo creada · si solo quería reflejar, presione Supr: borra los originales, que siguen elegidos");
+  }
+  PLH.copia = null;
+  plHerr(null);
+  DS_SEL.clear();
+  (h === "fila" ? nuevos : lista).forEach(el => DS_SEL.add(el.id));
+  if (!nuevos.length) return;
+  edCambio();
+  edProps();
+}
+// Fantasma de lo que se va a copiar: el elemento transformado, tenue
+function dsFantasma(g, el, tr, col) {
+  const o = JSON.parse(JSON.stringify(el));
+  tr(o);
+  if (o.t === "sim")
+    dsDibSim(g, o.k, ...plAPant(o.x, o.y), ((o.r || 0) * Math.PI) / 180, dsU() * PLV.s, col, null, plDpr());
+  else if (o.t === "txt" || o.t === "ley") {
+    const b = dsBBox(o),
+      [x0, y0] = plAPant(b[0], b[3]),
+      [x1, y1] = plAPant(b[2], b[1]);
+    g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  } else {
+    g.beginPath();
+    dsLineas(o).forEach(p => plRuta(g, p, false));
+    g.stroke();
+  }
+}
 // Termina la polilínea o la tubería en curso (Intro, doble clic o Esc); conFin: artefacto al que llega
-function dsTerminar(conFin) {
+function dsTerminar(conFin, tabFin) {
   const h = PLH.h;
   if (!(h === "pol" || dsEsTub(h)) || PLH.pts.length < 2) {
     if (h === "pol" || dsEsTub(h)) {
@@ -1832,6 +2373,11 @@ function dsTerminar(conFin) {
     }
     if (PLH.conIni) el.c0 = PLH.conIni;
     if (conFin && conFin !== PLH.conIni) el.c1 = conFin;
+    // Llega al tablero: se invierte para que salga de él
+    if (tabFin) {
+      el.c1 = tabFin;
+      dsInvertirTub(el);
+    }
   }
   dsAgregar(el);
   if (el.t === "tub") dsHeredar(el);
@@ -1948,7 +2494,7 @@ function dsGirar(ang = DSU.giro || 90) {
     PLH.rot = (((PLH.rot + ang) % 360) + 360) % 360;
     return plSobreDibujar();
   }
-  const sel = dsSel().filter(dsEditable);
+  const sel = dsSel().filter(el => dsEditable(el) && el.t !== "ley");
   if (!sel.length) return;
   dsDesligar(sel);
   // Los símbolos y textos giran sobre su punto; lo demás, sobre el centro de la selección
@@ -2085,6 +2631,13 @@ function dsProps(c) {
       (tubs.length ? fila("Tuberías", `${plFm(tubs.reduce((s, el) => s + dsLargo(el), 0))} m`) : "") +
       campo("Capa", capas(capa0)) +
       (sel.every(el => el.t === "sim" || el.t === "tub") ? campo("Circuito", circ(cir0)) + lista : "") +
+      (tubs.length === sel.length ? dsCampoCond(campo, tubs) : "") +
+      (sel.every(dsConEnc)
+        ? campo(
+            "Encendido",
+            `<input type="text" data-dsp="enc" value="${sel.every(e => (e.enc || "") === (sel[0].enc || "")) ? esc(sel[0].enc || "") : ""}" placeholder="a, b…" maxlength="3">`
+          )
+        : "") +
       (sel.some(el => el.t === "lin" || el.t === "tub") ? curvas : "") +
       acciones;
     return;
@@ -2121,6 +2674,12 @@ function dsProps(c) {
         : cat.s !== "can" && cat.s !== "tie"
           ? campo("Circuito", circ(el.cir)) + lista
           : "") +
+      (dsConEnc(el)
+        ? campo(
+            "Encendido",
+            `<input type="text" data-dsp="enc" value="${esc(el.enc || "")}" placeholder="a, b…" maxlength="3" title="Letra que une el interruptor con las luminarias que enciende">`
+          )
+        : "") +
       fila("Posición X", `${plFm(el.x)} m`) +
       fila("Posición Y", `${plFm(el.y)} m`);
   } else if (el.t === "txt") {
@@ -2152,6 +2711,12 @@ function dsProps(c) {
         `<select data-dsp="modo"><option value="alin"${el.modo === "alin" ? " selected" : ""}>Alineada</option><option value="h"${el.modo === "h" ? " selected" : ""}>Horizontal</option><option value="v"${el.modo === "v" ? " selected" : ""}>Vertical</option></select>`
       ) +
       campo("Capa", capas(el.capa));
+  } else if (el.t === "ley") {
+    h =
+      `<div class="ed-pt">Leyenda<small>Se arma sola con lo que usa el diseño</small></div>` +
+      campo("Título", `<input type="text" data-dsp="tit" value="${esc(el.tit || "LEYENDA")}" maxlength="60">`) +
+      fila("Filas", dsFilasLey().length) +
+      campo("Capa", capas(el.capa));
   } else if (el.t === "cir") {
     h =
       `<div class="ed-pt">Círculo</div>` +
@@ -2181,7 +2746,7 @@ function dsProps(c) {
         ? `<div class="ds-tramos">${T.map((t, i) => `<span>Tramo ${i + 1}${t.k ? " ◠" : ""}</span><b>${plFm(t.L)} m</b>`).join("")}</div>`
         : "") +
       campo("Capa", capas(el.capa)) +
-      (tub ? campo("Circuito", circ(el.cir)) + lista : "") +
+      (tub ? campo("Circuito", circ(el.cir)) + lista + dsCampoCond(campo, [el]) : "") +
       `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices.</p>` +
       curvas;
   }
@@ -2190,6 +2755,27 @@ function dsProps(c) {
       ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="letra0">Letra a su lugar</button></div>`
       : "";
   c.innerHTML = h + color + letra + (cap.bloq ? `<p class="pl-nota">La capa está bloqueada.</p>` : "") + acciones;
+}
+// Campo de conductores de las tuberías (fases, neutro, tierra) y botón para todo el circuito
+function dsCampoCond(campo, ts) {
+  const c0 = JSON.stringify(ts[0].cond || {}),
+    igual = ts.every(t => JSON.stringify(t.cond || {}) === c0),
+    c = igual ? ts[0].cond || {} : {},
+    cir = ts.length === 1 && ts[0].cir;
+  return (
+    campo(
+      "Conductores",
+      `<span class="ds-cond"><select data-dsp="condF" title="Número de fases">${[0, 1, 2, 3]
+        .map(n => `<option value="${n}"${igual && (c.f || 0) === n ? " selected" : ""}>${n} F</option>`)
+        .join(
+          ""
+        )}</select><label><input type="checkbox" data-dsp="condN"${c.n ? " checked" : ""}>N</label><label><input type="checkbox" data-dsp="condT"${c.t ? " checked" : ""}>T</label></span>`
+    ) +
+    `<p class="ds-crit">Marcas de la norma sobre la tubería: una raya por fase, el neutro (N) con punto y la tierra (T) con tope.</p>` +
+    (cir
+      ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="condcir">Igual en todo el circuito ${esc(cir)}</button></div>`
+      : "")
+  );
 }
 const dsNomTipo = t =>
   DS_CAT[t]
@@ -2201,14 +2787,33 @@ const dsNomTipo = t =>
         cir: "Círculo",
         txt: "Texto",
         cot: "Cota",
-        dir: "Directriz"
+        dir: "Directriz",
+        ley: "Leyenda"
       }[t] || t;
 $("edPropC").addEventListener("change", e => {
   const f = e.target.closest("[data-dsp]");
   if (!f || !DS_SEL.size) return;
   const k = f.dataset.dsp,
-    v = f.value.trim();
+    v = f.type === "checkbox" ? (f.checked ? "1" : "") : f.value.trim();
   dsSel().forEach(el => {
+    if (k === "condF" || k === "condN" || k === "condT") {
+      if (el.t !== "tub") return;
+      const c = { f: 0, n: false, t: false, ...(el.cond || {}) };
+      if (k === "condF") c.f = Math.max(0, Math.min(3, parseInt(v, 10) || 0));
+      else c[k === "condN" ? "n" : "t"] = !!v;
+      if (c.f || c.n || c.t) el.cond = c;
+      else delete el.cond;
+      return;
+    }
+    if (k === "enc") {
+      if (dsConEnc(el))
+        el.enc =
+          v
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "")
+            .slice(0, 3) || undefined;
+      return;
+    }
     if (k === "capa") {
       if (v) el.capa = v;
     } else if (k === "r") el.r = Math.round(((((parseFloat(v) || 0) % 360) + 360) % 360) * 100) / 100;
@@ -2217,6 +2822,7 @@ $("edPropC").addEventListener("change", e => {
     else if (k === "p") el.p = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "cir") el.cir = v.replace(/[<>]/g, "").slice(0, 12) || undefined;
     else if (k === "s") el.s = v.replace(/[<>]/g, "").slice(0, 200) || el.s;
+    else if (k === "tit") el.tit = v.replace(/[<>]/g, "").slice(0, 60) || "LEYENDA";
     else if (k === "ht") el.ht = Math.max(0.01, parseFloat(v) || 0.1) / EPL.f;
     else if (k === "rad") el.rad = Math.max(0.01, parseFloat(v) || 0.1) / EPL.f;
     else if (k === "modo") {
@@ -2235,7 +2841,19 @@ $("edPropC").addEventListener("click", e => {
   if (!b) return;
   const a = b.dataset.dsa;
   if (a === "girar") dsGirar();
-  else if (a === "colcapa" || a === "letra0") {
+  else if (a === "condcir") {
+    const t = dsSel()[0];
+    let n = 0;
+    dsD().els.forEach(o => {
+      if (o.t === "tub" && o !== t && o.cir === t.cir && (o.tab || "") === (t.tab || "")) {
+        if (t.cond) o.cond = { ...t.cond };
+        else delete o.cond;
+        n++;
+      }
+    });
+    edCambio();
+    toast(`Conductores iguales en ${n + 1} tubería${n ? "s" : ""} del circuito ${t.cir}`);
+  } else if (a === "colcapa" || a === "letra0") {
     dsSel().forEach(el => delete el[a === "colcapa" ? "col" : "dt"]);
     edCambio();
   } else if (a === "borrar") edBorrar(false);
@@ -2272,7 +2890,7 @@ function dsResumen() {
         : hayTub
           ? '<div class="ds-aviso ok">✓ Todas las tuberías y artefactos están conectados</div>'
           : "";
-  const orden = [...Object.keys(DS_CAT), "tub-techo", "tub-piso", "lin", "cir", "txt", "cot", "dir"].filter(
+  const orden = [...Object.keys(DS_CAT), "tub-techo", "tub-piso", "lin", "cir", "txt", "cot", "dir", "ley"].filter(
     t => cuenta[t]
   );
   box.innerHTML = orden.length
@@ -2280,7 +2898,7 @@ function dsResumen() {
       orden
         .map(
           t =>
-            `<button type="button" class="ds-fila" data-dst="${t}" title="Seleccionar todos">${DS_CAT[t] ? (DSU.colTipo ? dsIcono(t).replace('class="ds-ico"', `class="ds-ico" style="color:${plColorDis(DS_COLT[t])}"`) : dsIcono(t)) : `<i class="ds-ico ds-lin${t === "tub-piso" ? " piso" : ""}"></i>`}<span>${dsNomTipo(t)}</span><em>${largo[t] ? plFm(largo[t]) + " m" : cuenta[t]}</em></button>`
+            `<button type="button" class="ds-fila" data-dst="${t}" title="Seleccionar todos">${DS_CAT[t] ? (DSU.color === "tipo" ? dsIcono(t).replace('class="ds-ico"', `class="ds-ico" style="color:${plColorDis(DS_COLT[t])}"`) : dsIcono(t)) : `<i class="ds-ico ds-lin${t === "tub-piso" ? " piso" : ""}"></i>`}<span>${dsNomTipo(t)}</span><em>${largo[t] ? plFm(largo[t]) + " m" : cuenta[t]}</em></button>`
         )
         .join("")
     : `<p class="pl-nota">Coloque luminarias, interruptores, tomacorrientes, tableros y tuberías desde las pestañas <b>Insertar</b> y <b>Dibujo</b>. Aquí verá cuántos hay de cada uno y los metros de tubería.</p>`;
@@ -2330,12 +2948,14 @@ function dsCinta() {
   $("dsPaso").value = String(DSU.paso);
   $("dsAlinear").checked = DSU.alinear;
   $("dsGiro").value = String(DSU.giro || 0);
-  $("dsColTipo").checked = DSU.colTipo;
+  $("dsColor").value = DSU.color;
+  $("dsMarcas").checked = DSU.marcas;
+  $("edPolar").value = String(DSU.polarInc);
   $("dsSueltos").checked = DSU.sueltos;
   $("dsTrazo").value = DSU.curva ? "curvo" : "recto";
   document.querySelectorAll("[data-edtg]").forEach(b => {
     const v = b.dataset.edtg;
-    b.setAttribute("aria-pressed", v === "rej" ? DSU.rej : v === "forz" ? DSU.forz : $(v).checked);
+    b.setAttribute("aria-pressed", v === "rej" || v === "forz" || v === "polar" ? DSU[v] : $(v).checked);
   });
   // Enganches activos
   document.querySelectorAll("#edRefs [data-ref]").forEach(c => (c.checked = DSU.ref[c.dataset.ref] !== false));
@@ -2362,7 +2982,9 @@ function dsAlternarRejilla(cual, aviso) {
   dsGuardarPref();
   dsCinta();
   if (aviso)
-    toast(`${cual === "rej" ? "Rejilla" : "Forzar cursor a la rejilla"} ${DSU[cual] ? "activado" : "desactivado"}`);
+    toast(
+      `${cual === "rej" ? "Rejilla" : cual === "polar" ? `Rastreo polar (cada ${DSU.polarInc}°)` : "Forzar cursor a la rejilla"} ${DSU[cual] ? "activado" : "desactivado"}`
+    );
   plDibujar();
 }
 $("dsRej").addEventListener("change", () => dsAlternarRejilla("rej"));
@@ -2388,11 +3010,21 @@ $("dsSueltos").addEventListener("change", e => {
   dsGuardarPref();
   plDibujar();
 });
-$("dsColTipo").addEventListener("change", e => {
-  DSU.colTipo = e.target.checked;
+$("dsColor").addEventListener("change", e => {
+  DSU.color = ["capa", "tipo", "cir"].includes(e.target.value) ? e.target.value : "tipo";
+  e.target.blur();
   dsGuardarPref();
   dsResumen();
   plDibujar();
+});
+$("dsMarcas").addEventListener("change", e => {
+  DSU.marcas = e.target.checked;
+  dsGuardarPref();
+  plDibujar();
+});
+$("edPolar").addEventListener("change", e => {
+  DSU.polarInc = [15, 30, 45, 90].includes(+e.target.value) ? +e.target.value : 45;
+  dsGuardarPref();
 });
 $("dsAlinear").addEventListener("change", e => {
   DSU.alinear = e.target.checked;

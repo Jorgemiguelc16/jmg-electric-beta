@@ -936,7 +936,10 @@ prueba("Editor de diseño: tuberías conectadas a los artefactos (imán, borde, 
   await teclaE("Escape", "Escape", 27);
   const t = await J("dsD().els.filter(e => e.t === 'tub')");
   ok(t.length === 2, `dos tuberías: tablero → luminaria y luminaria → luminaria (${t.length})`);
-  ok(t[0] && t[0].cir === "C-1" && t[0].c1 === l1 && !t[0].c0, "la primera sale de C-1 y llega a la luminaria 1");
+  ok(
+    t[0] && t[0].cir === "C-1" && t[0].c1 === l1 && t[0].c0 === t[0].tab,
+    "la primera sale de C-1 y llega a la luminaria 1"
+  );
   ok(
     t[1] && t[1].c0 === l1 && t[1].c1 === l2 && t[1].cir === "C-1",
     "la segunda une las luminarias, con el mismo circuito"
@@ -972,6 +975,117 @@ prueba("Editor de diseño: tuberías conectadas a los artefactos (imán, borde, 
     "las conexiones se guardan con el proyecto"
   );
 });
+
+prueba(
+  "Editor de diseño: salidas del tablero, color por circuito, conductores, encendido, polar, fila, espejo y leyenda",
+  async ok => {
+    await ejemplo("uni");
+    await abrirPlano();
+    await ev(
+      `(() => { dsAgregar({ t: 'sim', k: 'tab', x: ${OX} + 3, y: ${OY} + 7.9, r: 180, capa: 'E-TABLEROS', nom: 'TG', nc: 4 });
+      dsAgregar({ t: 'sim', k: 'toma', x: ${OX} + 2, y: ${OY} + 4, r: 0, capa: 'E-TOMACORRIENTES' }); edCambio(); })()`
+    );
+    const tb = await J("dsD().els.find(e => e.k === 'tab')"),
+      to = await J("dsD().els.find(e => e.k === 'toma')");
+    // Tubería dibujada desde el tomacorriente hasta el tablero: clic en el tablero muestra sus salidas
+    await clic('#editor [data-pl="tubT"]');
+    await clicPlano(to.x + 0.02, to.y + 0.02, 0);
+    await clicPlano(tb.x, tb.y - 0.05, 0);
+    await esperar(80);
+    ok(
+      await ev("!$('edMenu').hidden && $('edMenu').querySelectorAll('[data-edm^=\"sal:\"]').length === 4"),
+      "clic en el tablero: menú con sus 4 salidas"
+    );
+    await clic('#edMenu [data-edm="sal:2"]');
+    const t = await J("dsD().els.find(e => e.t === 'tub')");
+    ok(
+      t && t.cir === "C-3" && t.c0 === tb.id && t.c1 === to.id,
+      `la tubería sale de C-3 del TG y llega al tomacorriente (${t && t.cir})`
+    );
+    ok(await ev(`dsD().els.find(e => e.k === 'toma').cir === 'C-3'`), "el tomacorriente toma el circuito C-3");
+    // Al mover el tablero, la tubería sigue a su salida
+    await ev(`(() => { const b = dsD().els.find(e => e.k === 'tab'); b.x += 0.5; edCambio(); })()`);
+    ok(
+      await ev(
+        `(() => { const b = dsD().els.find(e => e.k === 'tab'), o = dsSalidasTab(b).find(q => q.n === 'C-3'), t = dsD().els.find(e => e.t === 'tub'); return Math.hypot(t.pts[0] - o.p[0], t.pts[1] - o.p[1]) < 1e-9; })()`
+      ),
+      "al mover el tablero, la tubería sigue a su salida"
+    );
+    await teclaE("Escape", "Escape", 27);
+    // Color por circuito
+    await poner("#dsColor", "cir");
+    ok(
+      await ev(
+        "dsColorEl(dsD().els.find(e => e.t === 'tub'), dsCapaDe(dsD().els.find(e => e.t === 'tub'))) === dsColCir('C-3')"
+      ),
+      "color por circuito"
+    );
+    await poner("#dsColor", "tipo");
+    // Conductores de la tubería
+    await ev(`DS_SEL.clear(); DS_SEL.add(dsD().els.find(e => e.t === 'tub').id); edProps(); 1`);
+    await poner('#edPropC [data-dsp="condF"]', "2");
+    await ev(
+      "(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector('#edPropC [data-dsp=\"condT\"]'))"
+    );
+    ok(
+      await ev(
+        "JSON.stringify(dsD().els.find(e => e.t === 'tub').cond) === JSON.stringify({ f: 2, n: false, t: true })"
+      ),
+      "conductores: 2 fases y tierra"
+    );
+    // Encendido
+    await ev(
+      `DS_SEL.clear(); dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 4, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' }); DS_SEL.add(dsD().els[dsD().els.length - 1].id); edProps(); 1`
+    );
+    await poner('#edPropC [data-dsp="enc"]', "B");
+    ok((await ev("dsSel()[0].enc")) === "b", "letra de encendido «b»");
+    // Copiar en fila: 3 copias a 1.5 m
+    await clic('#editor [data-pl="fila"]');
+    await poner("#plCmdV", "3");
+    await clic("#plCmdOk");
+    ok((await ev("PLH.h")) === "fila", "Copiar en fila listo para designar la separación");
+    await clicPlano(OX + 4, OY + 5, 0);
+    await ev(`dsPunto([${OX} + 5.5, ${OY} + 5]); 1`);
+    ok((await ev("dsD().els.filter(e => e.k === 'luz').length")) === 4, "3 copias en fila de la luminaria");
+    ok(
+      await ev(`dsD().els.filter(e => e.k === 'luz').some(e => Math.abs(e.x - (${OX} + 8.5)) < 1e-6)`),
+      "la última a 4.50 m"
+    );
+    // Espejo del tomacorriente respecto de una línea vertical en x = 5
+    await ev(`DS_SEL.clear(); DS_SEL.add(dsD().els.find(e => e.k === 'toma').id); 1`);
+    await clic('#editor [data-pl="espejo"]');
+    await ev(`dsPunto([${OX} + 5, ${OY}]); dsPunto([${OX} + 5, ${OY} + 1]); 1`);
+    const tm = await J("dsD().els.filter(e => e.k === 'toma')");
+    ok(
+      tm.length === 2 && Math.abs(tm[1].x - (OX + 8)) < 1e-6 && tm[1].r === 180,
+      `espejo: copia en x = 8 y girada 180° (${tm[1] && tm[1].r}°)`
+    );
+    // Polar: con 45°, un punto cerca de la diagonal se alinea a ella
+    await ev(
+      `PLH.h = 'lin'; PLH.pts = [[${OX}, ${OY}]]; PLH.cur = [${OX} + 2, ${OY} + 2.04]; PLH.eng = null; PLH.libre = false; DSU.polar = true; DSU.polarInc = 45; 1`
+    );
+    const pp = await J("plPuntoActual()");
+    ok(Math.abs(pp[0] - pp[1] - (OX - OY)) < 1e-6, "rastreo polar a 45°");
+    await ev("plHerr(null); 1");
+    // Leyenda
+    await clic('#editor [data-pl="ley"]');
+    await clicPlano(OX + 11, OY + 8, 0);
+    const ley = await J("dsFilasLey().map(f => f.k || f.tub || Object.keys(f.cond || {})[0])");
+    ok(
+      (await ev("dsD().els.some(e => e.t === 'ley')")) &&
+        ["luz", "toma", "tab", "techo", "f", "t"].every(k => ley.includes(k)),
+      `leyenda con lo usado (${ley.join(", ")})`
+    );
+    await clic('[data-ed="aceptar"]');
+    await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+    ok(
+      await ev(
+        "PLANO.dis.els.some(e => e.t === 'ley') && PLANO.dis.els.find(e => e.t === 'tub').cond.f === 2 && PLANO.dis.els.some(e => e.enc === 'b')"
+      ),
+      "leyenda, conductores y encendido se guardan"
+    );
+  }
+);
 
 // Ejecución
 let mal = 0;

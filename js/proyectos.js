@@ -391,6 +391,8 @@ function disValido(v) {
             ? { dt: e.dt.slice() }
             : {}),
           ...cir,
+          // Letra de encendido (qué interruptor enciende qué luminaria: a, b, c…)
+          ...(typeof e.enc === "string" && /^[a-z0-9]{1,3}$/.test(e.enc) ? { enc: e.enc } : {}),
           // Tablero del circuito del artefacto (lo hereda de la tubería que llega a él)
           ...(e.k !== "tab" && typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {}),
           // Tablero: nombre, número de circuitos y descripción de cada uno
@@ -400,6 +402,9 @@ function disValido(v) {
         };
       if (e.t === "txt" && n(e.x) && n(e.y) && n(e.ht) && e.ht > 0)
         return { ...b, t: "txt", x: e.x, y: e.y, ht: e.ht, r: n(e.r) ? e.r : 0, s: txt(e.s, 200) || "Texto" };
+      // Leyenda automática: esquina superior izquierda y título
+      if (e.t === "ley" && n(e.x) && n(e.y))
+        return { ...b, t: "ley", x: e.x, y: e.y, tit: txt(e.tit, 60) || "LEYENDA" };
       if (e.t === "cir" && n(e.x) && n(e.y) && n(e.rad) && e.rad > 0)
         return { ...b, t: "cir", x: e.x, y: e.y, rad: e.rad };
       // Cota: dos puntos medidos, desplazamiento de la línea de cota y dirección (alineada, horizontal o vertical)
@@ -439,7 +444,17 @@ function disValido(v) {
                 ...(typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {}),
                 // Artefactos a los que está conectada en su inicio (c0) y en su final (c1)
                 ...(typeof e.c0 === "string" && /^d[0-9]{1,7}$/.test(e.c0) ? { c0: e.c0 } : {}),
-                ...(typeof e.c1 === "string" && /^d[0-9]{1,7}$/.test(e.c1) ? { c1: e.c1 } : {})
+                ...(typeof e.c1 === "string" && /^d[0-9]{1,7}$/.test(e.c1) ? { c1: e.c1 } : {}),
+                // Conductores que lleva (marcas de la norma): fases, neutro y tierra
+                ...(e.cond && typeof e.cond === "object"
+                  ? {
+                      cond: {
+                        f: Number.isInteger(e.cond.f) ? Math.max(0, Math.min(3, e.cond.f)) : 0,
+                        n: e.cond.n === true,
+                        t: e.cond.t === true
+                      }
+                    }
+                  : {})
               }
             : {})
         };
