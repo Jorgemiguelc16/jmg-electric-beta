@@ -997,3 +997,9 @@ body.arrastrando * {
 .cf-box .wl-lead p {
   margin: 0 0 10px;
 }
+
+/* Espacio usado por los proyectos en el navegador (lista de proyectos) */
+.al-uso {
+  margin: 0;
+  padding: 8px 12px 10px;
+}

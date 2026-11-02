@@ -1414,6 +1414,37 @@ prueba("Editor de diseño: plantas y montantes, bloques, plantillas, ruta autom�
   );
 });
 
+prueba("Proyectos en la base de datos del navegador y respaldo con el plano DXF", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  await clic('[data-ed="aceptar"]');
+  await ev("ponerDato('p_nombre', 'Casa con plano'); saveDraft(); 1");
+  await esperar(600);
+  ok(
+    await ev("alLeer(LKEY + '/' + PID).then(o => !!(o && o.p_nombre === 'Casa con plano' && o.PLANO))"),
+    "el proyecto se guarda en la base"
+  );
+  ok(await ev("alLeer(SKEY).then(o => !!(o && o.p_nombre === 'Casa con plano'))"), "el proyecto abierto también");
+  // Respaldo: el archivo lleva el plano DXF
+  const n = await ev("proyectoConPlano(estado()).then(o => o.PLANO_DXF ? o.PLANO_DXF.b64.length : 0)");
+  ok(n > 1000, `el respaldo lleva el plano DXF (${Math.round((n * 0.75) / 1024)} KB)`);
+  // Otra computadora: sin el plano en el navegador; al abrir el respaldo, el plano vuelve
+  await ev(
+    "(async () => { const o = await proyectoConPlano(estado()), db = await plDb(); await new Promise(ok => { const t = db.transaction('planos', 'readwrite'); t.objectStore('planos').delete(PLANO.sha); t.oncomplete = ok; }); window._resp = o; return 1; })()"
+  );
+  ok(!(await ev("plLeerArchivo(PLANO.sha).then(a => !!a)")), "plano borrado del navegador (simulación)");
+  ok(
+    await ev(
+      "guardarPlanoDeArchivo(window._resp).then(p => !p.PLANO_DXF && plLeerArchivo(p.PLANO.sha)).then(a => !!(a && a.buf && a.buf.byteLength > 1000))"
+    ),
+    "al abrir el respaldo, el plano vuelve al navegador"
+  );
+  ok(
+    /Espacio usado/.test(await ev("(async () => { renderProy(); await alUso(); return $('alUso').textContent; })()")),
+    "la lista de proyectos muestra el espacio usado"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

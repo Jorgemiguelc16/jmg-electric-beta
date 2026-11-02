@@ -7,7 +7,7 @@ $("btnSave").addEventListener("click", async () => {
       .trim()
       .slice(0, 60) || "proyecto";
   const nombre = `JMG-ELECTRIC - ${nm}.json`,
-    blob = new Blob([JSON.stringify(estado(), null, 1)], { type: "application/json" });
+    blob = new Blob([JSON.stringify(await proyectoConPlano(estado()), null, 1)], { type: "application/json" });
   try {
     if (downloads) await downloads.save({ filename: nombre, data: blob });
     else descargarLocal(blob, nombre);
@@ -26,7 +26,7 @@ $("fileOpen").addEventListener("change", () => {
   const f = $("fileOpen").files[0];
   if (!f) return;
   const rd = new FileReader();
-  rd.onload = () => {
+  rd.onload = async () => {
     let o = null;
     try {
       o = JSON.parse(rd.result);
@@ -36,6 +36,8 @@ $("fileOpen").addEventListener("change", () => {
       setTab("inicio");
       return;
     }
+    // Con su plano DXF (respaldo completo): el plano vuelve a la base del navegador
+    o = await guardarPlanoDeArchivo(o);
     aplicar(o);
     $("openMsg").textContent = "";
     msg.textContent = `Proyecto «${o.p_nombre || "sin nombre"}» abierto.`;
@@ -85,10 +87,9 @@ function resetUI(confirmar) {
   box.innerHTML = `<span>Se borrarán los datos ingresados.</span><button type="button" class="btn" id="rsYes">Restablecer</button><button type="button" class="btn sec" id="rsNo">Cancelar</button>`;
   $("rsYes").addEventListener("click", () => {
     try {
-      localStorage.removeItem(SKEY);
       localStorage.removeItem("jmg-electric-tab");
     } catch (e) {}
-    location.reload();
+    alBorrarBorrador().finally(() => location.reload());
   });
   $("rsNo").addEventListener("click", () => resetUI(false));
 }

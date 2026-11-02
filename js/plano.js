@@ -103,7 +103,12 @@ async function plLeerArchivo(sha) {
 async function plLimpiarArchivos() {
   try {
     const usados = new Set([PLANO && PLANO.sha, EPL && EPL.sha].filter(Boolean));
-    Object.values(libLoad()).forEach(o => o && o.PLANO && usados.add(o.PLANO.sha));
+    Object.values(libLoad()).forEach(o => {
+      if (o && o.PLANO) usados.add(o.PLANO.sha);
+      if (o && o.psha) usados.add(o.psha);
+    });
+    // Sin la base de proyectos leída no se borra nada (podría faltar algún proyecto)
+    if (typeof AL_LISTO !== "undefined" && AL_HAY && !AL_LISTO) return;
     const enHist = k => [HIST, REDO, ED.hist, ED.redo].some(h => h.some(s => s.includes(k)));
     const db = await plDb(),
       claves = await new Promise((ok, mal) => {

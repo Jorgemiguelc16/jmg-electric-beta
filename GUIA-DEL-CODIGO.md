@@ -59,7 +59,7 @@ está al final de `index.html` y es este:
 | 18f | `excel-metrado.js` | Hoja Metrado |
 | 19 | `descargas.js` | Guardar archivos, lista de planos (`PLANOS`) y diálogos de exportación |
 | 20 | `sitio.js` | Páginas de la web (glosario, novedades, soporte) |
-| 21 | `proyectos.js` | Guardar, abrir y ejemplos de proyectos |
+| 21 | `proyectos.js` | Guardar, abrir y ejemplos de proyectos. **Almacén** (v3.0): biblioteca y proyecto abierto en IndexedDB (`jmg-electric-proyectos`, `alCargar`, `alEscribir`), con copia de respaldo en localStorage (completos si caben, si no su resumen `_idb`); almacenamiento persistente; respaldo .json con el plano DXF (`proyectoConPlano`, `guardarPlanoDeArchivo`) |
 | 22 | `herramientas.js` | Calculadoras rápidas |
 | 23 | `archivo.js` | Abrir y guardar `.json` |
 | 24 | `app.js` | Espacio de trabajo: árbol, propiedades, cinta |
