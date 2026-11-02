@@ -1632,7 +1632,7 @@ plLienzo.addEventListener("pointermove", e => {
     PLH.sobre = i;
     PLH.agSobre = ag;
     plSobreDibujar();
-  }
+  } else if (id && DSU.info !== false) plSobreDibujar(); // los datos siguen al cursor
 });
 plLienzo.addEventListener("pointerup", e => {
   if (PLH.pan) {
@@ -1726,6 +1726,10 @@ addEventListener("keydown", e => {
     return edHist(k === "y" || e.shiftKey ? 1 : -1);
   }
   if (enCampo) return;
+  if (ctrl && k === "f" && PL_MOD) {
+    e.preventDefault();
+    return buAbrir();
+  }
   if (ctrl && k === "x") {
     if (!PL_MOD) return;
     e.preventDefault();
@@ -1774,6 +1778,7 @@ addEventListener("keydown", e => {
   } else if (e.key === "Escape") {
     e.preventDefault();
     $("edRefs").hidden = true;
+    if ($("editor").classList.contains("ed-pres")) return edPresentar(false);
     // Con un recorrido, polilínea o tubería en curso, Esc la termina; con otra herramienta, sale de ella; si no,
     // suelta la selección
     if (PLH.h === "rec" && !PLH.med && PLH.pts.length > 1) return plTerminarRecorrido();
@@ -1882,6 +1887,7 @@ $("editor").addEventListener("click", e => {
   }
   if (!e.target.closest("#edRefs")) $("edRefs").hidden = true;
   if (!e.target.closest('#edFondo, [data-pl="fondo"]')) $("edFondo").hidden = true;
+  if (!e.target.closest('#edBuscar, [data-pl="buscar"]')) $("edBuscar").hidden = true;
 });
 // Enganche y orto: casilla en la cinta (Medir) y botón en la barra de estado, siempre iguales
 function edAlternar(id, aviso = true) {
@@ -2103,7 +2109,11 @@ const ED_CMD = {
   BL: ["bloque", "Guardar como bloque"],
   RU: ["ruta", "Ruta automática"],
   VE: ["versiones", "Versiones"],
-  PLA: ["plantillas", "Plantillas"]
+  PLA: ["plantillas", "Plantillas"],
+  BU: ["buscar", "Buscar en el plano"],
+  MET: ["metrado", "Metrado del diseño"],
+  CU: ["cua", "Cuadro de circuitos"],
+  PRE: ["presentar", "Presentación"]
 };
 function edComando(letra) {
   plPedir(
@@ -2120,7 +2130,8 @@ function edComando(letra) {
   );
 }
 function edEjecutar(c) {
-  const x = ED_CMD[c];
+  const u = atjUsuario()[c],
+    x = u ? ED_CMD[u] || Object.values(ED_CMD).find(v => v[0] === u) : ED_CMD[c];
   if (!x) {
     plOrden();
     return toast(`Comando «${c}» desconocido · pruebe: ${Object.keys(ED_CMD).slice(0, 14).join(", ")}…`);
@@ -2143,10 +2154,202 @@ function edEjecutar(c) {
   if (a === "ruta") return dpRuta();
   if (a === "versiones") return verAbrir();
   if (a === "plantillas") return plaAbrir();
+  if (a === "buscar") return buAbrir();
+  if (a === "metrado") return metAbrir();
+  if (a === "presentar") return edPresentar(true);
   if (a.startsWith("col:") || DS_HERR[a]) DS_SEL.clear();
   plHerr(a);
   toast(x[1]);
 }
+
+/* ---------- Atajos de teclado: comandos de la plataforma y los del usuario (como el archivo de alias de AutoCAD) ---------- */
+const ATJ_K = (BETA ? "jmg-electric-beta" : "jmg-electric") + "-atajos";
+function atjUsuario() {
+  try {
+    const o = JSON.parse(localStorage.getItem(ATJ_K) || "{}");
+    return o && typeof o === "object" ? o : {};
+  } catch (e) {
+    return {};
+  }
+}
+function atjAbrir() {
+  $("atjDlg").hidden = false;
+  vwFondo();
+  atjRender();
+}
+function atjCerrar() {
+  $("atjDlg").hidden = true;
+  vwFondo();
+}
+function atjRender() {
+  const U = atjUsuario(),
+    acciones = new Map();
+  Object.entries(ED_CMD).forEach(([k, [a, n]]) => {
+    if (!acciones.has(a)) acciones.set(a, { n, k: [] });
+    acciones.get(a).k.push(k);
+  });
+  $("atjLista").innerHTML =
+    `<table class="atj-t"><thead><tr><th>Comando</th><th>De la plataforma</th><th>Los suyos (separados por coma)</th></tr></thead><tbody>${[
+      ...acciones
+    ]
+      .map(
+        ([a, o]) =>
+          `<tr><td>${esc(o.n)}</td><td class="atj-k">${o.k.join(", ")}</td><td><input type="text" data-atj-a="${esc(a)}" value="${esc(
+            Object.keys(U)
+              .filter(k => U[k] === a)
+              .join(", ")
+          )}" maxlength="40" spellcheck="false"></td></tr>`
+      )
+      .join("")}</tbody></table>` +
+    `<p class="pl-nota">Teclas de siempre: <b>R</b> girar · <b>B</b> biblioteca · <b>Supr</b> borrar · <b>Ctrl+C/V/X/Z/Y</b> · <b>Ctrl+F</b> buscar · <b>F3</b> enganche · <b>F7</b> rejilla · <b>F8</b> orto · <b>F9</b> forzar · <b>F10</b> polar · <b>Ctrl+F1</b> cinta.</p>`;
+}
+$("atjDlg").addEventListener("change", e => {
+  const i = e.target.closest("[data-atj-a]");
+  if (!i) return;
+  const a = i.dataset.atjA,
+    U = atjUsuario();
+  Object.keys(U).forEach(k => U[k] === a && delete U[k]);
+  i.value
+    .toUpperCase()
+    .split(/[\s,;]+/)
+    .map(k => k.replace(/[^A-ZÑ0-9]/g, "").slice(0, 6))
+    .filter(k => k && /^[A-ZÑ]/.test(k))
+    .forEach(k => (U[k] = a));
+  try {
+    localStorage.setItem(ATJ_K, JSON.stringify(U));
+  } catch (er) {}
+  atjRender();
+  toast("Atajos guardados");
+});
+$("atjDlg").addEventListener("click", e => {
+  if (e.target.id === "atjDlg") return atjCerrar();
+  const b = e.target.closest("[data-atj]");
+  if (!b) return;
+  if (b.dataset.atj === "cerrar") atjCerrar();
+  else if (b.dataset.atj === "restablecer") {
+    try {
+      localStorage.removeItem(ATJ_K);
+    } catch (er) {}
+    atjRender();
+  }
+});
+$("atjDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    atjCerrar();
+  }
+  e.stopPropagation();
+});
+
+/* ---------- Buscar en el plano (Ctrl+F): circuitos, tableros, artefactos y textos del diseño y del plano ---------- */
+let BU_L = [];
+function buAbrir() {
+  if (!EPL || !PL_MOD) return;
+  $("edBuscar").hidden = false;
+  $("buQ").value = "";
+  buRender();
+  setTimeout(() => $("buQ").focus(), 20);
+}
+function buCerrar() {
+  $("edBuscar").hidden = true;
+  $("buQ").blur();
+}
+function buRender() {
+  const q = biNorm($("buQ").value.trim()),
+    D = dsD(),
+    out = [];
+  if (q) {
+    // Circuitos (con su tablero)
+    const cirs = new Map();
+    D.els.forEach(e => {
+      if (!e.cir) return;
+      const tb = e.tab && D.els.find(x => x.id === e.tab),
+        k = e.cir + "|" + (e.tab || "");
+      if (!cirs.has(k)) cirs.set(k, { n: `Circuito ${e.cir}${tb ? " · " + (tb.nom || "tablero") : ""}`, ids: [] });
+      cirs.get(k).ids.push(e.id);
+    });
+    cirs.forEach(c => biNorm(c.n).includes(q) && out.push({ t: c.n, d: `${c.ids.length} elementos`, ids: c.ids }));
+    // Tableros, artefactos y textos del diseño
+    const porTipo = new Map();
+    D.els.forEach(e => {
+      if (e.k === "tab" && biNorm(`tablero ${e.nom || ""}`).includes(q))
+        out.push({ t: `Tablero ${e.nom || ""}`, d: `${e.nc || 0} circuitos`, ids: [e.id] });
+      else if (e.t === "sim" && DS_CAT[e.k] && biNorm(`${DS_CAT[e.k].n} ${DS_CAT[e.k].c}`).includes(q)) {
+        const k = e.k;
+        if (!porTipo.has(k)) porTipo.set(k, []);
+        porTipo.get(k).push(e.id);
+      } else if ((e.t === "txt" || e.t === "dir") && biNorm(e.s || "").includes(q))
+        out.push({ t: e.s, d: e.t === "txt" ? "texto" : "directriz", ids: [e.id] });
+    });
+    porTipo.forEach((ids, k) => out.push({ t: DS_CAT[k].n, d: `${ids.length} en el diseño`, ids }));
+    // Textos del plano de arquitectura (ambientes, por ejemplo)
+    const oc = new Set(EPL.ocultas);
+    PL_MOD.textos.forEach(t => {
+      if (out.length < 60 && !oc.has(t.capa) && !PL_BORR.has(t.e) && biNorm(t.s).includes(q))
+        out.push({ t: t.s.replace(/\n/g, " "), d: "plano", pt: [t.x, t.y] });
+    });
+  }
+  BU_L = out.slice(0, 60);
+  $("buRes").innerHTML = !q
+    ? "<p>Escriba un circuito (C-3), un tablero, un artefacto o el nombre de un ambiente.</p>"
+    : BU_L.length
+      ? BU_L.map(
+          (o, i) =>
+            `<button type="button" data-bu="${i}"${i ? "" : ' class="on"'}><span>${esc(o.t)}</span><small>${esc(o.d)}</small></button>`
+        ).join("")
+      : "<p>Nada coincide.</p>";
+}
+function buIr(i) {
+  const o = BU_L[i];
+  if (!o) return;
+  buCerrar();
+  DS_SEL.clear();
+  PL_ASEL.clear();
+  if (o.pt) {
+    const m = 3 / EPL.f;
+    plVer(o.pt[0] - m, o.pt[1] - m, o.pt[0] + m, o.pt[1] + m);
+  } else {
+    o.ids.forEach(id => DS_SEL.add(id));
+    const bb = dsSel().map(dsBBox),
+      x0 = Math.min(...bb.map(b => b[0])),
+      y0 = Math.min(...bb.map(b => b[1])),
+      x1 = Math.max(...bb.map(b => b[2])),
+      y1 = Math.max(...bb.map(b => b[3])),
+      m = Math.max(x1 - x0, y1 - y0, 3 / EPL.f) * 0.3;
+    plVer(x0 - m, y0 - m, x1 + m, y1 + m);
+  }
+  edProps();
+  plSobreDibujar();
+}
+$("buQ").addEventListener("input", buRender);
+$("buQ").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    buCerrar();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    buIr(0);
+  }
+  e.stopPropagation();
+});
+$("buRes").addEventListener("click", e => {
+  const b = e.target.closest("[data-bu]");
+  if (b) buIr(+b.dataset.bu);
+});
+
+/* ---------- Modo presentación: pantalla completa, solo el plano (Esc para salir) ---------- */
+function edPresentar(on) {
+  $("editor").classList.toggle("ed-pres", on);
+  if (on) {
+    toast("Presentación: Esc para salir");
+    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  } else if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  plTam();
+  plDibujar();
+}
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && $("editor").classList.contains("ed-pres")) edPresentar(false);
+});
 
 /* ---------- Autoguardado del editor ----------
    Cada 30 s, si hay cambios sin aplicar, se guarda una copia en este navegador; al volver a abrir el editor del
@@ -2643,6 +2846,10 @@ $("editor").addEventListener("click", e => {
   if (a === "plantillas") return plaAbrir();
   if (a === "versiones") return verAbrir();
   if (a === "ruta") return dpRuta();
+  if (a === "metrado") return metAbrir();
+  if (a === "buscar") return buAbrir();
+  if (a === "presentar") return edPresentar(true);
+  if (a === "atajos") return atjAbrir();
   if (a === "lamina") return lamAbrir();
   if (a === "dxfdis" || a === "dxftodo") return lamDxf(a === "dxftodo");
   if (a === "biblio") return bibAbrir();

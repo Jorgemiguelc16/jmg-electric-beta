@@ -677,6 +677,9 @@ function disValido(v) {
       if (e.t === "txt" && n(e.x) && n(e.y) && n(e.ht) && e.ht > 0)
         return { ...b, t: "txt", x: e.x, y: e.y, ht: e.ht, r: n(e.r) ? e.r : 0, s: txt(e.s, 200) || "Texto" };
       // Leyenda automática: esquina superior izquierda y título
+      // Cuadro de circuitos: esquina superior izquierda
+      if (e.t === "cua" && n(e.x) && n(e.y))
+        return { ...b, t: "cua", x: e.x, y: e.y, tit: txt(e.tit, 60) || "CUADRO DE CIRCUITOS" };
       if (e.t === "ley" && n(e.x) && n(e.y))
         return { ...b, t: "ley", x: e.x, y: e.y, tit: txt(e.tit, 60) || "LEYENDA" };
       if (e.t === "cir" && n(e.x) && n(e.y) && n(e.rad) && e.rad > 0)
@@ -779,6 +782,7 @@ function disValido(v) {
           arq: ["gris", "negro", "color"].includes(l.arq) ? l.arq : "gris",
           color: l.color === "bn" ? "bn" : "color",
           ley: l.ley !== false,
+          cua: l.cua !== false,
           tit: txt(l.tit, 120),
           num: txt(l.num, 20),
           notas: txt(l.notas, 2000)

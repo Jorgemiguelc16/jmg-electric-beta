@@ -215,7 +215,7 @@ function laHex(c) {
 
 /* ---------- Grabar el plano: arquitectura de la zona y diseño eléctrico ---------- */
 // Dibuja con el grabador y devuelve sus elementos. cx, cy: centro de la zona; s: píxeles por unidad del dibujo
-function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda, ocl }) {
+function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda, cuadro, ocl }) {
   // Capas del diseño que esta lámina no muestra
   const vis = dsD().capas.map(c => [c, c.vis]);
   (ocl || []).forEach(n => {
@@ -240,6 +240,10 @@ function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda, ocl }) {
     if (leyenda) {
       g.capa = "E-LEYENDA";
       dsDibLeyenda(g, leyenda, "#14212e", s, 1.2);
+    }
+    if (cuadro) {
+      g.capa = "E-LEYENDA";
+      dsDibCuadro(g, cuadro, "#14212e", s, 1.2);
     }
   } finally {
     Object.assign(PLV, vPLV);
@@ -386,11 +390,16 @@ function laSvg(op = laOp()) {
       e => e.t === "ley" && dsBBox(e)[0] < z[2] && dsBBox(e)[2] > z[0] && dsBBox(e)[1] < z[3] && dsBBox(e)[3] > z[1]
     ),
     conLey = op.ley && !hayLey && D.els.some(e => e.t !== "ley"),
-    lw = conLey ? dsTamLey()[0] * mmU : 0,
-    // Zona de dibujo (sobre la banda del rótulo y, con leyenda, a su izquierda)
+    // Cuadro de circuitos debajo de la leyenda (si la zona no tiene uno y hay tableros con circuitos)
+    hayCua = D.els.some(
+      e => e.t === "cua" && dsBBox(e)[0] < z[2] && dsBBox(e)[2] > z[0] && dsBBox(e)[1] < z[3] && dsBBox(e)[3] > z[1]
+    ),
+    conCua = op.cua !== false && !hayCua && D.els.some(e => e.k === "tab" && e.nc),
+    lw = Math.max(conLey ? dsTamLey()[0] * mmU : 0, conCua ? dsTamCua()[0] * mmU : 0),
+    // Zona de dibujo (sobre la banda del rótulo y, con leyenda o cuadro, a su izquierda)
     ax0 = mx0 + 4,
     ay0 = my0 + 4,
-    ax1 = mx1 - 4 - (conLey ? lw + 6 : 0),
+    ax1 = mx1 - 4 - (lw ? lw + 6 : 0),
     ay1 = banda - 4,
     acx = (ax0 + ax1) / 2,
     acy = (ay0 + ay1) / 2,
@@ -409,8 +418,12 @@ function laSvg(op = laOp()) {
       : "") + avEsc;
   // Leyenda arriba a la derecha (en coordenadas del dibujo, para dibujarla con el mismo código)
   const ley = conLey
-    ? { t: "ley", tit: "LEYENDA", x: cx + (mx1 - 4 - lw - acx) / mmU, y: cy - (ay0 - acy) / mmU }
-    : null;
+      ? { t: "ley", tit: "LEYENDA", x: cx + (mx1 - 4 - lw - acx) / mmU, y: cy - (ay0 - acy) / mmU }
+      : null,
+    yCua = ay0 + (conLey ? dsTamLey()[1] * mmU + 6 : 0),
+    cua = conCua
+      ? { t: "cua", tit: "CUADRO DE CIRCUITOS", x: cx + (mx1 - 4 - lw - acx) / mmU, y: cy - (yCua - acy) / mmU }
+      : null;
   const items = laGrabar({
     cx,
     cy,
@@ -419,6 +432,7 @@ function laSvg(op = laOp()) {
     arq: true,
     colorArq: op.arq,
     leyenda: ley,
+    cuadro: cua,
     ocl: op.ocl
   });
   // Del lienzo de grabación al papel (mm), con el centro de la zona en el centro del área
@@ -793,6 +807,7 @@ function lamCargar() {
   $("laArq").value = op.arq;
   $("laColor").value = op.color;
   $("laLey").checked = op.ley;
+  $("laCua").checked = op.cua !== false;
   $("laTit").value = op.tit;
   $("laNum").value = op.num;
   $("laNotas").value = op.notas;
@@ -820,6 +835,7 @@ function lamLeer() {
     arq: ["gris", "negro", "color"].includes($("laArq").value) ? $("laArq").value : "gris",
     color: $("laColor").value === "bn" ? "bn" : "color",
     ley: $("laLey").checked,
+    cua: $("laCua").checked,
     tit: $("laTit").value.replace(/[<>]/g, "").slice(0, 120) || LA_DEF.tit,
     num: $("laNum").value.replace(/[<>]/g, "").slice(0, 20) || "IE-0" + (i + 1),
     notas: $("laNotas").value.replace(/[<>]/g, "").slice(0, 2000)

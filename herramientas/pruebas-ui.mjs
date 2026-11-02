@@ -1480,6 +1480,93 @@ prueba("Editor de diseño: fondo del plano, barra de navegación y nombres de la
   await clic('[data-ed="aceptar"]');
 });
 
+prueba(
+  "Editor de diseño: cuadro de circuitos, metrado, caja automática, buscar, datos al pasar, varios, atajos y presentación",
+  async ok => {
+    await ejemplo("uni");
+    await abrirPlano();
+    await ev(
+      `(() => { const tb = dsAgregar({ t: 'sim', k: 'tab', x: ${OX} + 3, y: ${OY} + 7.9, r: 180, capa: 'E-TABLEROS', nom: 'TG', nc: 2, cd: ['Alumbrado'] });
+      const l1 = dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 2, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' }), l2 = dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 5, y: ${OY} + 5, r: 0, capa: 'E-ALUMBRADO' });
+      const o = dsSalidasTab(tb)[0];
+      dsAgregar({ t: 'tub', pts: [...o.p, ${OX} + 2, ${OY} + 5.2], modo: 'techo', capa: 'E-TUBERIAS-TECHO', c0: tb.id, c1: l1.id, tab: tb.id, cir: 'C-1', cond: { f: 1, n: 1, t: true }, dia: 20 });
+      dsAgregar({ t: 'tub', pts: [${OX} + 2.2, ${OY} + 5, ${OX} + 3, ${OY} + 4, ${OX} + 3.5, ${OY} + 6, ${OX} + 4.2, ${OY} + 4, ${OX} + 4.8, ${OY} + 5], b: [0.4, 0.4, 0.4, 0.4], modo: 'techo', capa: 'E-TUBERIAS-TECHO', c0: l1.id, c1: l2.id, tab: tb.id, cir: 'C-1', cond: { f: 1, n: 1, t: true }, dia: 20 });
+      edCambio(); })()`
+    );
+    // Cuadro de circuitos
+    const f = await J("dsFilasCua()");
+    ok(
+      f[0].tit === "TG" && f[1].c === "C-1" && /2 alum/.test(f[1].sal) && f[1].cond === "1F+1N+T" && f[1].dia === 20,
+      `cuadro: C-1 con 2 luminarias, 1F+1N+T, Ø20 (${f[1] && f[1].sal})`
+    );
+    await clic('#editor [data-pl="cua"]');
+    await clicPlano(OX + 11, OY + 8, 0);
+    ok(await ev("dsD().els.some(e => e.t === 'cua')"), "cuadro insertado en el plano");
+    // Metrado del diseño
+    await clic('#editor [data-pl="metrado"]');
+    const met = await ev("$('metC').textContent");
+    ok(
+      /techo o pared · Ø 20 mm/.test(met) &&
+        /Salida de alumbrado en techo/.test(met) &&
+        /Conductor de protección/.test(met),
+      "metrado: tuberías, artefactos y conductores"
+    );
+    await clic('[data-met="cerrar"]');
+    // Caja automática desde la revisión (la tubería con muchas curvas)
+    await clic('#editor [data-pl="revisar"]');
+    ok(await ev("!!$('revLista').querySelector('[data-revc]')"), "la revisión ofrece poner una caja de paso");
+    await clic("#revLista [data-revc]");
+    ok(
+      await ev(
+        "dsD().els.filter(e => e.k === 'caja').length === 1 && dsD().els.filter(e => e.t === 'tub').length === 3 && dsSueltos().puntas.length === 0"
+      ),
+      "caja puesta: la tubería quedó en dos, conectadas a la caja"
+    );
+    await clic('[data-rev="cerrar"]');
+    // Buscar
+    await teclaE("f", "KeyF", 70, 2);
+    ok(await ev("!$('edBuscar').hidden"), "Ctrl+F abre el buscador");
+    await poner("#buQ", "C-1");
+    ok(/Circuito C-1 · TG/.test(await ev("$('buRes').textContent")), "encuentra el circuito C-1 del TG");
+    await ev("buIr(0); 1");
+    ok((await ev("DS_SEL.size")) >= 4 && (await ev("$('edBuscar').hidden")), "lo elige y va a él");
+    // Datos al pasar el cursor
+    ok(
+      /Tubería en techo · C-1 · .* m · 1F\+1N\+T · Ø 20 mm/.test(
+        await ev("dsInfoEl(dsD().els.find(e => e.t === 'tub'))")
+      ),
+      "datos de la tubería al pasar el cursor"
+    );
+    // Propiedades de varios: rotación de las dos luminarias a la vez
+    await ev("DS_SEL.clear(); dsD().els.filter(e => e.k === 'luz').forEach(e => DS_SEL.add(e.id)); edProps(); 1");
+    await poner('#edPropC [data-dsp="r"]', "45");
+    ok(
+      await ev("dsD().els.filter(e => e.k === 'luz').every(e => e.r === 45)"),
+      "rotación de varias luminarias a la vez"
+    );
+    // Atajos del usuario: «LL» para luminaria
+    await ev("localStorage.removeItem(ATJ_K); atjAbrir(); 1");
+    await poner('#atjLista [data-atj-a="col:luz"]', "ll");
+    await clic('[data-atj="cerrar"]');
+    await teclaE("Escape", "Escape", 27);
+    await ev("edEjecutar('LL'); 1");
+    ok((await ev("PLH.h")) === "col:luz", "atajo propio LL: luminaria");
+    await teclaE("Escape", "Escape", 27);
+    // Presentación
+    await clic('#editor [data-pl="presentar"]');
+    ok(
+      await ev(
+        "$('editor').classList.contains('ed-pres') && document.querySelector('#editor .ed-ribbon').offsetHeight === 0"
+      ),
+      "presentación: solo el plano"
+    );
+    await teclaE("Escape", "Escape", 27);
+    ok(!(await ev("$('editor').classList.contains('ed-pres')")), "Esc sale de la presentación");
+    await ev("localStorage.removeItem(ATJ_K); 1");
+    await clic('[data-ed="aceptar"]');
+  }
+);
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

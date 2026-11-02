@@ -303,7 +303,8 @@ const DS_HERR = {
   cotA: "Cota alineada",
   cotL: "Cota lineal",
   dir: "Directriz",
-  ley: "Leyenda"
+  ley: "Leyenda",
+  cua: "Cuadro de circuitos"
 };
 Object.keys(DS_HERR).forEach(k => (PL_NOMH[k] = DS_HERR[k]));
 const dsEsTub = h => h === "tubT" || h === "tubP";
@@ -383,6 +384,8 @@ const DSU = {
   cintaMin: false,
   nav: true,
   navH: false,
+  // Datos del elemento al pasar el cursor
+  info: true,
   navPos: null
 };
 try {
@@ -893,7 +896,9 @@ const dsCaja = pts => {
    Tabla con lo que usa el diseño: cada símbolo (con su dibujo, nombre y código de la Norma DGE), las tuberías en
    techo y en piso y los conductores con marca. Se arma sola con los elementos del diseño; medidas en el papel (mm). */
 const DS_LEY = { w: [16, 84, 20], tit: 7, cab: 5, fila: 9, txt: 2.2 };
-function dsFilasLey() {
+// Se guarda hasta el próximo cambio del diseño
+const dsFilasLey = () => dpCache("ley", dsFilasLey0);
+function dsFilasLey0() {
   const D = dsD(),
     usados = new Set(),
     tubs = { techo: false, piso: false },
@@ -1002,9 +1007,10 @@ function dsDibLeyenda(g, el, col, s, lw) {
   });
   g.restore();
 }
+const dsEsTabla = el => el.t === "ley" || el.t === "cua";
 function dsBBox(el) {
-  if (el.t === "ley") {
-    const [W, H] = dsTamLey();
+  if (dsEsTabla(el)) {
+    const [W, H] = el.t === "cua" ? dsTamCua() : dsTamLey();
     return [el.x, el.y - H, el.x + W, el.y];
   }
   if (el.t === "sim") {
@@ -1050,7 +1056,7 @@ function dsDistSeg(p, x, y) {
 // Líneas que forman un elemento (para tocarlo, engancharse y encajar símbolos en él)
 function dsLineas(el) {
   if (el.t === "lin" || el.t === "tub") return [dsCurva(el)];
-  if (el.t === "ley") {
+  if (dsEsTabla(el)) {
     const b = dsBBox(el);
     return [[b[0], b[1], b[2], b[1], b[2], b[3], b[0], b[3], b[0], b[1]]];
   }
@@ -1169,7 +1175,7 @@ function dsHit(x, y, r) {
         bb = dsBBs(el.k),
         t = r / u;
       if (a >= bb[0] - t && a <= bb[2] + t && b >= bb[1] - t && b <= bb[3] + t) return el.id;
-    } else if (el.t === "txt" || el.t === "ley") {
+    } else if (el.t === "txt" || dsEsTabla(el)) {
       const b = dsBBox(el);
       if (x >= b[0] - r && x <= b[2] + r && y >= b[1] - r && y <= b[3] + r) return el.id;
     } else {
@@ -1191,7 +1197,7 @@ function dsPuntosEnganche(lista) {
   if (!D) return out;
   for (const el of lista || D.els) {
     if (!dsVis(el)) continue;
-    if (el.t === "ley") out.push([el.x, el.y, 4]);
+    if (dsEsTabla(el)) out.push([el.x, el.y, 4]);
     else if (el.t === "sim" || el.t === "txt") {
       out.push([el.x, el.y, 4]);
       // Salidas de circuito del tablero (tipo 8), con su circuito
@@ -1618,6 +1624,7 @@ function dsPintar(g) {
       g.fillText(el.s, 0, 0);
       g.restore();
     } else if (el.t === "ley") dsDibLeyenda(g, el, col, s, dsGrosor(cap));
+    else if (el.t === "cua") dsDibCuadro(g, el, col, s, dsGrosor(cap));
     else if (el.t === "cot") dsDibCota(g, el, col, s, dsGrosor(cap));
     else if (el.t === "dir") dsDibDir(g, el, col, s, dsGrosor(cap));
     else {
@@ -1781,6 +1788,36 @@ function dsVentanaCond(el) {
       edCambio();
     }
   );
+}
+// Texto breve con los datos de un elemento (información al pasar el cursor)
+function dsInfoEl(el) {
+  const f = EPL.f;
+  if (el.t === "sim") {
+    const c = DS_CAT[el.k];
+    if (!c) return "";
+    const pot = el.p ?? dsPotDef(el.k),
+      tb = el.tab && dsD().els.find(e => e.id === el.tab);
+    return [
+      el.k === "tab" ? `${el.nom || "Tablero"} · ${el.nc || 0} circuitos` : c.n,
+      el.cir ? `${el.cir}${tb ? " " + (tb.nom || "") : ""}` : "",
+      c.u && pot != null ? `${pot} ${c.u}` : "",
+      el.enc ? `encendido «${el.enc}»` : ""
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (el.t === "tub")
+    return [
+      `Tubería en ${el.modo === "piso" ? "piso" : "techo"}`,
+      el.cir || "",
+      `${fmt(dsLargo(el) * f, 2)} m`,
+      el.cond ? dpCond(el.cond) : "",
+      el.dia ? `Ø ${el.dia} mm` : ""
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  if (el.t === "lin") return `Línea · ${fmt(dsLargo(el) * f, 2)} m`;
+  return "";
 }
 // Letra de encendido (a, b, c…) junto al artefacto, arriba a la izquierda, siempre derecha
 function dsDibEnc(g, el, col, s) {
@@ -1948,7 +1985,7 @@ function dsPosGiro(el) {
   return dsAMundo(el, 0, DS_BB[el.k][1] - 7);
 }
 function dsAgarres(el) {
-  if (el.t === "ley") return [{ t: "ins", x: el.x, y: el.y }];
+  if (dsEsTabla(el)) return [{ t: "ins", x: el.x, y: el.y }];
   if (el.t === "sim" || el.t === "txt") {
     const out = [{ t: "ins", x: el.x, y: el.y }],
       [gx, gy] = dsPosGiro(el);
@@ -2275,14 +2312,33 @@ function dsSobre(g) {
     g.restore();
   }
   // Leyenda que se va a colocar
-  if (h === "ley" && q) {
+  if ((h === "ley" || h === "cua") && q) {
     g.save();
     g.globalAlpha = 0.5;
-    dsDibLeyenda(g, { x: q[0], y: q[1], tit: "LEYENDA" }, PL_OSCURO ? "#8fc1f0" : "#1f6fd6", PLV.s, plDpr());
+    (h === "ley" ? dsDibLeyenda : dsDibCuadro)(
+      g,
+      { t: h, x: q[0], y: q[1] },
+      PL_OSCURO ? "#8fc1f0" : "#1f6fd6",
+      PLV.s,
+      plDpr()
+    );
     g.restore();
   }
   // Bloque que se va a colocar y comparación con una versión
   dpSobre(g, q, d);
+  // Datos del elemento bajo el cursor (en Seleccionar, sin arrastrar)
+  if (DSU.info !== false && !h && PLH.dsSobre && !PLH.arr && !PLH.agarre && !PLH.marco && PLH.cur) {
+    const el = dsD().els.find(e => e.id === PLH.dsSobre),
+      t = el && dsInfoEl(el);
+    if (t) {
+      const [X, Y] = plAPant(PLH.cur[0], PLH.cur[1]);
+      g.save();
+      g.globalAlpha = 0.88;
+      g.font = `500 ${10.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
+      plEtiqueta(g, t, X + 14 * d, Y + 14 * d, PL_OSCURO ? "#9fb4c8" : "#14304f", "left", "top");
+      g.restore();
+    }
+  }
   // Rastreo polar: la guía desde el punto anterior y su ángulo
   if (PLH.polar && q) {
     const { u, ang } = PLH.polar,
@@ -2385,7 +2441,8 @@ function dsOrden(h, n) {
           ? "Segundo punto"
           : "Posición de la línea de cota (arriba o abajo: horizontal; a un lado: vertical)",
     dir: n ? "Dónde va el texto" : "Punta de la flecha",
-    ley: "Esquina superior izquierda de la leyenda"
+    ley: "Esquina superior izquierda de la leyenda",
+    cua: "Esquina superior izquierda del cuadro de circuitos"
   };
   return `<b>${DS_HERR[h]}</b> · ${T[h]}${libre} · <span class="pl-k">Esc</span> salir`;
 }
@@ -2398,10 +2455,17 @@ function dsPunto(p) {
   const h = PLH.h;
   if (h === "fila" || h === "espejo") return dsPuntoCopia(p);
   if (h === "blq") return dpColocarBloque(p);
-  if (h === "ley") {
+  if (h === "ley" || h === "cua") {
+    if (h === "cua" && !dsD().els.some(e => e.k === "tab" && e.nc)) {
+      plHerr(null);
+      return toast("Primero coloque un tablero y defina sus circuitos (doble clic en el tablero)");
+    }
     dsCapa(DS_SIS.txt.capa);
     DS_SEL.clear();
-    DS_SEL.add(dsAgregar({ t: "ley", x: p[0], y: p[1], tit: "LEYENDA", capa: DS_SIS.txt.capa }).id);
+    DS_SEL.add(
+      dsAgregar({ t: h, x: p[0], y: p[1], tit: h === "ley" ? "LEYENDA" : "CUADRO DE CIRCUITOS", capa: DS_SIS.txt.capa })
+        .id
+    );
     edCambio();
     return plHerr(null);
   }
@@ -2684,7 +2748,7 @@ function dsFantasma(g, el, tr, col) {
   tr(o);
   if (o.t === "sim")
     dsDibSim(g, o.k, ...plAPant(o.x, o.y), ((o.r || 0) * Math.PI) / 180, dsUk(o.k) * PLV.s, col, null, plDpr());
-  else if (o.t === "txt" || o.t === "ley") {
+  else if (o.t === "txt" || dsEsTabla(o)) {
     const b = dsBBox(o),
       [x0, y0] = plAPant(b[0], b[3]),
       [x1, y1] = plAPant(b[2], b[1]);
@@ -2850,7 +2914,7 @@ function dsGirar(ang = DSU.giro || 90) {
     PLH.rot = (((PLH.rot + ang) % 360) + 360) % 360;
     return plSobreDibujar();
   }
-  const sel = dsSel().filter(el => dsEditable(el) && el.t !== "ley");
+  const sel = dsSel().filter(el => dsEditable(el) && !dsEsTabla(el));
   if (!sel.length) return;
   dsDesligar(sel);
   // Los símbolos y textos giran sobre su punto; lo demás, sobre el centro de la selección
@@ -2988,6 +3052,7 @@ function dsProps(c) {
       campo("Capa", capas(capa0)) +
       (sel.every(el => el.t === "sim" || el.t === "tub") ? campo("Circuito", circ(cir0)) + lista : "") +
       (tubs.length === sel.length ? dsCampoCond(campo, tubs) : "") +
+      dsCamposVarios(campo, sel) +
       (sel.every(dsConEnc)
         ? campo(
             "Encendido",
@@ -3068,6 +3133,15 @@ function dsProps(c) {
         `<select data-dsp="modo"><option value="alin"${el.modo === "alin" ? " selected" : ""}>Alineada</option><option value="h"${el.modo === "h" ? " selected" : ""}>Horizontal</option><option value="v"${el.modo === "v" ? " selected" : ""}>Vertical</option></select>`
       ) +
       campo("Capa", capas(el.capa));
+  } else if (el.t === "cua") {
+    h =
+      `<div class="ed-pt">Cuadro de circuitos<small>Se arma solo con los tableros y lo conectado a cada circuito</small></div>` +
+      campo(
+        "Título",
+        `<input type="text" data-dsp="tit" value="${esc(el.tit || "CUADRO DE CIRCUITOS")}" maxlength="60">`
+      ) +
+      fila("Circuitos", dsFilasCua().filter(f => f.c).length) +
+      campo("Capa", capas(el.capa));
   } else if (el.t === "ley") {
     h =
       `<div class="ed-pt">Leyenda<small>Se arma sola con lo que usa el diseño</small></div>` +
@@ -3114,6 +3188,31 @@ function dsProps(c) {
   c.innerHTML = h + color + letra + (cap.bloq ? `<p class="pl-nota">La capa está bloqueada.</p>` : "") + acciones;
   if (c.id === "edPropC") elRender();
 }
+// Campos comunes a varios símbolos: rotación y, si todos tienen, altura de montaje y potencia (vacío = cada uno el suyo)
+function dsCamposVarios(campo, sel) {
+  if (!sel.every(el => el.t === "sim" && DS_CAT[el.k])) return "";
+  const igual = k => sel.every(el => el[k] === sel[0][k]),
+    u = DS_CAT[sel[0].k].u,
+    mismaU = sel.every(el => DS_CAT[el.k].u === u);
+  return (
+    campo(
+      "Rotación",
+      `<input type="number" data-dsp="r" value="${igual("r") ? +(sel[0].r || 0).toFixed(2) : ""}" placeholder="(varias)" step="1"><i>°</i>`
+    ) +
+    (sel.every(el => DS_CAT[el.k].h)
+      ? campo(
+          "Altura",
+          `<input type="number" data-dsp="h" value="${igual("h") && sel[0].h != null ? sel[0].h : ""}" placeholder="${igual("h") ? "la de Parámetros" : "(varias)"}" step="0.05" min="0" max="10"><i>m</i>`
+        )
+      : "") +
+    (u && mismaU
+      ? campo(
+          "Potencia",
+          `<input type="number" data-dsp="p" value="${igual("p") && sel[0].p != null ? sel[0].p : ""}" placeholder="${igual("p") ? "la de Parámetros" : "(varias)"}" step="10" min="0" max="100000"><i>${u}</i>`
+        )
+      : "")
+  );
+}
 // Diámetros nominales de las tuberías (mm)
 const DS_DIAS = [15, 20, 25, 35, 40, 50, 65, 80];
 // Campo de conductores de las tuberías (fases, neutro, tierra), su diámetro y botón para todo el circuito
@@ -3159,7 +3258,8 @@ const dsNomTipo = t =>
         txt: "Texto",
         cot: "Cota",
         dir: "Directriz",
-        ley: "Leyenda"
+        ley: "Leyenda",
+        cua: "Cuadro de circuitos"
       }[t] || t;
 function dsPropCambio(e) {
   const f = e.target.closest("[data-dsp]");
@@ -3199,7 +3299,8 @@ function dsPropCambio(e) {
     else if (k === "p") el.p = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "cir") el.cir = v.replace(/[<>]/g, "").slice(0, 12) || undefined;
     else if (k === "s") el.s = v.replace(/[<>]/g, "").slice(0, 200) || el.s;
-    else if (k === "tit") el.tit = v.replace(/[<>]/g, "").slice(0, 60) || "LEYENDA";
+    else if (k === "tit")
+      el.tit = v.replace(/[<>]/g, "").slice(0, 60) || (el.t === "cua" ? "CUADRO DE CIRCUITOS" : "LEYENDA");
     else if (k === "ht") el.ht = Math.max(0.01, parseFloat(v) || 0.1) / EPL.f;
     else if (k === "rad") el.rad = Math.max(0.01, parseFloat(v) || 0.1) / EPL.f;
     else if (k === "modo") {
@@ -3294,9 +3395,18 @@ function dsResumen0() {
   const revision = D.els.length
     ? `<div class="ds-aviso${rv ? "" : " ok"}"><b>Revisión:</b> ${rv ? `${rv} aviso${rv > 1 ? "s" : ""}` : "sin avisos"}<div><button type="button" data-dsx="rev">Revisar diseño</button></div></div>`
     : "";
-  const orden = [...Object.keys(DS_CAT), "tub-techo", "tub-piso", "lin", "cir", "txt", "cot", "dir", "ley"].filter(
-    t => cuenta[t]
-  );
+  const orden = [
+    ...Object.keys(DS_CAT),
+    "tub-techo",
+    "tub-piso",
+    "lin",
+    "cir",
+    "txt",
+    "cot",
+    "dir",
+    "ley",
+    "cua"
+  ].filter(t => cuenta[t]);
   box.innerHTML = orden.length
     ? aviso +
       revision +
@@ -3364,6 +3474,7 @@ function dsCinta() {
   $("dsMarcaEst").value = DSU.marcaEst === "recta" ? "recta" : "incl";
   $("dsCalido").value = String(DSU.calido || 0);
   $("dsNav").checked = DSU.nav !== false;
+  $("dsInfo").checked = DSU.info !== false;
   $("dsBrillo").value = String(DSU.brillo || 100);
   $("dsCirT").checked = !!(D && D.cirt);
   $("dsNSal").checked = !!(D && D.nsal);
@@ -3435,6 +3546,11 @@ $("dsColor").addEventListener("change", e => {
   dsGuardarPref();
   dsResumen();
   plDibujar();
+});
+$("dsInfo").addEventListener("change", e => {
+  DSU.info = e.target.checked;
+  dsGuardarPref();
+  plSobreDibujar();
 });
 $("dsNav").addEventListener("change", e => {
   DSU.nav = e.target.checked;
@@ -3778,7 +3894,7 @@ function dsVerificar() {
         `Tubería${t.cir ? " de " + t.cir : ""} con ${Math.round(g)}° de curvas`,
         [t.id],
         `Más de ${C.cur}° entre dos cajas o artefactos (criterio; verifique la regla del CNE): ponga una caja de paso.`
-      );
+      ) && (out[out.length - 1].caja = t.id);
   });
   // Tomacorrientes sin conductor de protección marcado
   const sinT = tubs.filter(
@@ -3884,7 +4000,7 @@ function revRender() {
   $("revLista").innerHTML = REV_L.length
     ? REV_L.map(
         (o, i) =>
-          `<div class="rev-it ${o.nivel}"><i>${o.nivel === "aviso" ? "⚠" : "ℹ"}</i><span>${esc(o.t)}<small>${esc(o.d)}</small></span><button type="button" class="vw-btn" data-revi="${i}" title="Elige y muestra estos elementos">Ver</button></div>`
+          `<div class="rev-it ${o.nivel}"><i>${o.nivel === "aviso" ? "⚠" : "ℹ"}</i><span>${esc(o.t)}<small>${esc(o.d)}</small></span><span class="pla-b">${o.caja ? `<button type="button" class="vw-btn" data-revc="${o.caja}" title="Parte la tubería en el medio de su recorrido con una caja de paso">Poner caja</button>` : ""}<button type="button" class="vw-btn" data-revi="${i}" title="Elige y muestra estos elementos">Ver</button></span></div>`
       ).join("")
     : '<p class="rev-ok">✓ Sin observaciones: el diseño está conectado y completo.</p>';
   $("revNota").textContent = REV_L.length
@@ -3896,6 +4012,11 @@ $("revDlg").addEventListener("click", e => {
   const b = e.target.closest("[data-rev]"),
     v = e.target.closest("[data-revi]");
   if (b && b.dataset.rev === "cerrar") return revCerrar();
+  const pc = e.target.closest("[data-revc]");
+  if (pc) {
+    dpPonerCaja(pc.dataset.revc);
+    return revRender();
+  }
   if (b && b.dataset.rev === "max") return REV_VW.maximizar();
   if (v) {
     const o = REV_L[+v.dataset.revi];

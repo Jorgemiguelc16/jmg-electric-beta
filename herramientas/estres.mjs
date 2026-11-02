@@ -28,7 +28,7 @@ console.log(
     if (prev && i % cols) { dsAgregar({ t: 'tub', pts: [prev.x, prev.y, x, y], b: [0.2], modo: 'techo', capa: 'E-TUBERIAS-TECHO', c0: prev.id, c1: l.id, cir: c, cond: { f: 1, n: 1, t: true } }); }
     dsAgregar({ t: 'tub', pts: [x, y, x + dx * 0.4, y], modo: 'piso', capa: 'E-TUBERIAS-PISO', c0: l.id, c1: t.id, cir: c });
     prev = l; }
-  return D.els.length + ' elementos'; })()`)
+  dsAgregar({ t: 'cua', x: e[2], y: e[3], tit: 'CUADRO', capa: 'E-TEXTOS' }); return D.els.length + ' elementos'; })()`)
 );
 const med = async (nom, js, n = 3) => {
   const r = await ev(
@@ -36,6 +36,7 @@ const med = async (nom, js, n = 3) => {
   );
   console.log(nom.padEnd(42), r);
 };
+await med("cuadro: dsBBox", "dsBBox(dsD().els.find(e => e.t === 'cua'))");
 await med("edCambio (un cambio cualquiera)", "edCambio()");
 await med("  · dsReconectar", "dsReconectar()");
 await med("  · dsPropagarCircuitos", "dsPropagarCircuitos()");

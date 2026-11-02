@@ -455,6 +455,138 @@
   font: 600 9px var(--f-body);
   color: #c77d2e;
 }
+/* Buscar en el plano */
+.ed-buscar {
+  position: absolute;
+  z-index: 8;
+  top: 150px;
+  left: 50%;
+  width: 380px;
+  transform: translateX(-50%);
+  padding: 6px;
+  background: var(--ws-pane, #fff);
+  border: 1px solid var(--ws-line, #d6dde6);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(20, 48, 79, 0.22);
+}
+.ed-buscar input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--ws-line, #d6dde6);
+  border-radius: 4px;
+  font: 13px var(--f-body);
+}
+.bu-res {
+  max-height: 300px;
+  overflow: auto;
+}
+.bu-res button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--ws-text, #1f2a36);
+  font: 12px var(--f-body);
+  text-align: left;
+  cursor: pointer;
+}
+.bu-res button:hover,
+.bu-res button.on {
+  background: var(--ws-sel, #dde9f6);
+}
+.bu-res small {
+  color: var(--ws-text2, #66737f);
+  white-space: nowrap;
+}
+.bu-res p {
+  margin: 8px;
+  font: 12px var(--f-body);
+  color: var(--ws-text2, #66737f);
+}
+/* Modo presentación: solo el plano */
+.ed.ed-pres .ed-tit,
+.ed.ed-pres .ed-tabs,
+.ed.ed-pres .ed-ribbon,
+.ed.ed-pres .ed-izq,
+.ed.ed-pres .ed-der,
+.ed.ed-pres .ed-estado,
+.ed.ed-pres .pl-nav,
+.ed.ed-pres .pl-cmd {
+  display: none !important;
+}
+/* Atajos de teclado */
+.atj-t {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--f-body);
+}
+.atj-t th,
+.atj-t td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #eef1f4;
+  text-align: left;
+}
+.atj-t th {
+  color: #5f6b77;
+  background: #f4f6f8;
+  font-weight: 600;
+}
+.atj-t td.atj-k {
+  font: 600 12px var(--f-mono);
+  color: #14304f;
+}
+.atj-t input {
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid #c9cfd6;
+  border-radius: 3px;
+  font: 12px var(--f-mono);
+  text-transform: uppercase;
+}
+/* Metrado del diseño */
+.met-cuerpo h4 {
+  margin: 12px 2px 4px;
+  font: 600 11px var(--f-body);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #14304f;
+}
+.met-cuerpo table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--f-body);
+}
+.met-cuerpo th,
+.met-cuerpo td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #eef1f4;
+  text-align: left;
+}
+.met-cuerpo th {
+  font-weight: 600;
+  color: #5f6b77;
+  background: #f4f6f8;
+}
+.met-cuerpo td.n,
+.met-cuerpo th.n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.met-cuerpo tr.tot td {
+  font-weight: 600;
+  border-top: 1px solid #c9cfd6;
+}
+.met-f {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  font: 12px var(--f-body);
+}
 /* Plantillas y versiones */
 .pla-h {
   margin: 10px 4px 4px;
