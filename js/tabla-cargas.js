@@ -209,11 +209,13 @@ function renderTabla() {
   renderLista();
   const x = P[TC_SEL],
     rap = `<div class="tc-rap"><span>Rápido</span>${TC_RAPIDAS[nm].map(([t, tp, n]) => `<button type="button" class="vw-btn" data-rap="${esc(tp)}|${esc(n)}" title="${esc(n)}">${esc(t)}</button>`).join("")}</div>`;
-  $("tcForm").innerHTML = x
-    ? `<fieldset class="fc-g tc-g"><legend>Carga ${TC_SEL + 1}</legend><div class="tc-grid">${tcCampos(nm, x)
-        .map(d => tcCampo(x, d))
-        .join("")}</div></fieldset>${rap}<div class="tc-res" id="tcRes"></div>`
-    : `<p class="fc-nota">Agregue la primera carga con + o con un botón rápido.</p>${rap}`;
+  $("tcForm").innerHTML =
+    (nm === "cargas" ? planoNota("carPlanoN") : "") +
+    (x
+      ? `<fieldset class="fc-g tc-g"><legend>Carga ${TC_SEL + 1}</legend><div class="tc-grid">${tcCampos(nm, x)
+          .map(d => tcCampo(x, d))
+          .join("")}</div></fieldset>${rap}<div class="tc-res" id="tcRes"></div>`
+      : `<p class="fc-nota">Agregue la primera carga con + o con un botón rápido.</p>${rap}`);
   tcRes();
 }
 function tcPie() {

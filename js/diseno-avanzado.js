@@ -111,6 +111,314 @@ function dpVerificar(add) {
     );
 }
 
+/* ---------- Ver elementos: los elige y los muestra en pantalla ---------- */
+function dsVerIds(ids) {
+  DS_SEL.clear();
+  PL_ASEL.clear();
+  const D = dsD();
+  if (!D) return;
+  const has = new Set(ids);
+  D.els.forEach(e => has.has(e.id) && DS_SEL.add(e.id));
+  const bb = dsSel().map(dsBBox);
+  if (bb.length) {
+    const x0 = Math.min(...bb.map(q => q[0])),
+      y0 = Math.min(...bb.map(q => q[1])),
+      x1 = Math.max(...bb.map(q => q[2])),
+      y1 = Math.max(...bb.map(q => q[3])),
+      m = Math.max(x1 - x0, y1 - y0, 2 / EPL.f) * 0.35;
+    plVer(x0 - m, y0 - m, x1 + m, y1 + m);
+  }
+  edProps();
+  plSobreDibujar();
+}
+// Desde el cálculo: abre el editor (si hace falta, con el plano) y muestra los elementos; o la ventana «Datos
+// para el cálculo» (fn)
+function edVerEnPlano(ids, fn) {
+  if (!PLANO) return toast("El proyecto aún no tiene plano: ábralo en Planos › Editor de diseño");
+  if (!ED.abierto) edAbrir();
+  let n = 0;
+  const ir = () => {
+    if (PL_MOD && EPL && dsD()) return fn ? fn() : dsVerIds(ids);
+    if (++n < 80) setTimeout(ir, 100);
+  };
+  setTimeout(ir, 60);
+}
+
+/* ---------- Tipos de luminaria del proyecto: L1, L2… con su descripción, potencia, control y uso ---------- */
+const LU_VW = ventanaMovil(document.querySelector("#lumDlg .vw"), "jmg-electric-luminarias", {
+  w: 880,
+  h: 420,
+  minW: 560,
+  minH: 260
+});
+function lumAbrir() {
+  if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
+  dsAsegurar();
+  $("lumDlg").hidden = false;
+  vwFondo();
+  LU_VW.abrir();
+  lumRender();
+}
+function lumCerrar() {
+  $("lumDlg").hidden = true;
+  vwFondo();
+}
+function lumRender() {
+  const D = dsD(),
+    L = D.lums || [],
+    uso = {};
+  D.els.forEach(e => e.lt && (uso[e.lt] = (uso[e.lt] || 0) + 1));
+  const sel = dsSel().filter(e => dsClase(e) === "al").length,
+    op = (o, v) =>
+      Object.entries(o)
+        .map(([k, n]) => `<option value="${k}"${k === (v || "") ? " selected" : ""}>${esc(n)}</option>`)
+        .join("");
+  $("luLista").innerHTML = L.length
+    ? `<div class="lu-fila lu-cab"><span>Tipo</span><span>Descripción</span><span>Potencia</span><span>Control</span><span>Uso</span><span>En el plano</span><span></span></div>` +
+      L.map(
+        (t, i) =>
+          `<div class="lu-fila"><b>${t.id}</b><input type="text" data-lu-k="n" data-i="${i}" value="${esc(t.n)}" list="luSug" maxlength="60" placeholder="Descripción: panel LED, dicroico…" aria-label="Descripción del tipo ${t.id}"><span class="tc-u"><input type="number" data-lu-k="w" data-i="${i}" value="${t.w || ""}" min="0" step="1" placeholder="0" aria-label="Potencia del tipo ${t.id}"><em>W</em></span><select data-lu-k="ctrl" data-i="${i}" aria-label="Control">${op(DS_CTRL, t.ctrl)}</select><select data-lu-k="emer" data-i="${i}" aria-label="Uso">${op(DS_EMER, t.emer)}</select><span class="lu-uso">${uso[t.id] || 0} luminaria${uso[t.id] === 1 ? "" : "s"}${sel ? ` · <button type="button" class="linkbtn" data-lu-asig="${i}" title="Pone este tipo a las ${sel} luminarias elegidas">asignar</button>` : ""}</span><button type="button" class="vw-btn" data-lu-x="${i}" title="Quitar el tipo (las luminarias quedan sin tipo)" aria-label="Quitar el tipo ${t.id}">×</button></div>`
+      ).join("")
+    : '<p class="rev-ok">Aún no hay tipos. Agregue uno por cada luminaria distinta del proyecto: dicroico, panel, gradas, con sensor, emergencia…</p>';
+}
+$("lumDlg").addEventListener("click", e => {
+  if (e.target.id === "lumDlg") return lumCerrar();
+  const b = e.target.closest("[data-lu]"),
+    x = e.target.closest("[data-lu-x]"),
+    a = e.target.closest("[data-lu-asig]"),
+    D = dsD();
+  if (b && b.dataset.lu === "cerrar") return lumCerrar();
+  if (b && b.dataset.lu === "max") return LU_VW.maximizar();
+  if (b && b.dataset.lu === "nuevo") {
+    const L = (D.lums = D.lums || []);
+    let k = 1;
+    while (L.some(t => t.id === "L" + k)) k++;
+    L.push({ id: "L" + k, n: "", w: 0 });
+    edCambio();
+    lumRender();
+    const i = $("luLista").querySelector(`[data-lu-k="n"][data-i="${L.length - 1}"]`);
+    if (i) i.focus();
+    return;
+  }
+  if (x) {
+    const t = D.lums[+x.dataset.luX];
+    D.els.forEach(el => el.lt === t.id && delete el.lt);
+    D.lums.splice(+x.dataset.luX, 1);
+    if (!D.lums.length) delete D.lums;
+    edCambio();
+    lumRender();
+    return toast(`Tipo ${t.id} quitado`);
+  }
+  if (a) {
+    const t = D.lums[+a.dataset.luAsig],
+      s = dsSel().filter(el => dsClase(el) === "al");
+    s.forEach(el => (el.lt = t.id));
+    edCambio();
+    lumRender();
+    toast(`Tipo ${t.id} en ${s.length} luminaria${s.length > 1 ? "s" : ""}`);
+  }
+});
+$("lumDlg").addEventListener("change", e => {
+  const c = e.target.closest("[data-lu-k]");
+  if (!c) return;
+  const t = dsD().lums[+c.dataset.i],
+    k = c.dataset.luK,
+    v = c.value;
+  if (k === "n") t.n = v.replace(/[<>]/g, "").trim().slice(0, 60);
+  else if (k === "w") t.w = Math.max(0, Math.min(100000, parseFloat(v) || 0));
+  else if (v) t[k] = v;
+  else delete t[k];
+  edCambio();
+});
+$("lumDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    lumCerrar();
+  }
+  e.stopPropagation();
+});
+
+/* ---------- Datos del diseño para el cálculo (planoCalc, js/calculo-plano.js) ---------- */
+const DC_VW = ventanaMovil(document.querySelector("#dcDlg .vw"), "jmg-electric-datos-calculo", {
+  w: 900,
+  h: 600,
+  minW: 520,
+  minH: 320
+});
+// Qué hacer con cada aviso
+const DC_AYUDA = {
+  pot: "Escriba su potencia en Propiedades (o la de su tipo de luminaria).",
+  ruta: "Únalas con tuberías desde la salida del tablero: la longitud se mide por el recorrido.",
+  tipo: "Doble clic en el tablero y elija el tipo de cada circuito.",
+  nom: "Los tableros del plano se llaman como en el cálculo: TG, TD-1, TD-2…"
+};
+// Nombres de los tableros del cálculo (vivienda y otros usos): TG y, con pisos, el TD de cada uno
+function dcNomsCalc() {
+  const td = pisos.length && PROY.esqPisos === "td";
+  return ["TG", ...(td ? ["TD-1"] : []), ...pisos.map((_, i) => tabPiso(i + 2))];
+}
+// Datos del diseño que está en el editor (con los cambios aún sin aplicar)
+function dcDatos() {
+  const c = ctx(estado()),
+    n = k => parseFloat(PROY[k]) || 0,
+    R = planoCalc({ f: EPL.f, plantas: EPL.plantas, dis: dsD() }, c, {
+      al_p: n("al_p"),
+      tg_p: n("tg_p"),
+      tc_p: n("tc_p"),
+      hEnt: n("hEnt") || 3.1
+    }),
+    noms = dcNomsCalc();
+  if (R && MODE === "uni")
+    R.tabs
+      .filter(t => t.circs.length && !noms.includes(t.nom))
+      .forEach(t =>
+        R.avisos.push({
+          t: "aviso",
+          m: `El tablero ${t.nom} no está en el cálculo (${noms.join(", ")})`,
+          ids: [t.id],
+          k: "nom"
+        })
+      );
+  return { R, noms, c };
+}
+// Avisos para la revisión del diseño (solo si el diseño tiene tableros con circuitos)
+function dcAvisos() {
+  if (!EPL || !dsD() || MODE !== "uni" || !dsD().els.some(e => e.k === "tab" && e.nc)) return [];
+  return dcDatos().R.avisos;
+}
+function dcAbrir() {
+  if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
+  dsAsegurar();
+  $("dcDlg").hidden = false;
+  vwFondo();
+  DC_VW.abrir();
+  dcRender();
+}
+function dcCerrar() {
+  $("dcDlg").hidden = true;
+  vwFondo();
+}
+let DC_AV = [];
+function dcRender() {
+  if ($("dcDlg").hidden) return;
+  const { R, noms } = dcDatos(),
+    usa = PROY.calPlano === "1",
+    sucio = edSnap() !== ED.base,
+    // ΔV del último cálculo (solo si el cálculo ya usa este diseño)
+    L = usa && !sucio && LAST && LAST.plano ? LAST : null,
+    m = v => fmt(v, 2),
+    ver = (ids, t = "Ver") =>
+      ids && ids.length ? `<button type="button" class="vw-btn" data-dcv="${ids.join(",")}">${t}</button>` : "";
+  $("dcUsar").value = usa ? "1" : "";
+  $("dcEst").innerHTML =
+    MODE !== "uni"
+      ? "Por ahora, el cálculo con el diseño es para vivienda unifamiliar y otros usos; el edificio multifamiliar llegará después."
+      : !usa
+        ? "El cálculo usa los datos escritos: elija «Sí» para calcular con este diseño."
+        : sucio
+          ? `El cálculo usa el diseño aplicado: <button type="button" class="linkbtn" data-dc="aplicar">aplique los cambios</button> para actualizarlo.`
+          : "El cálculo usa este diseño.";
+  let h = "";
+  const tabs = R ? R.tabs : [];
+  if (!tabs.length)
+    h +=
+      '<p class="rev-ok">El diseño aún no tiene tableros. Ponga el tablero (Biblioteca › Tableros y medición), defina sus circuitos con doble clic y saque las tuberías desde sus salidas.</p>';
+  tabs.forEach(tb => {
+    const en = noms.includes(tb.nom);
+    h += `<h4>${esc(tb.nom)}<small class="${en ? "" : "bad"}">${en ? "en el cálculo" : `no está en el cálculo (${noms.join(", ")})`}</small> ${ver([tb.id])}</h4>`;
+    if (!tb.circs.length) {
+      h += '<p class="dc-nota">Sin circuitos con carga: defina sus circuitos con doble clic y conecte las salidas.</p>';
+      return;
+    }
+    h +=
+      `<table class="dc-t"><thead><tr><th>Circuito</th><th>Tipo</th><th>Salidas</th><th>Carga conectada</th><th>Hasta la salida más alejada</th>${L ? "<th>ΔV total</th>" : ""}<th></th></tr></thead><tbody>` +
+      tb.circs
+        .map(q => {
+          const qq = L && L.circ.find(x => x.src && x.src.t === "plano" && x.src.tab === tb.id && x.src.cir === q.cir),
+            pd = q.sal.filter(o => o.de === "Parámetros").length,
+            tp = [...new Set(q.sal.filter(o => o.de.startsWith("tipo")).map(o => o.de.slice(5)))];
+          return `<tr><td><b>${q.cir}</b>${q.desc ? `<small>${esc(q.desc)}</small>` : ""}</td><td>${PL_TCIR[q.tipo]}${q.auto ? "<small>automático</small>" : ""}</td><td class="n"><button type="button" class="linkbtn" data-dcv="${q.sal.map(o => o.id).join(",")}" title="Elige y muestra sus salidas">${q.n}</button></td><td class="n">${fmt(q.P, 0)} W<small>${[pd ? `${pd} con la de Parámetros` : "", tp.length ? `tipo ${tp.join(", ")}` : ""].filter(Boolean).join(" · ")}</small></td><td class="n${q.est ? " bad" : ""}">${m(q.L)} m<small>${q.est ? "estimada: hay salidas sin tubería" : `${m(q.Lh)} tubería + ${m(q.Lv)} vertical`}</small></td>${L ? `<td class="n ${qq && qq.ok ? "ok" : "bad"}">${qq ? m(qq.dVt) + " %" : "—"}</td>` : ""}<td>${ver(q.lej ? [q.lej] : [], "Más alejada")}</td></tr>`;
+        })
+        .join("") +
+      "</tbody></table>";
+  });
+  // Alimentadores
+  if (tabs.length) {
+    const ali = R.rutas,
+      fila = (n, r, alt) =>
+        `<tr><td>${n}</td><td class="n">${r ? `${m(r.L)} m<small>${m(r.Lh)} tubería + ${m(r.L - r.Lh)} vertical</small>` : "—"}</td><td>${r ? "del plano" : esc(alt)}</td></tr>`;
+    h +=
+      `<h4>Alimentadores<small>tuberías marcadas como alimentador, por los montantes</small></h4><table class="dc-t"><thead><tr><th>Tramo</th><th>Longitud</th><th>Origen</th></tr></thead><tbody>` +
+      fila(
+        "Medidor → TG",
+        ali.TG,
+        `sin tubería de alimentador del medidor al TG: se usa la escrita (${PROY.Lalim || "—"} m)`
+      ) +
+      noms
+        .filter(n => n !== "TG")
+        .map(n => fila(`TG → ${n}`, ali[n], "sin recorrido en el plano: se usa la escrita en Pisos y tableros"))
+        .join("") +
+      "</tbody></table>";
+  }
+  // Cargas especiales
+  if (R && R.cargas.length)
+    h +=
+      `<h4>Cargas especiales<small>para la máxima demanda (Regla 050-200) y su circuito</small></h4><table class="dc-t"><thead><tr><th>Descripción</th><th>Tipo de carga</th><th>Potencia</th><th>Fases</th><th>Circuito</th><th></th></tr></thead><tbody>` +
+      R.cargas
+        .map(
+          x =>
+            `<tr><td>${esc(x.nombre)}</td><td>${esc(TIPOS[x.tipo])}</td><td class="n">${fmt(x.p, 0)} W</td><td>${x.fases === 3 ? "Trifásica" : "Monofásica"}${x.elec ? "<small>con electrónica</small>" : ""}</td><td>${esc(x.tab)} ${x.cir}</td><td>${ver([x.id])}</td></tr>`
+        )
+        .join("") +
+      "</tbody></table>";
+  // Avisos
+  DC_AV = R ? R.avisos : [];
+  if (DC_AV.length)
+    h +=
+      `<h4>Avisos<small>${DC_AV.length}</small></h4>` +
+      DC_AV.map(
+        (a, i) =>
+          `<div class="rev-it ${a.t === "error" ? "aviso" : "info"}"><i>${a.t === "info" ? "ℹ" : "⚠"}</i><span>${esc(a.m)}<small>${esc(DC_AYUDA[a.k] || "")}</small></span><span class="pla-b"><button type="button" class="vw-btn" data-dca="${i}">Ver</button></span></div>`
+      ).join("");
+  h += `<p class="dc-nota"><b>Cómo se mide (criterio de la plataforma):</b> el recorrido es el camino más corto por las tuberías del circuito, desde el tablero hasta cada salida, con las derivaciones. Se suman los tramos verticales: la tubería por el techo va a la altura del techo (${m(+PROY.hTecho || 2.9)} m) y la del piso a 0 m; en cada artefacto se sube o se baja hasta su altura de montaje (la suya o la de Parámetros › Alturas) y en el tablero desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza. Cada montante suma la altura de entrepiso (${m(+PROY.hEnt || 3.1)} m) por piso. La potencia de cada salida es la suya o, si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). La caída de tensión se calcula con la carga conectada del circuito hasta la salida más alejada (Regla 050-102). Los tableros que no están dibujados se calculan con los datos escritos.</p>`;
+  $("dcC").innerHTML = h;
+}
+$("dcDlg").addEventListener("click", e => {
+  if (e.target.id === "dcDlg") return dcCerrar();
+  const b = e.target.closest("[data-dc]"),
+    v = e.target.closest("[data-dcv]"),
+    a = e.target.closest("[data-dca]");
+  if (b && b.dataset.dc === "cerrar") return dcCerrar();
+  if (b && b.dataset.dc === "max") return DC_VW.maximizar();
+  if (b && b.dataset.dc === "aplicar") {
+    edAplicar();
+    return dcRender();
+  }
+  if (v || a) {
+    dcCerrar();
+    dsVerIds(v ? v.dataset.dcv.split(",") : DC_AV[+a.dataset.dca].ids);
+  }
+});
+$("dcDlg").addEventListener("change", e => {
+  if (e.target.id !== "dcUsar") return;
+  // Se escribe en el dato del proyecto como si se eligiera allí: el cálculo y el historial lo toman
+  const s = $("calPlano");
+  s.value = e.target.value;
+  s.dispatchEvent(new Event("input", { bubbles: true }));
+  s.dispatchEvent(new Event("change", { bubbles: true }));
+  toast(
+    e.target.value ? "El proyecto se calcula con el diseño del plano" : "El proyecto se calcula con los datos escritos"
+  );
+  setTimeout(dcRender, 50);
+});
+$("dcDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    dcCerrar();
+  }
+  e.stopPropagation();
+});
+
 /* ---------- Bloques propios ---------- */
 const DP_BLQ = DP_PRE + "-bloques";
 function dpBloques() {

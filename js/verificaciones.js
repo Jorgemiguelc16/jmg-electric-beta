@@ -205,7 +205,22 @@ function recomendaciones(r) {
       sug: "Si los conductores van dentro de tubos empotrados, corresponde el método B1.",
       ir: { foco: "met", lab: "Ir a Método de instalación" }
     });
-  const l1 = items.filter(x => x.L <= 1);
+  // Avisos del diseño en el plano (con «Calcular con el diseño»)
+  const pa = r.plano ? r.plano.avisos.filter(a => a.t !== "info") : [];
+  if (pa.length)
+    R.push({
+      id: "plano|" + pa.map(a => a.m).join(","),
+      tipo: "sub",
+      tit: "Avisos del diseño en el plano",
+      txt: `${pa
+        .slice(0, 4)
+        .map(a => a.m)
+        .join("; ")}${pa.length > 4 ? ` y ${pa.length - 4} más` : ""}.`,
+      sug: "Corríjalos en el editor de diseño: mientras tanto, esas salidas se calculan sin potencia o con la longitud estimada en línea quebrada.",
+      ir: { act: "datosplano", lab: "Abrir los datos del plano" }
+    });
+  // Las longitudes del plano son medidas: no se avisan
+  const l1 = items.filter(x => x.L <= 1 && !x.plano);
   if (l1.length)
     R.push({
       id: "l1|" + l1.map(nom).join(","),

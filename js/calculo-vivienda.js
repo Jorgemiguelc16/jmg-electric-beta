@@ -1,7 +1,9 @@
 /* CÁLCULO · VIVIENDA Y OTROS USOS
    calcUni(): vivienda unifamiliar (con sus pisos y tableros) y otros usos (oficinas, comercios, escuelas, hospitales,
    hoteles): máxima demanda, alimentadores, circuitos, balance, cortocircuito y puesta a tierra. Parte del motor de
-   js/calculo.js. */
+   js/calculo.js. Con «Calcular con el diseño» (dato calPlano), los tableros dibujados en el plano dan sus circuitos,
+   sus cargas especiales y la longitud de sus alimentadores (planoCalc, js/calculo-plano.js); los tableros que no están
+   en el plano se calculan con los datos escritos, como siempre. */
 function calcUni(c) {
   SFX = (P.SECF || {}).uni || {};
   const PS = pisosUni(),
@@ -13,12 +15,78 @@ function calcUni(c) {
     fSot = viv ? 0.75 : 1,
     ImV = viv ? IMIN_UNI : 0,
     fdV = viv ? c.fdA : FD;
+  // Tablero de cada piso: TG si el piso se conecta al tablero general, TD-n si tiene tablero propio
+  const tabDe = n => (!varios || (n === 1 && esq === "tg") ? "TG" : tabPiso(n));
+  const pisoCarga = x => {
+    const k = Math.round(+x.piso || 0);
+    return varios && k >= 1 && k <= PS.length ? k : 0;
+  };
+  const tabCarga = x => {
+    const k = pisoCarga(x);
+    return k ? tabDe(k) : "TG";
+  };
+  // Diseño del plano: los tableros del cálculo que están dibujados (con circuitos) toman sus datos de allí
+  const PLD =
+      pv("calPlano") === "1" && P.PLANO
+        ? planoCalc(P.PLANO, c, { al_p: pn("al_p"), tg_p: pn("tg_p"), tc_p: pn("tc_p"), hEnt: pn("hEnt") || 3.1 })
+        : null,
+    nomsCalc = new Set(["TG", ...PS.map(p => tabDe(p.n))]),
+    PT_ = new Map(PLD ? PLD.tabs.filter(t => nomsCalc.has(t.nom) && t.circs.length).map(t => [t.nom, t]) : []);
+  if (PLD)
+    PLD.tabs
+      .filter(t => !nomsCalc.has(t.nom))
+      .forEach(t =>
+        PLD.avisos.push({
+          t: "aviso",
+          m: `El tablero ${t.nom} del plano no está en el cálculo (${[...nomsCalc].join(", ")}): cambie su nombre o agregue su piso en Vivienda › Pisos y tableros`,
+          ids: [t.id],
+          k: "nom"
+        })
+      );
+  const pisoDe = nom => (nom === "TG" ? 0 : (PS.find(p => tabDe(p.n) === nom) || { n: 0 }).n);
+  if (PT_.size)
+    PS.forEach(p => {
+      const t = PT_.get(tabDe(p.n));
+      if (!t || (p.n !== 1 && tabDe(p.n) === "TG")) return;
+      // Salidas del piso según el plano (para la memoria): cantidad y la mayor longitud de cada tipo
+      const de = k => {
+        const q = t.circs.filter(x => x.tipo === k);
+        return { n: q.reduce((s, x) => s + x.n, 0), L: q.reduce((m, x) => Math.max(m, x.L), 0) || 1 };
+      };
+      p.al = de("al");
+      p.tg = de("tg");
+      p.tc = de("tc");
+      p.plano = true;
+      const ru = PLD.rutas[tabDe(p.n)];
+      if (ru && tabDe(p.n) !== "TG") {
+        p.Ld = Math.max(ru.L, 0.5);
+        p.LdPlano = true;
+      }
+    });
   const areaT = PS.reduce((s, p) => s + p.area, 0),
     sot = pn("sot"),
     area = areaT + fSot * sot,
     sk = pv("sist") || "mono220",
-    Lalim = pn("Lalim") || 1;
-  const cs = P.cargas.map(x => ({ ...x }));
+    rTG = PT_.size && PLD.rutas.TG,
+    Lalim = rTG ? Math.max(rTG.L, 0.5) : pn("Lalim") || 1;
+  // Cargas especiales: las escritas y, en los tableros del plano, las dibujadas (con la longitud de su circuito)
+  const cs = P.cargas.filter(x => !PT_.has(tabCarga(x))).map(x => ({ ...x }));
+  if (PT_.size)
+    PLD.cargas
+      .filter(x => PT_.has(x.tab))
+      .forEach(x => {
+        const q = PT_.get(x.tab).circs.find(k => k.cir === x.cir);
+        cs.push({
+          nombre: x.nombre,
+          tipo: x.tipo,
+          fases: x.fases,
+          p: x.p,
+          L: q ? q.L : 1,
+          piso: pisoDe(x.tab),
+          elec: x.elec,
+          plano: { tab: x.tab, cir: x.cir, id: x.id }
+        });
+      });
   const mdDe = (a, list, aE = 0) =>
     viv ? mdVivienda({ area: a, ...cargasMD(list) }, false) : mdUso(c.uso, a, list, aE);
   // Áreas libres no techadas (patios, jardines, cocheras abiertas): carga unitaria elegida por el proyectista (p. ej. 5 W/m²), al 100 %;
@@ -54,9 +122,14 @@ function calcUni(c) {
       const e = exPt(p);
       return e ? { n: p.tg.n + e.n, mix: e.mix } : {};
     };
+  // Carga instalada: en los pisos del plano, la potencia de sus salidas (las cargas especiales están en cs)
   const CI =
     PS.reduce(
-      (s, p) => s + (p.al.n * pw.al + (exP(p)?.P || 0) + p.tg.n * pw.tg + (exPt(p)?.P || 0) + p.tc.n * pw.tc),
+      (s, p) =>
+        s +
+        (p.plano
+          ? PT_.get(tabDe(p.n)).circs.reduce((t, q) => t + q.sal.reduce((u, o) => u + (o.cl === "esp" ? 0 : o.p), 0), 0)
+          : p.al.n * pw.al + (exP(p)?.P || 0) + p.tg.n * pw.tg + (exPt(p)?.P || 0) + p.tc.n * pw.tc),
       0
     ) +
     cs.reduce((s, x) => s + x.p, 0) +
@@ -69,17 +142,8 @@ function calcUni(c) {
   });
   al.iccO = c.iccE;
   al.pdc = pdcPara(c.iccE, c.pdcMin);
+  if (rTG) al.plano = { Lh: rTG.Lh, de: rTG.de };
   const iccTG = iccAbajo(c.iccE, al.s, al.L, al.S);
-  // Tablero de cada piso: TG si el piso se conecta al tablero general, TD-n si tiene tablero propio
-  const tabDe = n => (!varios || (n === 1 && esq === "tg") ? "TG" : tabPiso(n));
-  const pisoCarga = x => {
-    const k = Math.round(+x.piso || 0);
-    return varios && k >= 1 && k <= PS.length ? k : 0;
-  };
-  const tabCarga = x => {
-    const k = pisoCarga(x);
-    return k ? tabDe(k) : "TG";
-  };
   const alims = [al],
     tabs = [
       {
@@ -111,6 +175,7 @@ function calcUni(c) {
     });
     f.iccO = iccTG;
     f.pdc = pdcPara(iccTG, c.pdcMin);
+    if (p.LdPlano) f.plano = { Lh: PLD.rutas[tab].Lh, de: PLD.rutas[tab].de };
     alims.push(f);
     p.tab = tab;
     p.feeder = alims.length - 1;
@@ -130,6 +195,36 @@ function calcUni(c) {
   tabs.forEach(tb => {
     const f = alims[tb.feeder],
       up = tb.feeder ? f.dvAc : al.dVp;
+    // Tablero del plano: sus circuitos, con el mismo nombre (C-1, C-2…), sus salidas y su recorrido
+    const pt = PT_.get(tb.tab);
+    if (pt) {
+      pt.circs.forEach(q0 => {
+        const esp = q0.tipo === "esp",
+          cg = esp ? cs.filter(x => x.plano && x.plano.tab === tb.tab && x.plano.cir === q0.cir) : [],
+          m = cg.reduce((a, x) => (!a || x.p > a.p ? x : a), null),
+          q = circuito(
+            {
+              tab: tb.tab,
+              id: q0.cir,
+              desc: q0.desc || (esp ? (cg.length === 1 ? m.nombre : "Cargas especiales") : PL_DESC[q0.tipo]),
+              tipo: esp ? TIPOS[m ? m.tipo : "otra"].split(" (")[0] : PL_TIPO[q0.tipo],
+              n: q0.n,
+              P: q0.P,
+              L: q0.L,
+              fases: q0.f3 ? 3 : 1,
+              skTri: sk
+            },
+            c,
+            up,
+            tb.feeder
+          );
+        q.src = { t: "plano", tab: pt.id, cir: q0.cir };
+        q.elec = q0.elec;
+        q.plano = { lej: q0.lej, Lh: q0.Lh, Lv: q0.Lv, est: q0.est, Lmet: q0.Lmet, auto: q0.auto, ct: q0.tipo };
+        circ.push(q);
+      });
+      return;
+    }
     const PT = PS.filter(p => tabDe(p.n) === tb.tab);
     const src = (p, k) => (p.n === 1 ? { t: "grp", k } : { t: "piso", i: p.i, k });
     const list = grupos(
@@ -144,7 +239,7 @@ function calcUni(c) {
       tb.feeder
     );
     cs.forEach((x, ix) => {
-      if (!(x.p > 0) || tabCarga(x) !== tb.tab) return;
+      if (!(x.p > 0) || x.plano || tabCarga(x) !== tb.tab) return;
       const q = circuito(
         {
           tab: tb.tab,
@@ -198,6 +293,17 @@ function calcUni(c) {
     esq,
     contratada: Math.ceil(md.MD / 500) / 2,
     conexion: "Conexión simple (Norma DGE, 301.A)",
+    // Con el diseño: los tableros que salen del plano, los alimentadores medidos en él y los avisos
+    ...(PLD
+      ? {
+          plano: {
+            tabs: [...PT_.keys()],
+            ali: !!rTG,
+            Ld: PS.filter(p => p.LdPlano).map(p => tabDe(p.n)),
+            avisos: PLD.avisos
+          }
+        }
+      : {}),
     Selec: tierraElectrodo(al.Izc)
   };
 }

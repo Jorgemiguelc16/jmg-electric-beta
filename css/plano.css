@@ -1855,7 +1855,7 @@
 }
 .ta-fila {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 40px 150px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 2px 0;
@@ -1865,9 +1865,124 @@
   font: 600 12px var(--f-mono);
   color: var(--dl-ink, #1b1b1b);
 }
-.ta-fila input {
+.ta-fila input,
+.ta-fila select {
   padding: 3px 6px;
   font: 12px var(--f-body);
+}
+/* Propiedades: dato que el cálculo necesita */
+.ds-falta {
+  color: #b3261e;
+}
+/* Tipos de luminaria: una fila por tipo */
+.lu-fila {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 72px 132px 150px 96px 26px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font: 12px var(--f-body);
+}
+.lu-fila b {
+  font: 600 12px var(--f-mono);
+}
+.lu-fila input,
+.lu-fila select {
+  min-width: 0;
+  padding: 3px 6px;
+  font: 12px var(--f-body);
+}
+.lu-fila .tc-u {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.lu-fila .tc-u input {
+  width: 100%;
+}
+.lu-fila .vw-btn {
+  min-width: 0;
+  padding: 0 6px;
+}
+.lu-uso {
+  color: var(--dl-mute, #5b6470);
+  font-size: 11px;
+}
+.lu-cab {
+  color: var(--dl-mute, #5b6470);
+  font-size: 11px;
+  font-weight: 600;
+}
+/* Datos para el cálculo */
+.dc-cuerpo {
+  overflow-x: hidden;
+}
+.dc-cuerpo h4 .vw-btn {
+  margin-left: 6px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.dc-cuerpo h4 {
+  margin: 12px 0 4px;
+  font: 600 13px var(--f-body);
+}
+.dc-cuerpo h4 small {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--dl-mute, #5b6470);
+}
+.dc-cuerpo h4 small.bad {
+  color: #b3261e;
+}
+.dc-t {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--f-body);
+}
+.dc-t th,
+.dc-t td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--dl-line, #e2e5ea);
+  text-align: left;
+  vertical-align: middle;
+}
+.dc-t th {
+  color: var(--dl-mute, #5b6470);
+  font-weight: 600;
+  font-size: 11px;
+}
+.dc-t td.n {
+  text-align: right;
+  font-family: var(--f-mono);
+  white-space: nowrap;
+}
+.dc-t td small {
+  display: block;
+  color: var(--dl-mute, #5b6470);
+}
+.dc-t .ok {
+  color: #1e7a34;
+}
+.dc-t .bad {
+  color: #b3261e;
+  font-weight: 600;
+}
+.dc-t .vw-btn {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.dc-t td:last-child {
+  white-space: nowrap;
+  text-align: right;
+}
+.lu-lista {
+  overflow-x: hidden;
+}
+.dc-nota {
+  margin: 10px 0 2px;
+  color: var(--dl-mute, #5b6470);
+  font-size: 11.5px;
+  line-height: 1.45;
 }
 /* Sin las flechas propias del campo numérico: ya están los botones − y + */
 .ta-num input::-webkit-outer-spin-button,

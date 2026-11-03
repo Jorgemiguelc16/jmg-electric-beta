@@ -97,7 +97,8 @@ function metrado(r) {
   });
   r.circ.forEach(q => {
     const n = r.alims[q.feeder].cant || 1,
-      Lr = q.L + tramoVertical(q, c);
+      // Circuito del plano: todas sus tuberías con sus tramos verticales (planoCalc, js/calculo-plano.js)
+      Lr = q.plano ? q.plano.Lmet : q.L + tramoVertical(q, c);
     add(cond, q.S, (q.f3 ? 3 : 2) * Lr * n);
     add(cond, q.St, Lr * n);
     add(tubo, tk(q.tubo), Lr * n);

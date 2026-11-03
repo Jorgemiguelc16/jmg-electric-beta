@@ -75,4 +75,6 @@ console.log(
     ? `\n✘ ${mal} de ${n} casos con diferencias contra la referencia (${s} s)`
     : `✔ Todas las pruebas pasaron (${n} de ${n}) en ${s} s · referencia ${ref.version} del ${ref.fecha}`
 );
+// Cálculo con el diseño del plano (casos con las medidas calculadas a mano)
+mal += require("./pruebas-calc-plano.js")(ctx);
 process.exit(mal ? 1 : 0);

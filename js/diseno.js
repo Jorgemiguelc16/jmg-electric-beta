@@ -72,8 +72,8 @@ const DS_CAT = Object.fromEntries(
     ["proyIl", "Iluminación proyectada", "09-93-64", "alu", 0, null, "al_p", "W"],
     ["proyDir", "Proyector de iluminación", "09-93-65", "alu", 0, null, "al_p", "W"],
     ["aux", "Aparato auxiliar para lámpara de descarga", "09-93-66", "alu", 0, null],
-    ["emer", "Luminaria de alumbrado de emergencia", "09-93-67", "alu", 0, "hBraq", null, "W"],
-    ["emerB", "Bloque autónomo de alumbrado de emergencia", "09-93-68", "alu", 0, "hBraq", null, "W", "abajo"],
+    ["emer", "Luminaria de alumbrado de emergencia", "09-93-67", "alu", 0, "hBraq", "al_p", "W"],
+    ["emerB", "Bloque autónomo de alumbrado de emergencia", "09-93-68", "alu", 0, "hBraq", "al_p", "W", "abajo"],
     ["int", "Interruptor unipolar", "09-93-30", "alu", 1, "hInt", null, null, "izq"],
     ["int2", "Interruptor bipolar", "09-93-31", "alu", 1, "hInt", null, null, "izq", true],
     ["int3", "Interruptor de tres vías", "09-93-32", "alu", 1, "hInt", null, null, "izq", true],
@@ -923,6 +923,9 @@ function dsFilasLey0() {
   if (cond.n) out.push({ cond: { n: true }, n: "Conductor neutro", c: "09-93-01" });
   if (cond.t) out.push({ cond: { t: true }, n: "Conductor de protección (tierra)", c: "09-93-02" });
   if (out.some(f => f.k && dsSimb(f.k))) out.push({ nota: true, n: "(*) Símbolo con criterio del proyectista", c: "" });
+  // Tipos de luminaria usados en el plano
+  const lt = new Set(D.els.filter(e => e.lt).map(e => e.lt));
+  (D.lums || []).filter(t => lt.has(t.id)).forEach(t => out.push({ nota: true, n: "Luminaria " + dsLumTxt(t), c: "" }));
   return out;
 }
 // Tamaño de la leyenda en el dibujo
@@ -1400,7 +1403,8 @@ function dsReconectar() {
         const i = c === "c0" ? 0 : n - 1,
           j = c === "c0" ? 1 : n - 2;
         let p;
-        if (s.k === "tab") {
+        if (s.k === "tab" && t.ali) p = dsBorde(s, t.pts[2 * j], t.pts[2 * j + 1]);
+        else if (s.k === "tab") {
           // En el tablero: la salida de su circuito (si el tablero ya no la tiene, se suelta)
           const o = dsSalidasTab(s).find(q => q.n === t.cir);
           if (!o) return delete t[c];
@@ -1416,7 +1420,7 @@ function dsPropagarCircuitos() {
   const D = dsD();
   if (!D) return;
   const por = new Map(D.els.map(e => [e.id, e])),
-    tubs = D.els.filter(e => e.t === "tub" && (e.c0 || e.c1));
+    tubs = D.els.filter(e => e.t === "tub" && !e.ali && (e.c0 || e.c1));
   for (let vuelta = 0, cambio = true; cambio && vuelta < 50; vuelta++) {
     cambio = false;
     tubs.forEach(t => {
@@ -1872,12 +1876,14 @@ function dsInfoEl(el) {
   if (el.t === "sim") {
     const c = DS_CAT[el.k];
     if (!c) return "";
-    const pot = el.p ?? dsPotDef(el.k),
+    const pot = dsPotEl(el),
       tb = el.tab && dsD().els.find(e => e.id === el.tab);
     return [
       el.k === "tab" ? `${el.nom || "Tablero"} · ${el.nc || 0} circuitos` : c.n,
       el.cir ? `${el.cir}${tb ? " " + (tb.nom || "") : ""}` : "",
       c.u && pot != null ? `${pot} ${c.u}` : "",
+      el.lt ? `tipo ${el.lt}` : "",
+      el.cn || "",
       el.enc ? `encendido «${el.enc}»` : ""
     ]
       .filter(Boolean)
@@ -1886,7 +1892,7 @@ function dsInfoEl(el) {
   if (el.t === "tub")
     return [
       `Tubería en ${el.modo === "piso" ? "piso" : el.modo === "pared" ? "pared" : "techo"}`,
-      el.cir || "",
+      el.ali ? "alimentador" : el.cir || "",
       `${fmt(dsLargo(el) * f, 2)} m`,
       el.cond ? dpCond(el.cond) : "",
       el.dia ? `Ø ${el.dia} mm` : ""
@@ -2678,12 +2684,19 @@ function dsPuntoTub(p, engX) {
   // Clic sobre el tablero: se elige la salida en un menú y la tubería empieza o termina en ella
   if (eng && eng[2] === 10) {
     const tb = dsD().els.find(e => e.id === eng[3].tabla);
+    if (tb && PLH.ali && PLH.pts.length) return dsPuntoAli(tb, p);
     return (
       tb &&
-      dsElegirSalida(tb, p, o => {
-        dsPuntoTub(o.p, [o.p[0], o.p[1], 8, { cir: o.n, tab: tb.id, nom: tb.nom || "" }]);
-        plSobreDibujar();
-      })
+      dsElegirSalida(
+        tb,
+        p,
+        o => {
+          if (o.ali) return dsPuntoAli(tb, p);
+          dsPuntoTub(o.p, [o.p[0], o.p[1], 8, { cir: o.n, tab: tb.id, nom: tb.nom || "" }]);
+          plSobreDibujar();
+        },
+        true
+      )
     );
   }
   const con = eng && eng[2] === 9 ? eng[3].con : null,
@@ -2707,10 +2720,10 @@ function dsPuntoTub(p, engX) {
   }
   // Un clic en el mismo artefacto del inicio no hace un tramo
   if (con && con === PLH.conIni && PLH.pts.length === 1) return;
-  // El inicio en un artefacto: a su borde, hacia este punto
+  // El inicio en un artefacto (o el alimentador en un tablero): a su borde, hacia este punto
   if (PLH.pts.length === 1 && PLH.conIni) {
     const s = D.els.find(e => e.id === PLH.conIni);
-    if (s && s.k !== "tab") PLH.pts[0] = dsBorde(s, p[0], p[1]);
+    if (s && (s.k !== "tab" || PLH.ali)) PLH.pts[0] = dsBorde(s, p[0], p[1]);
   }
   PLH.pts.push(p);
   (PLH.bul = PLH.bul || []).push(dsBulNuevo());
@@ -2725,20 +2738,46 @@ function dsPuntoTub(p, engX) {
     const t = dsTerminar(con),
       s = D.els.find(e => e.id === con);
     if (t && s) {
-      // Sigue desde el artefacto, con el mismo circuito
+      // Sigue desde el artefacto, con el mismo circuito (o como alimentador)
       PLH.pts = [dsCentroCon(s)];
       PLH.conIni = con;
       PLH.cirIni = t.cir ? { cir: t.cir, tab: t.tab || "", nom: "" } : null;
+      PLH.ali = !!t.ali;
       toast(`Conectada a ${DS_CAT[s.k].n.toLowerCase()} · siga a la próxima salida o Esc para terminar`);
     }
   }
   plOrden();
   plSobreDibujar();
 }
-// Menú con las salidas del tablero, junto al punto p (cada una con su descripción y si ya tiene tubería)
-function dsElegirSalida(tb, p, fn) {
+/* Tubería de alimentador en un tablero (del medidor al TG, o del TG a un montante o a otro tablero): empieza en el
+   borde del tablero o termina en él, sin circuito */
+function dsPuntoAli(tb, p) {
+  if (!PLH.pts.length) {
+    PLH.pts.push([tb.x, tb.y]);
+    PLH.conIni = tb.id;
+    PLH.cirIni = null;
+    PLH.ali = true;
+    toast(
+      `Alimentador desde ${tb.nom || "el tablero"}: haga clic en cada punto hasta el medidor, el montante o el otro tablero`
+    );
+    plOrden();
+    return plSobreDibujar();
+  }
+  if (PLH.conIni === tb.id) return;
+  const u = PLH.pts[PLH.pts.length - 1];
+  PLH.pts.push(dsBorde(tb, u[0], u[1]));
+  (PLH.bul = PLH.bul || []).push(dsBulNuevo());
+  PLH.cirIni = null;
+  PLH.ali = true;
+  dsTerminar(tb.id);
+  toast(`Alimentador conectado a ${tb.nom || "el tablero"}`);
+  plSobreDibujar();
+}
+// Menú con las salidas del tablero, junto al punto p (cada una con su descripción y si ya tiene tubería); conAli:
+// también la opción de un alimentador
+function dsElegirSalida(tb, p, fn, conAli) {
   const S = dsSalidasTab(tb);
-  if (!S.length) {
+  if (!S.length && !conAli) {
     toast(`${tb.nom || "El tablero"} aún no tiene circuitos: defínalos en su ventana`);
     return tabAbrir(tb.id);
   }
@@ -2754,8 +2793,11 @@ function dsElegirSalida(tb, p, fn) {
         o =>
           `<button type="button" data-edm="sal:${o.i}" role="menuitem"><span><b style="color:${plColorDis(dsColCir(o.n, tb.id))}">${o.n}</b>${o.d ? " · " + esc(o.d) : ""}</span>${usada.has(o.n) ? "<kbd>en uso</kbd>" : ""}</button>`
       ).join("") +
+      (conAli
+        ? `${S.length ? "<hr>" : ""}<button type="button" data-edm="sal:-1" role="menuitem" title="Tubería del alimentador: del medidor al tablero, o del tablero general a un montante o a otro tablero"><span>Alimentador (sin circuito)</span></button>`
+        : "") +
       `<hr><button type="button" data-edm="tablero:${tb.id}" role="menuitem"><span>Circuitos del tablero…</span></button>`,
-    i => fn(S[i])
+    i => fn(i < 0 ? { ali: true } : S[i])
   );
 }
 /* ---------- Copiar en fila y espejo ---------- */
@@ -2899,6 +2941,11 @@ function dsTerminar(conFin, tabFin) {
     }
     if (PLH.conIni) el.c0 = PLH.conIni;
     if (conFin && conFin !== PLH.conIni) el.c1 = conFin;
+    if (PLH.ali) {
+      el.ali = true;
+      delete el.cir;
+      delete el.tab;
+    }
     // Llega al tablero: se invierte para que salga de él
     if (tabFin) {
       el.c1 = tabFin;
@@ -2906,11 +2953,12 @@ function dsTerminar(conFin, tabFin) {
     }
   }
   dsAgregar(el);
-  if (el.t === "tub") dsHeredar(el);
+  if (el.t === "tub" && !el.ali) dsHeredar(el);
   PLH.pts = [];
   PLH.bul = [];
   PLH.cirIni = null;
   PLH.conIni = null;
+  PLH.ali = false;
   edCambio();
   plOrden();
   return el;
@@ -3127,6 +3175,35 @@ const dsPotDef = k => {
   const c = DS_CAT[k];
   return c && c.p ? parseFloat(PROY[c.p]) || null : null;
 };
+// Tipo de luminaria del catálogo del proyecto (L1, L2…)
+const dsLumT = id => (id && dsD() && (dsD().lums || []).find(x => x.id === id)) || null;
+// Potencia por defecto de un artefacto (sin la suya): la de su tipo de luminaria o la de Parámetros
+const dsPotBase = el => {
+  const t = dsLumT(el.lt);
+  return t && t.w > 0 ? t.w : dsPotDef(el.k);
+};
+const dsPotEl = el => el.p ?? dsPotBase(el);
+// Clase del artefacto para el cálculo (js/calculo-plano.js): alumbrado, tomacorriente, carga especial o sin carga
+const dsClase = el => (el && el.t === "sim" ? plArt(el.k)[0] : "");
+const DS_CTRL = {
+  "": "—",
+  sensor: "Sensor de presencia",
+  foto: "Fotocelda",
+  temp: "Temporizador",
+  dimmer: "Atenuador"
+};
+const DS_EMER = { "": "Alumbrado normal", emer: "Alumbrado de emergencia", senal: "Señalización de salida" };
+// Texto de un tipo de luminaria: «L1 · Panel LED · 18 W · sensor de presencia»
+const dsLumTxt = t =>
+  [
+    t.id,
+    t.n,
+    t.w > 0 ? `${fmt(t.w, 0)} W` : "",
+    t.ctrl ? DS_CTRL[t.ctrl].toLowerCase() : "",
+    t.emer ? DS_EMER[t.emer].toLowerCase() : ""
+  ]
+    .filter(Boolean)
+    .join(" · ");
 function dsProps(c) {
   const sel = dsSel(),
     D = dsD();
@@ -3178,7 +3255,9 @@ function dsProps(c) {
   if (el.t === "sim") {
     const cat = DS_CAT[el.k],
       hd = dsAlturaDef(el.k),
-      pd = dsPotDef(el.k);
+      pd = dsPotBase(el),
+      cl = dsClase(el),
+      esp = PL_ESP[el.k] || ["otra", 1, "Carga especial"];
     h =
       `<div class="ed-pt">${cat.n}<small>Norma DGE ${cat.c}</small></div>` +
       `<div class="ds-prev">${dsIcono(el.k)}</div>` +
@@ -3196,7 +3275,40 @@ function dsProps(c) {
         ? campo(
             "Potencia",
             `<input type="number" data-dsp="p" value="${el.p ?? ""}" placeholder="${pd != null ? pd : ""}" step="10" min="0" max="100000"><i>${cat.u}</i>`
-          )
+          ) +
+          (cl === "esp" && el.p == null
+            ? `<p class="ds-crit ds-falta">Escriba la potencia: el cálculo la necesita.</p>`
+            : cl === "al" || cl === "to"
+              ? `<p class="ds-crit">Vacía: ${dsLumT(el.lt) && dsLumT(el.lt).w > 0 ? `la del tipo ${el.lt}` : "la de Parámetros (W por salida)"}.</p>`
+              : "")
+        : "") +
+      (cl === "al"
+        ? campo(
+            "Luminaria",
+            `<select data-dsp="lt"><option value="">— Sin tipo —</option>${(dsD().lums || []).map(t => `<option value="${t.id}"${t.id === el.lt ? " selected" : ""}>${esc(dsLumTxt(t))}</option>`).join("")}</select>`
+          ) +
+          `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="lums" title="Dicroicos, paneles, luminarias de gradas, con sensor, de emergencia…: cada tipo con su potencia">Tipos de luminaria…</button></div>`
+        : "") +
+      (cl === "esp"
+        ? campo(
+            "Descripción",
+            `<input type="text" data-dsp="cn" value="${esc(el.cn || "")}" placeholder="${esc(esp[2])}" maxlength="60">`
+          ) +
+          campo(
+            "Tipo de carga",
+            `<select data-dsp="ctp">${Object.entries(TIPOS)
+              .map(([k, n]) => `<option value="${k}"${k === (el.ctp || esp[0]) ? " selected" : ""}>${esc(n)}</option>`)
+              .join("")}</select>`
+          ) +
+          campo(
+            "Fases",
+            `<select data-dsp="fs"><option value="1"${(el.fs || esp[1]) === 1 ? " selected" : ""}>Monofásica</option><option value="3"${(el.fs || esp[1]) === 3 ? " selected" : ""}>Trifásica</option></select>`
+          ) +
+          campo(
+            "Electrónica",
+            `<select data-dsp="elc" title="Inverter, variador, cocina de inducción, cargador: su diferencial se sugiere tipo A"><option value="">No</option><option value="1"${el.elc ? " selected" : ""}>Sí (inverter, variador…)</option></select>`
+          ) +
+          `<p class="ds-crit">El tipo de carga decide cómo entra en la máxima demanda (Regla 050-200).</p>`
         : "") +
       (el.k === "tab"
         ? fila("Nombre", esc(el.nom || "—")) +
@@ -3286,7 +3398,14 @@ function dsProps(c) {
         ? `<div class="ds-tramos">${T.map((t, i) => `<span>Tramo ${i + 1}${t.k ? " ◠" : ""}</span><b>${plFm(t.L)} m</b>`).join("")}</div>`
         : "") +
       campo("Capa", capas(el.capa)) +
-      (tub ? campo("Circuito", circ(el.cir)) + lista + dsCampoCond(campo, [el]) : "") +
+      (tub
+        ? campo(
+            "Uso",
+            `<select data-dsp="ali"><option value="">Circuito</option><option value="1"${el.ali ? " selected" : ""}>Alimentador (sin circuito)</option></select>`
+          ) +
+          (el.ali ? "" : campo("Circuito", circ(el.cir)) + lista) +
+          dsCampoCond(campo, [el])
+        : "") +
       `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices.</p>` +
       curvas;
   }
@@ -3318,6 +3437,12 @@ function dsCamposVarios(campo, sel) {
       ? campo(
           "Potencia",
           `<input type="number" data-dsp="p" value="${igual("p") && sel[0].p != null ? sel[0].p : ""}" placeholder="${igual("p") ? "la de Parámetros" : "(varias)"}" step="10" min="0" max="100000"><i>${u}</i>`
+        )
+      : "") +
+    (sel.every(el => dsClase(el) === "al")
+      ? campo(
+          "Luminaria",
+          `<select data-dsp="lt">${igual("lt") ? "" : '<option value="-" selected>(varias)</option>'}<option value=""${igual("lt") && !sel[0].lt ? " selected" : ""}>— Sin tipo —</option>${(dsD().lums || []).map(t => `<option value="${t.id}"${igual("lt") && t.id === sel[0].lt ? " selected" : ""}>${esc(dsLumTxt(t))}</option>`).join("")}</select>`
         )
       : "")
   );
@@ -3406,7 +3531,20 @@ function dsPropCambio(e) {
     else if (k === "col") el.col = /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : el.col;
     else if (k === "h") el.h = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "p") el.p = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
-    else if (k === "cir") el.cir = v.replace(/[<>]/g, "").slice(0, 12) || undefined;
+    else if (k === "lt") {
+      if (v !== "-") el.lt = /^L[0-9]{1,3}$/.test(v) ? v : undefined;
+    } else if (k === "cn") el.cn = v.replace(/[<>]/g, "").trim().slice(0, 60) || undefined;
+    else if (k === "ctp") el.ctp = TIPOS[v] ? v : undefined;
+    else if (k === "fs") el.fs = v === "3" ? 3 : 1;
+    else if (k === "elc") el.elc = v === "1" || undefined;
+    else if (k === "ali") {
+      // Alimentador: sin circuito (no lo hereda ni lo pasa a lo conectado)
+      el.ali = v === "1" || undefined;
+      if (el.ali) {
+        delete el.cir;
+        delete el.tab;
+      }
+    } else if (k === "cir") el.cir = v.replace(/[<>]/g, "").slice(0, 12) || undefined;
     else if (k === "s") el.s = v.replace(/[<>]/g, "").slice(0, 200) || el.s;
     else if (k === "tit")
       el.tit = v.replace(/[<>]/g, "").slice(0, 60) || (el.t === "cua" ? "CUADRO DE CIRCUITOS" : "LEYENDA");
@@ -3450,6 +3588,7 @@ function dsPropClic(e) {
     dsCopiar();
     dsPegar();
   } else if (a === "tablero") tabAbrir(dsSel()[0].id);
+  else if (a === "lums") lumAbrir();
   else dsCurvar(a);
 }
 ["edPropC", "elC"].forEach(id => {
@@ -3970,7 +4109,10 @@ function dsVerificar() {
     [...new Set(sl.puntas.map(o => o.el.id))],
     "Llévelas a un artefacto, a una caja o a la salida del tablero."
   );
-  const sinCir = [...sims.filter(e => !e.cir && !["can", "tie"].includes(DS_CAT[e.k].s)), ...tubs.filter(e => !e.cir)];
+  const sinCir = [
+    ...sims.filter(e => !e.cir && !["can", "tie"].includes(DS_CAT[e.k].s) && e.k !== "med"),
+    ...tubs.filter(e => !e.cir && !e.ali)
+  ];
   add(
     "aviso",
     s(sinCir.length, "elemento sin circuito", "elementos sin circuito"),
@@ -4079,6 +4221,10 @@ function dsVerificar() {
     "Clic en el medio de la tubería para elegir sus conductores."
   );
   dpVerificar(add);
+  // Datos para el cálculo: salidas sin potencia o sin recorrido, circuitos mezclados, tableros que no coinciden
+  dcAvisos().forEach(a => {
+    if (a.t !== "info") add(a.t === "error" ? "aviso" : "info", a.m, a.ids.length ? a.ids : ["-"], DC_AYUDA[a.k] || "");
+  });
   return out;
 }
 const REV_VW = ventanaMovil(document.querySelector("#revDlg .vw"), "jmg-electric-revision", {
@@ -4350,7 +4496,7 @@ function tabAbrir(id) {
   TA_ID = id;
   $("taNom").value = el.nom || "";
   $("taN").value = el.nc || 6;
-  tabLista(el.cd || []);
+  tabLista(el.cd || [], el.ct || []);
   $("tabDlg").hidden = false;
   vwFondo();
   TA_VW.abrir();
@@ -4365,15 +4511,31 @@ function tabCerrar() {
   vwFondo();
 }
 // Lista de circuitos con su descripción (opcional), según el número elegido
-function tabLista(cd) {
+function tabLista(cd, ct) {
   const n = Math.max(1, Math.min(60, Math.round(+$("taN").value) || 1)),
     prev = [...$("taLista").querySelectorAll("input")].map(i => i.value),
-    d = cd || prev;
-  $("taLista").innerHTML = Array.from(
-    { length: n },
-    (v, i) =>
-      `<label class="ta-fila"><b>C-${i + 1}</b><input type="text" maxlength="60" value="${esc(d[i] || "")}" placeholder="Descripción (opcional): alumbrado, tomacorrientes…"></label>`
-  ).join("");
+    prevT = [...$("taLista").querySelectorAll("select")].map(i => i.value),
+    d = cd || prev,
+    tt = ct || prevT,
+    // Tipo automático: el de las salidas conectadas a cada circuito
+    auto = i => {
+      const c = { al: 0, to: 0, esp: 0 };
+      dsD().els.forEach(e => {
+        const k = e.tab === TA_ID && e.cir === "C-" + (i + 1) && dsClase(e);
+        if (k) c[k]++;
+      });
+      return c.esp && !c.al && !c.to ? "esp" : c.al > c.to ? "al" : c.to ? "tg" : "";
+    };
+  $("taLista").innerHTML = Array.from({ length: n }, (v, i) => {
+    const a = auto(i);
+    return `<div class="ta-fila"><b>C-${i + 1}</b><select aria-label="Tipo del circuito C-${i + 1}" title="Tipo del circuito, para el cálculo"><option value="">${a ? "Auto: " + PL_TCIR[a].toLowerCase() : "Automático"}</option>${Object.entries(
+      PL_TCIR
+    )
+      .map(([k, t]) => `<option value="${k}"${tt[i] === k ? " selected" : ""}>${t}</option>`)
+      .join(
+        ""
+      )}</select><input type="text" maxlength="60" value="${esc(d[i] || "")}" placeholder="Descripción (opcional): sala y comedor, cocina…" aria-label="Descripción del circuito C-${i + 1}"></div>`;
+  }).join("");
   const el = dsD().els.find(e => e.id === TA_ID),
     usados = dsD()
       .els.filter(e => e.t === "tub" && e.tab === TA_ID && e.cir && parseInt(e.cir.slice(2), 10) > n)
@@ -4392,10 +4554,14 @@ function tabAceptar() {
       .slice(0, n)
       .map(i => i.value.replace(/[<>]/g, "").trim().slice(0, 60));
   while (cd.length && !cd[cd.length - 1]) cd.pop();
+  const ct = [...$("taLista").querySelectorAll("select")].slice(0, n).map(s => (PL_TCIR[s.value] ? s.value : ""));
+  while (ct.length && !ct[ct.length - 1]) ct.pop();
   el.nom = $("taNom").value.replace(/[<>]/g, "").trim().slice(0, 20) || el.nom || "TG";
   el.nc = n;
   if (cd.length) el.cd = cd;
   else delete el.cd;
+  if (ct.length) el.ct = ct;
+  else delete el.ct;
   tabCerrar();
   edCambio();
   toast(`${el.nom}: ${n} circuito${n > 1 ? "s" : ""} (C-1 a C-${n}). Empiece cada tubería en su salida`);

@@ -6,7 +6,7 @@ const NODEFS = {
   proyecto: ["fs-proy", "fs-tipo"],
   suministro: { uni: ["fs-sum-uni"], multi: ["fs-sum-multi"] },
   vivienda: { uni: ["fs-viv", "fs-pisos"], multi: ["fs-tipos"] },
-  salidas: ["fs-sal"],
+  salidas: ["fs-plano", "fs-sal"],
   cargas: ["fs-cargas"],
   servicios: ["fs-serv"],
   param: [
@@ -326,7 +326,8 @@ $("ws").addEventListener("click", e => {
     // Abre Datos del proyecto con el tipo de edificación enfocado: el cambio, que es grande, se confirma al aplicar
     abrirDatos("proy");
     enfocar('#dpBody [data-dp="_tipo"]');
-  } else if (a === "calc") {
+  } else if (a === "datosplano") edVerEnPlano([], dcAbrir);
+  else if (a === "calc") {
     calcularAhora();
     toast(LAST ? "Cálculo actualizado" : "Complete los datos para calcular");
   } else if (a === "xlsx") {

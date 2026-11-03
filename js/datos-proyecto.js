@@ -31,7 +31,7 @@ function dpPestanas() {
         [
           "sal",
           "Salidas",
-          ["fs-sal"],
+          ["fs-plano", "fs-sal"],
           [],
           [
             ["add_lums", "+ Luminarias de otra potencia"],
@@ -187,6 +187,12 @@ function renderDatos() {
         : "";
   $("dpBody").innerHTML =
     tipo +
+    // Con «Calcular con el diseño»: qué sale del plano
+    (DP_TAB === "sal"
+      ? planoNota("plCalRes") + planoNota("salPlanoN")
+      : DP_TAB === "viv"
+        ? planoNota("aliPlanoN")
+        : "") +
     grupos +
     vacio +
     (DP_TAB === "dep" ? depHTML() : "") +

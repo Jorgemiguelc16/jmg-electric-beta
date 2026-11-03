@@ -61,6 +61,7 @@ const FS_DATOS = {
   "fs-sum-uni": "sum",
   "fs-sum-multi": "sum",
   "fs-viv": "viv",
+  "fs-plano": "sal",
   "fs-sal": "sal",
   "fs-pisos": "pis",
   "fs-tipos": "dep"

@@ -156,6 +156,10 @@ function fcNota(q) {
     return `Datos de todas las salidas de ${nm[q.src.k]} (máximo ${ctx().maxSal} por circuito): al cambiarlos se recalculan todos los circuitos del grupo.`;
   if (t === "piso")
     return `Datos de ${nm[q.src.k]} del ${ORD(q.src.i + 2)} piso: al cambiarlos se recalculan todos sus circuitos. La potencia por salida es la de Salidas, común a todos los pisos.`;
+  if (t === "plano") {
+    const p = q.plano;
+    return `<b>Circuito del diseño en el plano:</b> ${q.n} salida${q.n === 1 ? "" : "s"} con carga conectada${q.n === 1 ? "" : "s"}, ${fmt(q.P, 0)} W, y ${fmt(q.L, 2)} m hasta la salida más alejada (${p.est ? "estimada en línea quebrada: hay salidas sin tubería" : `${fmt(p.Lh, 2)} m por la tubería y ${fmt(p.Lv, 2)} m de tramos verticales`}). La caída de tensión se calcula con esa carga y esa longitud (Regla 050-102). Para cambiarlos, edite el diseño. ${p.lej ? `<button type="button" class="linkbtn" data-fcpl="${p.lej}">Ver la salida más alejada en el plano</button>` : ""}`;
+  }
   if (t === "tipo") {
     const d = tipos[q.src.i];
     return `Datos de ${q.tipo === "Alumbrado" ? "alumbrado" : "tomacorrientes"} del departamento ${esc(d?.nombre || "")}: se repiten en sus ${d?.cant ?? ""} unidades y al cambiarlos se recalculan todos sus circuitos. La potencia por salida es la de Parámetros, común a todos los departamentos.`;
@@ -412,6 +416,11 @@ $("fichaDlg").addEventListener("change", e => {
   if (e.target.matches("select[data-fce]")) e.target.dispatchEvent(new Event("input", { bubbles: true }));
 });
 $("fichaDlg").addEventListener("click", e => {
+  const pl = e.target.closest("[data-fcpl]");
+  if (pl) {
+    cerrarFicha();
+    return edVerEnPlano([pl.dataset.fcpl]);
+  }
   const t = e.target.closest("[data-fct]");
   if (t) {
     FC_TAB = t.dataset.fct;

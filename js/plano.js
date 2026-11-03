@@ -320,6 +320,7 @@ function edAplicar() {
   edEstado();
   edInfo();
   edAutoguardar(true);
+  if (PROY.calPlano === "1") calcularAhora();
   toast("Cambios del diseño aplicados al proyecto");
 }
 function edCancelar() {
@@ -1039,7 +1040,7 @@ function plEnganche(x, y) {
     sn = PL_MOD.snap,
     vale = k => R[PL_REF[k]] !== false;
   // Tubería: la punta se conecta al artefacto cercano (en su borde); la salida del tablero va primero
-  if (dsEsTub(PLH.h) || (PLH.agarre && PLH.agarre.t === "v")) {
+  if (!PLH.ali && (dsEsTub(PLH.h) || (PLH.agarre && PLH.agarre.t === "v"))) {
     const s = dsSalidaEn(x, y, r * 1.6);
     // (sobre el cuerpo del tablero manda el menú de sus salidas)
     if (s && !dsTableroEn(x, y, 0)) return [s.o.p[0], s.o.p[1], 8, { cir: s.o.n, tab: s.tb.id, nom: s.tb.nom || "" }];
@@ -1231,6 +1232,7 @@ function plHerr(h) {
   PLH.cirIni = null;
   PLH.conIni = null;
   PLH.modoT = null;
+  PLH.ali = false;
   plPedir(null);
   // Sin herramienta, el modo es Seleccionar
   document.querySelectorAll("#editor [data-pl]").forEach(b => b.classList.toggle("on", b.dataset.pl === (h || "sel")));
@@ -2134,6 +2136,8 @@ const ED_CMD = {
   REP: ["rep", "Repartir en ambiente"],
   RM: ["rmur", "A lo largo del muro"],
   MET: ["metrado", "Metrado del diseño"],
+  DC: ["calc", "Datos para el cálculo"],
+  LUM: ["lums", "Tipos de luminaria"],
   CU: ["cua", "Cuadro de circuitos"],
   PRE: ["presentar", "Presentación"]
 };
@@ -2178,6 +2182,8 @@ function edEjecutar(c) {
   if (a === "plantillas") return plaAbrir();
   if (a === "buscar") return buAbrir();
   if (a === "metrado") return metAbrir();
+  if (a === "calc") return dcAbrir();
+  if (a === "lums") return lumAbrir();
   if (a === "presentar") return edPresentar(true);
   if (a === "rep" || a === "rmur") return dpIniciarRep(a);
   if (a.startsWith("col:") || DS_HERR[a]) DS_SEL.clear();
@@ -3022,6 +3028,8 @@ $("editor").addEventListener("click", e => {
   if (a === "ruta") return dpRuta();
   if (a === "rep" || a === "rmur") return dpIniciarRep(a);
   if (a === "metrado") return metAbrir();
+  if (a === "calc") return dcAbrir();
+  if (a === "lums") return lumAbrir();
   if (a === "buscar") return buAbrir();
   if (a === "presentar") return edPresentar(true);
   if (a === "atajos") return atjAbrir();

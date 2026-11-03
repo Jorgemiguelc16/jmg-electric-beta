@@ -85,7 +85,9 @@ const KEYS = [
   "Lv",
   "dv",
   "esqPisos",
-  "Ltd1"
+  "Ltd1",
+  "calPlano",
+  "hEnt"
 ];
 const SKEY = BETA ? "jmg-electric-beta-v1" : "jmg-electric-v1",
   DEFV = {};
@@ -672,7 +674,18 @@ function disValido(v) {
           // Tablero: nombre, número de circuitos y descripción de cada uno
           ...(e.k === "tab" && e.nom ? { nom: txt(e.nom, 20) } : {}),
           ...(e.k === "tab" && n(e.nc) && e.nc >= 1 ? { nc: Math.min(60, Math.round(e.nc)) } : {}),
-          ...(e.k === "tab" && Array.isArray(e.cd) ? { cd: e.cd.slice(0, 60).map(d => txt(d, 60)) } : {})
+          ...(e.k === "tab" && Array.isArray(e.cd) ? { cd: e.cd.slice(0, 60).map(d => txt(d, 60)) } : {}),
+          // Tipo de cada circuito del tablero (alumbrado, tomacorrientes, cocina, carga especial o reserva)
+          ...(e.k === "tab" && Array.isArray(e.ct)
+            ? { ct: e.ct.slice(0, 60).map(x => (["al", "tg", "tc", "esp", "res"].includes(x) ? x : "")) }
+            : {}),
+          // Tipo de luminaria del catálogo del proyecto (L1, L2…)
+          ...(typeof e.lt === "string" && /^L[0-9]{1,3}$/.test(e.lt) ? { lt: e.lt } : {}),
+          // Carga especial: descripción, tipo para la máxima demanda, trifásica y con electrónica
+          ...(e.cn ? { cn: txt(e.cn, 60) } : {}),
+          ...(["calentador", "cocina", "aire", "motor", "otra"].includes(e.ctp) ? { ctp: e.ctp } : {}),
+          ...(e.fs === 1 || e.fs === 3 ? { fs: e.fs } : {}),
+          ...(e.elc === true ? { elc: true } : {})
         };
       if (e.t === "txt" && n(e.x) && n(e.y) && n(e.ht) && e.ht > 0)
         return { ...b, t: "txt", x: e.x, y: e.y, ht: e.ht, r: n(e.r) ? e.r : 0, s: txt(e.s, 200) || "Texto" };
@@ -723,6 +736,8 @@ function disValido(v) {
                 // Artefactos a los que está conectada en su inicio (c0) y en su final (c1)
                 ...(typeof e.c0 === "string" && /^d[0-9]{1,7}$/.test(e.c0) ? { c0: e.c0 } : {}),
                 ...(typeof e.c1 === "string" && /^d[0-9]{1,7}$/.test(e.c1) ? { c1: e.c1 } : {}),
+                // Tubería de un alimentador (del medidor al tablero o entre tableros), sin circuito
+                ...(e.ali === true ? { ali: true } : {}),
                 // Diámetro nominal de la tubería (mm)
                 ...([15, 20, 25, 35, 40, 50, 65, 80].includes(e.dia) ? { dia: e.dia } : {}),
                 // Conductores que lleva (marcas de la norma): fases, neutro y tierra
@@ -761,6 +776,21 @@ function disValido(v) {
     ...(v.cirt === true ? { cirt: true } : {}),
     // Circuito escrito junto a cada salida
     ...(v.nsal === true ? { nsal: true } : {}),
+    // Catálogo de luminarias del proyecto: tipo (L1, L2…), descripción, potencia, control y si es de emergencia
+    ...(Array.isArray(v.lums) && v.lums.length
+      ? {
+          lums: v.lums
+            .filter(x => x && typeof x === "object" && typeof x.id === "string" && /^L[0-9]{1,3}$/.test(x.id))
+            .slice(0, 60)
+            .map(x => ({
+              id: x.id,
+              n: txt(x.n, 60),
+              w: n(x.w) && x.w >= 0 ? Math.min(100000, x.w) : 0,
+              ...(["sensor", "foto", "temp", "dimmer"].includes(x.ctrl) ? { ctrl: x.ctrl } : {}),
+              ...(["emer", "senal"].includes(x.emer) ? { emer: x.emer } : {})
+            }))
+        }
+      : {}),
     // Láminas: papel, escala, zona (planta, todo, la pantalla o un rectángulo), capas, colores, leyenda, título,
     // número y notas (la v3.0.0-b10 guardaba una sola, en lam)
     ...(() => {
@@ -829,7 +859,16 @@ function disValido(v) {
 // eslint-disable-next-line no-unused-vars -- la usa herramientas/pruebas.js (pruebas sin navegador)
 function proyectoDe(o) {
   const n = normalizar(o),
-    p = { MODE: n.MODE, sist: n.sist, sistG: n.sistG, FIX: n.FIX, ACEP: n.ACEP, TEQ: n.TEQ, SECF: n.SECF };
+    p = {
+      MODE: n.MODE,
+      sist: n.sist,
+      sistG: n.sistG,
+      FIX: n.FIX,
+      ACEP: n.ACEP,
+      TEQ: n.TEQ,
+      SECF: n.SECF,
+      PLANO: n.PLANO
+    };
   KEYS.forEach(k => (p[k] = n.campos[k] !== undefined ? n.campos[k] : String(DEFV[k] ?? "")));
   LISTAS_PROY.forEach(k => (p[k] = n.listas[k] || []));
   return p;

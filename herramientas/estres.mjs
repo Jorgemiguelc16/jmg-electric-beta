@@ -44,6 +44,7 @@ await med("  · copia para deshacer (JSON)", "edSnap()");
 await med("  · dsResumen (panel izquierdo)", "dsResumen()");
 await med("  · dsVerificar (revisión)", "dsVerificar()");
 await med("  · dsSueltos", "dsSueltos()");
+await med("  · dcAvisos (datos para el cálculo)", "dcAvisos()");
 await ev("plAjustar(); 1");
 await med("dibujar todo (vista total)", "plPintar()");
 await med("  · solo el diseño (dsPintar)", "dsPintar(plBase.getContext('2d'))");

@@ -993,8 +993,10 @@ prueba(
     await clicPlano(tb.x, tb.y - 0.05, 0);
     await esperar(80);
     ok(
-      await ev("!$('edMenu').hidden && $('edMenu').querySelectorAll('[data-edm^=\"sal:\"]').length === 4"),
-      "clic en el tablero: menú con sus 4 salidas"
+      await ev(
+        "!$('edMenu').hidden && $('edMenu').querySelectorAll('[data-edm^=\"sal:\"]:not([data-edm=\"sal:-1\"])').length === 4 && !!$('edMenu').querySelector('[data-edm=\"sal:-1\"]')"
+      ),
+      "clic en el tablero: menú con sus 4 salidas y la opción de alimentador"
     );
     await clic('#edMenu [data-edm="sal:2"]');
     const t = await J("dsD().els.find(e => e.t === 'tub')");
@@ -1717,10 +1719,138 @@ prueba("Editor de diseño: repartir en un ambiente y a lo largo de un muro", asy
   await clic('[data-ed="aceptar"]');
 });
 
+prueba("Calcular con el diseño: tipo de circuito, luminarias, carga especial, alimentador y cálculo", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Tablero con 3 circuitos, dos luminarias (una del tipo L1), un tomacorriente, una terma y el medidor
+  const ids = await J(`(() => {
+    const D = dsD(), a = o => dsAgregar(o).id;
+    D.lums = [{ id: "L1", n: "Panel LED", w: 18 }];
+    const tb = a({ t: "sim", k: "tab", x: ${OX} + 3, y: ${OY} + 7.9, r: 180, capa: "E-TABLEROS", nom: "TG", nc: 3, ct: ["al", "tg"] }),
+      l1 = a({ t: "sim", k: "luz", x: ${OX} + 3, y: ${OY} + 5, r: 0, capa: "E-ALUMBRADO", cir: "C-1", tab: tb }),
+      l2 = a({ t: "sim", k: "luz", x: ${OX} + 3, y: ${OY} + 2, r: 0, capa: "E-ALUMBRADO", cir: "C-1", tab: tb, lt: "L1" }),
+      to = a({ t: "sim", k: "toma", x: ${OX} + 5, y: ${OY} + 7.5, r: 0, capa: "E-TOMACORRIENTES", cir: "C-2", tab: tb }),
+      te = a({ t: "sim", k: "terma", x: ${OX} + 1, y: ${OY} + 7.5, r: 0, capa: "E-FUERZA", cir: "C-3", tab: tb, p: 1500 }),
+      me = a({ t: "sim", k: "med", x: ${OX} + 0.5, y: ${OY} + 4, r: 0, capa: "E-TABLEROS" });
+    const tub = (c0, c1, pts, o = {}) => a({ t: "tub", pts, c: false, modo: "techo", capa: "E-TUBERIAS-TECHO", c0, c1, tab: tb, ...o });
+    tub(tb, l1, [${OX} + 3, ${OY} + 7.6, ${OX} + 3, ${OY} + 5], { cir: "C-1" });
+    tub(l1, l2, [${OX} + 3, ${OY} + 5, ${OX} + 3, ${OY} + 2], { cir: "C-1" });
+    tub(tb, to, [${OX} + 3, ${OY} + 7.6, ${OX} + 5, ${OY} + 7.6, ${OX} + 5, ${OY} + 7.5], { cir: "C-2", modo: "piso" });
+    tub(tb, te, [${OX} + 3, ${OY} + 7.6, ${OX} + 1, ${OY} + 7.6, ${OX} + 1, ${OY} + 7.5], { cir: "C-3", modo: "pared" });
+    edCambio();
+    return { tb, l1, l2, to, te, me };
+  })()`);
+  // El cálculo conoce cada artefacto con la misma altura de montaje y la misma clase que el catálogo de símbolos
+  const dif = await J(
+    'Object.keys(DS_CAT).filter(k => { const c = DS_CAT[k], [cl, a] = plArt(k); return (c.h ? a !== c.h.slice(1).toLowerCase() : !(a === "T" || a === 0 || a === null)) || (c.p === "al_p" && cl !== "al") || (c.p === "tg_p" && cl !== "to"); })'
+  );
+  ok(!dif.length, `alturas y clases del cálculo iguales a las del catálogo (${dif.join(", ") || "todas"})`);
+  // Ventana del tablero: el tipo de cada circuito (el C-3, automático: carga especial)
+  await ev(`tabAbrir("${ids.tb}"); 1`);
+  ok(
+    (await J("[...$('taLista').querySelectorAll('select')].map(s => s.value)")).join() === "al,tg," &&
+      /carga especial/i.test(await ev("$('taLista').querySelectorAll('select')[2].options[0].textContent")),
+    "ventana del tablero: tipo de cada circuito (el C-3, automático: carga especial)"
+  );
+  await ev("$('taLista').querySelectorAll('select')[2].value = 'esp'; tabAceptar(); 1");
+  ok((await J(`dsD().els.find(e => e.id === "${ids.tb}").ct`)).join() === "al,tg,esp", "tipo guardado en el tablero");
+  // Propiedades: tipo de luminaria y datos de la carga especial
+  await ev(`DS_SEL.clear(); DS_SEL.add("${ids.l2}"); edProps(); 1`);
+  ok(
+    (await ev("$('edPropC').querySelector('[data-dsp=\"lt\"]').value")) === "L1" &&
+      (await ev("$('edPropC').querySelector('[data-dsp=\"p\"]').placeholder")) === "18",
+    "luminaria del tipo L1: su potencia (18 W) por defecto"
+  );
+  await ev(`DS_SEL.clear(); DS_SEL.add("${ids.te}"); edProps(); 1`);
+  ok(
+    (await ev("$('edPropC').querySelector('[data-dsp=\"ctp\"]').value")) === "calentador",
+    "terma: carga especial de tipo calentador"
+  );
+  // Tipos de luminaria
+  await ev("lumAbrir(); 1");
+  ok((await ev("$('luLista').querySelectorAll('.lu-fila').length")) === 2, "ventana de tipos de luminaria con L1");
+  await ev("lumCerrar(); 1");
+  // Alimentador dibujado: clic en el tablero › Alimentador, y luego en el medidor
+  await ev("DS_SEL.clear(); 1");
+  const tb = await J(`dsD().els.find(e => e.id === "${ids.tb}")`);
+  await clic('#editor [data-pl="tubP"]');
+  // Clic sobre el tablero con la herramienta de tubería (el mismo punto y enganche que da el mouse)
+  await ev(`dsPuntoTub([${tb.x}, ${tb.y}], [${tb.x}, ${tb.y}, 10, { tabla: "${ids.tb}", nom: "TG" }]); 1`);
+  for (let i = 0; i < 20 && !(await ev("!$('edMenu').hidden")); i++) await esperar(50);
+  ok(
+    await ev("!!$('edMenu').querySelector('[data-edm=\"sal:-1\"]')"),
+    `menú del tablero con «Alimentador» (${await ev("JSON.stringify([PLH.h, PLH.eng && PLH.eng[2], $('edMenu').hidden])")})`
+  );
+  await clic('#edMenu [data-edm="sal:-1"]');
+  ok((await ev("PLH.ali")) === true, "tubería de alimentador en curso");
+  await ev(`dsPuntoTub([${OX} + 0.5, ${OY} + 7.6], [${OX} + 0.5, ${OY} + 7.6, 0]); 1`);
+  await ev(`dsPuntoTub([${OX} + 0.5, ${OY} + 4.1], [${OX} + 0.5, ${OY} + 4.1, 9, { con: "${ids.me}" }]); 1`);
+  const ali = await J("dsD().els.find(e => e.t === 'tub' && e.ali)");
+  ok(
+    ali && !ali.cir && [ali.c0, ali.c1].includes(ids.tb) && [ali.c0, ali.c1].includes(ids.me),
+    `alimentador del tablero al medidor, sin circuito (${ali ? [ali.c0, ali.c1, ali.cir] : "—"})`
+  );
+  await teclaE("Escape", "Escape", 27);
+  ok(
+    !(await J("dsVerificar().some(o => /sin circuito/.test(o.t))")),
+    "la revisión no pide circuito al medidor ni al alimentador"
+  );
+  // Datos para el cálculo: tabla de circuitos y alimentador; se activa el modo y se aplica
+  await ev("dcAbrir(); 1");
+  ok(
+    /C-1[\s\S]*C-2[\s\S]*C-3/.test(await ev("$('dcC').textContent")) &&
+      /Medidor → TG[\s\S]*del plano/.test(await ev("$('dcC').textContent")),
+    "ventana de datos: los tres circuitos y el alimentador del plano"
+  );
+  await ev("$('dcUsar').value = '1'; $('dcUsar').dispatchEvent(new Event('change', { bubbles: true })); 1");
+  await esperar(120);
+  ok((await ev("PROY.calPlano")) === "1", "«Calcular con el diseño» activado en el proyecto");
+  await ev("edAplicar(); 1");
+  await esperar(150);
+  const r = await J(
+    "LAST && { c: LAST.circ.filter(q => q.plano).map(q => [q.id, q.n, q.P]), ali: LAST.plano && LAST.plano.ali }"
+  );
+  ok(
+    r &&
+      JSON.stringify(r.c) ===
+        JSON.stringify([
+          ["C-1", 2, 118],
+          ["C-2", 1, 180],
+          ["C-3", 1, 1500]
+        ]) &&
+      r.ali,
+    `el cálculo usa los circuitos del plano (${JSON.stringify(r)})`
+  );
+  ok(
+    /ΔV total/.test(await ev("dcRender(), $('dcC').textContent")),
+    "con el diseño aplicado, la caída de tensión de cada circuito"
+  );
+  await ev("dcCerrar(); 1");
+  await clic('[data-ed="aceptar"]');
+  // Pantalla del cálculo: resumen, avisos en Salidas y la ficha del circuito
+  ok(/Del plano/.test(await ev("$('plCalRes').textContent")), "resumen «Del plano» en Salidas");
+  ok(!(await ev("$('salPlanoN').hidden")), "aviso en Salidas: salen del plano");
+  const key = await ev("LAST.circ.find(q => q.plano && q.id === 'C-1').key");
+  await ev(`fichaCirc(${JSON.stringify(key)}); 1`);
+  ok(
+    /Circuito del diseño en el plano/.test(await ev("$('fichaDlg').textContent")),
+    "ficha del circuito: datos del plano"
+  );
+  await ev("cerrarFicha(); 1");
+  // Se vuelve a los datos escritos
+  await ev(
+    "$('calPlano').value = ''; $('calPlano').dispatchEvent(new Event('input', { bubbles: true })); $('calPlano').dispatchEvent(new Event('change', { bubbles: true })); 1"
+  );
+  await esperar(120);
+  ok(!(await J("LAST.circ.some(q => q.plano)")), "sin el modo, los circuitos escritos");
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();
-for (const [nombre, fn] of PRUEBAS) {
+// Con un texto (npm run pruebas-ui -- "Calcular"), solo las pruebas cuyo nombre lo contiene
+const SOLO = process.argv[2] || "";
+for (const [nombre, fn] of PRUEBAS.filter(([n]) => n.includes(SOLO))) {
   const fallas = [];
   try {
     await fn((c, d) => {
@@ -1745,7 +1875,7 @@ for (const [nombre, fn] of PRUEBAS) {
   console.log(`${fallas.length ? "✘" : "✔"} ${nombre}`);
   fallas.forEach(f => console.log(`    ✘ ${f}`));
 }
-const n = PRUEBAS.length;
+const n = PRUEBAS.filter(([x]) => x.includes(SOLO)).length;
 console.log(
   mal
     ? `\n✘ ${mal} de ${n} pruebas de la interfaz fallaron (${((Date.now() - t0) / 1000).toFixed(1)} s)`
