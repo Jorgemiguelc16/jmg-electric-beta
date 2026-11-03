@@ -87,6 +87,8 @@ const PL_ART = {
   tabD: ["", "tab"],
   centroDist: ["", "tab"],
   med: ["", "med"],
+  med3: ["", "med"],
+  bmed: ["", "med"],
   pat: ["", 0],
   timbre: ["", "braq"],
   ...Object.fromEntries(["telG", "telTP", "telTV", "telFX", "telM", "telFM", "telTX"].map(k => [k, ["", "toma"]]))
@@ -103,6 +105,8 @@ const PL_ESP = {
 };
 // Tomacorrientes trifásicos
 const PL_TRI = new Set(["toma3", "toma3Piso"]);
+// Medidores de la concesionaria (monofásico, trifásico y banco de medidores): de ellos salen los alimentadores
+const PL_MED = new Set(["med", "med3", "bmed"]);
 // Descripción por defecto de cada tipo de circuito y su «tipo» en el resultado (el que leen el metrado y los avisos)
 const PL_DESC = { al: "Alumbrado", tg: "Tomacorrientes", tc: "Tomacorrientes cocina / lavandería" };
 const PL_TIPO = { al: "Alumbrado", tg: "Tomacorriente", tc: "Tomacorriente" };
@@ -181,8 +185,12 @@ function planoCalc(PL, c, v) {
     T = A.techo,
     els = dis.els,
     por = new Map(els.map(e => [e.id, e])),
-    tubs = els.filter(e => e.t === "tub" && Array.isArray(e.pts) && e.pts.length >= 4),
+    tubs0 = els.filter(e => e.t === "tub" && Array.isArray(e.pts) && e.pts.length >= 4),
     sims = els.filter(e => e.t === "sim"),
+    // La tubería que llega a un medidor es de un alimentador, aunque no esté marcada
+    medIds = new Set(sims.filter(s => PL_MED.has(s.k)).map(s => s.id)),
+    esAli = t => t.ali || medIds.has(t.c0) || medIds.has(t.c1),
+    tubs = tubs0,
     tabs = sims.filter(e => e.k === "tab"),
     lums = new Map((dis.lums || []).map(x => [x.id, x])),
     avisos = [],
@@ -259,7 +267,7 @@ function planoCalc(PL, c, v) {
     clave = (tb, cir) => `${tb}·${cir}`;
   const cirsDe = t => [...new Set([t.cir, ...(t.cx || [])].filter(Boolean))];
   tubs.forEach(t => {
-    if (!t.cir || !t.tab || t.ali) return;
+    if (!t.cir || !t.tab || esAli(t)) return;
     cirsDe(t).forEach(cir => {
       const k = clave(t.tab, cir);
       if (!tubC.has(k)) tubC.set(k, []);
@@ -427,17 +435,51 @@ function planoCalc(PL, c, v) {
         Lmet: Math.max(Lmet, L)
       });
     }
-    return { id: tb.id, nom, circs };
+    return {
+      id: tb.id,
+      nom,
+      circs,
+      // Tablero trifásico (ventana Tablero) y tipo de departamento al que pertenece (edificio multifamiliar)
+      ...(tb.fs ? { fs: tb.fs } : {}),
+      ...(Number.isInteger(tb.dep) ? { dep: tb.dep } : {})
+    };
   });
   // Alimentadores: tuberías marcadas como alimentador, del medidor al TG y del TG a cada tablero
-  const ali = tubs.filter(t => t.ali),
+  const ali = tubs.filter(esAli),
     GA = grafo(ali, false),
     TG = tabs.find(t => (t.nom || "TG") === "TG"),
-    rutas = {};
+    rutas = {},
+    // Desde el medidor más cercano (o el banco de medidores) hasta cada tablero: alimentadores de los departamentos
+    desdeMed = {};
+  if (ali.length && medIds.size) {
+    medIds.forEach(id => {
+      if (!GA.has(`D:${id}`)) return;
+      GA.get(`D:${id}`).push(["S", 0, 0]);
+      if (!GA.has("S")) GA.set("S", []);
+      GA.get("S").push([`D:${id}`, 0, 0]);
+    });
+    if (GA.has("S")) {
+      const dm = plDijkstra(GA, "S");
+      tabs.forEach(tb => {
+        const d = dm.D.get(`D:${tb.id}`);
+        if (d != null) desdeMed[tb.id] = { L: d, Lh: dm.H.get(`D:${tb.id}`) };
+      });
+    }
+    // El nodo auxiliar no debe quedar en el grafo (no es un camino real)
+    GA.delete("S");
+    medIds.forEach(
+      id =>
+        GA.has(`D:${id}`) &&
+        GA.set(
+          `D:${id}`,
+          GA.get(`D:${id}`).filter(([v]) => v !== "S")
+        )
+    );
+  }
   if (TG && ali.length) {
     const desde = plDijkstra(GA, `D:${TG.id}`);
     sims
-      .filter(s => s.k === "med")
+      .filter(s => PL_MED.has(s.k))
       .forEach(m => {
         const d = desde.D.get(`D:${m.id}`);
         if (d != null && (!rutas.TG || d < rutas.TG.L)) rutas.TG = { L: d, Lh: desde.H.get(`D:${m.id}`), de: m.id };
@@ -483,5 +525,12 @@ function planoCalc(PL, c, v) {
     if (tp === "libre") return sumar(piso, "libre", m2);
     sumar(piso, tp, m2);
   });
-  return { tabs: R, cargas, rutas, avisos, areas, pisos };
+  if (TG && medIds.size && !rutas.TG)
+    aviso(
+      "aviso",
+      "El medidor no está unido al TG por una tubería: el alimentador se calcula con la longitud escrita",
+      [...medIds],
+      "ali"
+    );
+  return { tabs: R, cargas, rutas, desdeMed, avisos, areas, pisos };
 }

@@ -627,10 +627,14 @@ const DC_AYUDA = {
   pot: "Escriba su potencia en Propiedades (o la de su tipo de luminaria).",
   ruta: "Únalas con tuberías desde la salida del tablero: la longitud se mide por el recorrido.",
   tipo: "Doble clic en el tablero y elija el tipo de cada circuito.",
-  nom: "Los tableros del plano se llaman como en el cálculo: TG, TD-1, TD-2…"
+  nom: "Los tableros del plano se llaman como en el cálculo: TG, TD-1, TD-2…",
+  ali: "Dibuje una tubería desde el medidor hasta el TG (clic en el TG › Alimentador).",
+  sis: "Elija el sistema del tablero (doble clic) o cambie el suministro del proyecto.",
+  area: "Encuadre la planta que contiene el área, o márquela dentro de ella."
 };
 // Nombres de los tableros del cálculo (vivienda y otros usos): TG y, con pisos, el TD de cada uno
 function dcNomsCalc() {
+  if (MODE === "multi") return ["TG", "TSG", ...tipos.map(t => "TD-" + (t.nombre || "").replace(/^Tipo\s*/i, ""))];
   const td = pisos.length && PROY.esqPisos === "td";
   return ["TG", ...(td ? ["TD-1"] : []), ...pisos.map((_, i) => tabPiso(i + 2))];
 }
@@ -645,6 +649,7 @@ function dcDatos() {
       hEnt: n("hEnt") || 3.1
     }),
     noms = dcNomsCalc();
+  // En el edificio, los tableros de departamento se reconocen por su tipo (ventana Tablero), no por el nombre
   if (R && MODE === "uni")
     R.tabs
       .filter(t => t.circs.length && !noms.includes(t.nom))
@@ -660,7 +665,7 @@ function dcDatos() {
 }
 // Avisos para la revisión del diseño (solo si el diseño tiene tableros con circuitos)
 function dcAvisos() {
-  if (!EPL || !dsD() || MODE !== "uni" || !dsD().els.some(e => e.k === "tab" && e.nc)) return [];
+  if (!EPL || !dsD() || !dsD().els.some(e => (e.k === "tab" && e.nc) || e.ar)) return [];
   return dcDatos().R.avisos;
 }
 function dcAbrir() {
@@ -687,22 +692,21 @@ function dcRender() {
     ver = (ids, t = "Ver") =>
       ids && ids.length ? `<button type="button" class="vw-btn" data-dcv="${ids.join(",")}">${t}</button>` : "";
   $("dcUsar").value = usa ? "1" : "";
-  $("dcEst").innerHTML =
-    MODE !== "uni"
-      ? "Por ahora, el cálculo con el diseño es para vivienda unifamiliar y otros usos; el edificio multifamiliar llegará después."
-      : !usa
-        ? "El cálculo usa los datos escritos: elija «Sí» para calcular con este diseño."
-        : sucio
-          ? `El cálculo usa el diseño aplicado: <button type="button" class="linkbtn" data-dc="aplicar">aplique los cambios</button> para actualizarlo.`
-          : "El cálculo usa este diseño.";
+  $("dcEst").innerHTML = !usa
+    ? "El cálculo usa los datos escritos: elija «Sí» para calcular con este diseño."
+    : sucio
+      ? `El cálculo usa el diseño aplicado: <button type="button" class="linkbtn" data-dc="aplicar">aplique los cambios</button> para actualizarlo.`
+      : "El cálculo usa este diseño.";
   let h = "";
   const tabs = R ? R.tabs : [];
   if (!tabs.length)
     h +=
       '<p class="rev-ok">El diseño aún no tiene tableros. Ponga el tablero (Biblioteca › Tableros y medición), defina sus circuitos con doble clic y saque las tuberías desde sus salidas.</p>';
   tabs.forEach(tb => {
-    const en = noms.includes(tb.nom);
-    h += `<h4>${esc(tb.nom)}<small class="${en ? "" : "bad"}">${en ? "en el cálculo" : `no está en el cálculo (${noms.join(", ")})`}</small> ${ver([tb.id])}</h4>`;
+    const dep = MODE === "multi" && Number.isInteger(tb.dep) ? tipos[tb.dep] : null,
+      en = dep || noms.includes(tb.nom),
+      dm = R.desdeMed[tb.id];
+    h += `<h4>${esc(tb.nom)}${tb.fs ? ` <small>${tb.fs === 3 ? "trifásico" : "monofásico"}</small>` : ""}<small class="${en ? "" : "bad"}">${dep ? `departamento ${esc(dep.nombre || "")}` : en ? "en el cálculo" : MODE === "multi" ? "elija su tipo de departamento con doble clic" : `no está en el cálculo (${noms.join(", ")})`}</small>${dm && tb.nom !== "TG" ? `<small>desde el medidor: ${m(dm.L)} m</small>` : ""} ${ver([tb.id])}</h4>`;
     if (!tb.circs.length) {
       h += '<p class="dc-nota">Sin circuitos con carga: defina sus circuitos con doble clic y conecte las salidas.</p>';
       return;
@@ -727,9 +731,9 @@ function dcRender() {
     h +=
       `<h4>Alimentadores<small>tuberías marcadas como alimentador, por los montantes</small></h4><table class="dc-t"><thead><tr><th>Tramo</th><th>Longitud</th><th>Origen</th></tr></thead><tbody>` +
       fila(
-        "Medidor → TG",
+        MODE === "multi" ? "Medidor o banco → TG (general)" : "Medidor → TG",
         ali.TG,
-        `sin tubería de alimentador del medidor al TG: se usa la escrita (${PROY.Lalim || "—"} m)`
+        `sin tubería del medidor al TG: se usa la escrita (${(MODE === "multi" ? PROY.Lgen : PROY.Lalim) || "—"} m)`
       ) +
       noms
         .filter(n => n !== "TG")

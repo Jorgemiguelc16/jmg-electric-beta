@@ -195,6 +195,8 @@ const DS_CAT = Object.fromEntries(
     ["tabD", "Panel de distribución o centro de control", "09-91-16", "tab", 5, "hTab", null, null, "abajo"],
     ["centroDist", "Centro de distribución", "09-93-11", "tab", 5, "hTab"],
     ["med", "Medidor de energía", "08-80-22", "tab", 5, "hMed", null, null, "abajo"],
+    ["med3", "Medidor de energía trifásico", "08-80-22 · 3∼", "tab", 5, "hMed", null, null, "abajo"],
+    ["bmed", "Banco de medidores", "criterio", "tab", 5, "hMed", null, null, "abajo"],
     ["caja", "Caja, símbolo general (caja de paso)", "09-93-08", "can", 6, null],
     ["cajaCon", "Caja de conexión o de derivación", "09-93-09", "can", 6, null],
     ["terminal", "Terminal de consumidores", "09-93-10", "can", 6, null],
@@ -2064,10 +2066,11 @@ function dsDibSalidas(g, el, col, u, lw) {
     g.lineJoin = "round";
     g.lineWidth = 3 * plDpr();
     g.strokeStyle = PL_FONDO;
-    const yy = yn + (arriba ? 1 : -1) * 1.5 * u;
-    g.strokeText(el.nom, xn, yy);
+    const yy = yn + (arriba ? 1 : -1) * 1.5 * u,
+      nom = el.nom + (el.fs === 3 ? " 3φ" : "");
+    g.strokeText(nom, xn, yy);
     g.fillStyle = col;
-    g.fillText(el.nom, xn, yy);
+    g.fillText(nom, xn, yy);
     g.restore();
   }
 }
@@ -4225,8 +4228,8 @@ function dsVerificar() {
     "Llévelas a un artefacto, a una caja o a la salida del tablero."
   );
   const sinCir = [
-    ...sims.filter(e => !e.cir && !["can", "tie"].includes(DS_CAT[e.k].s) && e.k !== "med"),
-    ...tubs.filter(e => !e.cir && !e.ali)
+    ...sims.filter(e => !e.cir && !["can", "tie"].includes(DS_CAT[e.k].s) && !PL_MED.has(e.k)),
+    ...tubs.filter(e => !e.cir && !e.ali && ![e.c0, e.c1].some(id => por.get(id) && PL_MED.has(por.get(id).k)))
   ];
   add(
     "aviso",
@@ -4611,6 +4614,17 @@ function tabAbrir(id) {
   TA_ID = id;
   $("taNom").value = el.nom || "";
   $("taN").value = el.nc || 6;
+  $("taFs").value = el.fs === 3 ? "3" : el.fs === 1 ? "1" : "";
+  // Edificio: a qué tipo de departamento pertenece (el cálculo toma de él sus salidas y su alimentador)
+  $("taDepL").hidden = MODE !== "multi";
+  $("taDep").innerHTML =
+    '<option value="">— TG, servicios generales u otro —</option>' +
+    tipos
+      .map(
+        (t, i) =>
+          `<option value="${i}"${el.dep === i ? " selected" : ""}>${esc(t.nombre || "Tipo " + (i + 1))}</option>`
+      )
+      .join("");
   tabLista(el.cd || [], el.ct || []);
   $("tabDlg").hidden = false;
   vwFondo();
@@ -4673,6 +4687,12 @@ function tabAceptar() {
   while (ct.length && !ct[ct.length - 1]) ct.pop();
   el.nom = $("taNom").value.replace(/[<>]/g, "").trim().slice(0, 20) || el.nom || "TG";
   el.nc = n;
+  if ($("taFs").value) el.fs = +$("taFs").value;
+  else delete el.fs;
+  if (MODE === "multi") {
+    if ($("taDep").value !== "") el.dep = +$("taDep").value;
+    else delete el.dep;
+  }
   if (cd.length) el.cd = cd;
   else delete el.cd;
   if (ct.length) el.ct = ct;

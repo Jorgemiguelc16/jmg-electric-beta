@@ -538,7 +538,10 @@ async function arrastrarPlano(a, b) {
 prueba("Editor de diseño: símbolos DGE, enganche, mover, girar, borrar, tuberías, capas y guardado", async ok => {
   await ejemplo("uni");
   await abrirPlano();
-  ok(await ev("EPL.dis && EPL.dis.capas.length === 14 && !EPL.dis.els.length"), "diseño nuevo con sus 14 capas (con la de áreas)");
+  ok(
+    await ev("EPL.dis && EPL.dis.capas.length === 14 && !EPL.dis.els.length"),
+    "diseño nuevo con sus 14 capas (con la de áreas)"
+  );
   // Una luminaria en el centro de la sala y un tomacorriente que se encaja en el muro
   await clic('#editor [data-pl="col:luz"]');
   await clicPlano(OX + 1.5, OY + 6, 0);

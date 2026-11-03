@@ -75,7 +75,7 @@ function dpTexto(c) {
   const lb = c.closest("label");
   if (lb && lb.querySelectorAll("input,select").length === 1) {
     const k = lb.cloneNode(true);
-    k.querySelectorAll("input,select,datalist,button").forEach(x => x.remove());
+    k.querySelectorAll("input,select,datalist,button,.pl-chip").forEach(x => x.remove());
     const t = k.textContent.replace(/\s+/g, " ").trim();
     if (t) return t;
   }
@@ -87,9 +87,11 @@ const dpValor = c =>
   c.type === "radio" ? document.querySelector(`input[name="${c.name}"]:checked`)?.value || "" : c.value;
 function dpCampo(c) {
   const k = dpClave(c),
-    v = k in DP_PEND ? DP_PEND[k] : dpValor(c),
+    // Con el diseño, el dato que sale del plano se muestra con su valor y no se escribe
+    pl = k in PLANO_CAMPOS,
+    v = pl ? String(+(+PLANO_CAMPOS[k]).toFixed(2)) : k in DP_PEND ? DP_PEND[k] : dpValor(c),
     mod = k in DP_PEND ? " mod" : "",
-    a = `data-dp="${esc(k)}"`;
+    a = `data-dp="${esc(k)}"${pl ? " readonly" : ""}`;
   let ctl, txt;
   if (c.type === "radio") {
     // Los botones de opción del sistema eléctrico se muestran como una lista
@@ -107,7 +109,7 @@ function dpCampo(c) {
     falta = c.classList.contains("falta") || c.classList.contains("inv") ? " tc-falta" : "";
   // A todo lo ancho: las listas y el nombre del proyecto; los demás textos y números van de a dos o tres por fila
   const ancho = c.tagName === "SELECT" || c.type === "radio" || c.id === "p_nombre" ? " ancho" : "";
-  return `<label class="dp-c fc-e${ancho}${mod}${falta}"${ay ? ` data-ayuda="${esc(ay)}"` : ""}><span>${esc(txt)}</span>${ctl}</label>`;
+  return `<label class="dp-c fc-e${ancho}${mod}${pl ? " del-plano" : falta}"${ay ? ` data-ayuda="${esc(ay)}"` : ""}><span>${esc(txt)}${pl ? ' <em class="pl-chip">del plano</em>' : ""}</span>${ctl}</label>`;
 }
 // Grupos de un formulario: los datos sueltos y uno por cada elemento de sus listas (cada piso, cada tipo…)
 function dpGrupos(fid, excluir) {

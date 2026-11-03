@@ -129,7 +129,11 @@ function exTree() {
   add(0, esc($("p_nombre").value.trim() || "Proyecto sin nombre"), "proyecto", pst("proyecto"), pc("proyecto"));
   add(1, `Suministro · ${sis}`, "suministro", pst("suministro"), pc("suministro"));
   if (!multi) {
-    const a = (parseFloat($("area").value) || 0) + pisos.reduce((s, p) => s + (p.area || 0), 0);
+    // Con el diseño, el área calculada (la de las áreas marcadas en el plano)
+    const a =
+      LAST && LAST.mode === "uni" && LAST.plano
+        ? LAST.areaT
+        : (parseFloat($("area").value) || 0) + pisos.reduce((s, p) => s + (p.area || 0), 0);
     add(
       1,
       `${usoAct() === "viv" ? "Vivienda" : "Edificación"}${a > 0 ? ` · ${fmt(a, 0)} m²` : ""}${pisos.length ? ` · ${pisos.length + 1} pisos` : ""}`,

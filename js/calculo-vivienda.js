@@ -44,6 +44,19 @@ function calcUni(c) {
         })
       );
   const pisoDe = nom => (nom === "TG" ? 0 : (PS.find(p => tabDe(p.n) === nom) || { n: 0 }).n);
+  if (PLD) {
+    const tri = SIST[pv("sist") || "mono220"].tri;
+    PLD.tabs
+      .filter(t => t.nom === "TG" && t.fs && (t.fs === 3) !== tri)
+      .forEach(t =>
+        PLD.avisos.push({
+          t: "aviso",
+          m: `El ${t.nom} del plano es ${t.fs === 3 ? "trifásico" : "monofásico"}, pero el suministro del proyecto es ${tri ? "trifásico" : "monofásico"} (Suministro)`,
+          ids: [t.id],
+          k: "sis"
+        })
+      );
+  }
   if (PT_.size)
     PS.forEach(p => {
       const t = PT_.get(tabDe(p.n));
@@ -89,7 +102,7 @@ function calcUni(c) {
     sot = AP && sumaA("sot") > 0 ? sumaA("sot") : pn("sot"),
     area = areaT + fSot * sot,
     sk = pv("sist") || "mono220",
-    rTG = PT_.size && PLD.rutas.TG,
+    rTG = PLD && PLD.rutas.TG,
     Lalim = rTG ? Math.max(rTG.L, 0.5) : pn("Lalim") || 1;
   // Cargas especiales: las escritas y, en los tableros del plano, las dibujadas (con la longitud de su circuito)
   const cs = P.cargas.filter(x => !PT_.has(tabCarga(x))).map(x => ({ ...x }));
@@ -324,6 +337,26 @@ function calcUni(c) {
             ali: !!rTG,
             Ld: PS.filter(p => p.LdPlano).map(p => tabDe(p.n)),
             areas: PS.filter(p => p.areaPlano).map(p => p.n),
+            campos: Object.fromEntries(
+              [
+                rTG ? ["Lalim", Lalim] : null,
+                AP && sumaA("sot") > 0 ? ["sot", sot] : null,
+                AP && sumaA("libre") > 0 ? ["aLib", sumaA("libre")] : null,
+                ...PS.flatMap(p => {
+                  const k = (c0, c1) => (p.n === 1 ? c0 : `pisos_${c1}_${p.i}`);
+                  return [
+                    p.areaPlano ? [k("area", "area"), p.area] : null,
+                    p.LdPlano ? [p.n === 1 ? "Ltd1" : `pisos_Ld_${p.i}`, p.Ld] : null,
+                    ...(p.plano
+                      ? ["al", "tg", "tc"].flatMap(t => [
+                          [k(t + "_n", t + "_n"), p[t].n],
+                          [k(t + "_L", t + "_L"), p[t].L]
+                        ])
+                      : [])
+                  ];
+                })
+              ].filter(Boolean)
+            ),
             sot: !!(AP && sumaA("sot") > 0),
             libre: !!(AP && sumaA("libre") > 0),
             avisos: PLD.avisos

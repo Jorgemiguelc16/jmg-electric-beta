@@ -228,8 +228,8 @@ let RESUMEN = null;
 /* Con «Calcular con el diseño»: los tableros del plano que tienen circuitos y los alimentadores medidos en él (para
    no pedir los datos que salen del plano). Sin el modo, o sin diseño, nada. */
 function planoDatos(D) {
-  const vacio = { tabs: new Set(), rutas: {}, ali: false, areas: new Set() };
-  if (D.calPlano !== "1" || !D.PLANO || !D.PLANO.dis || D.MODE !== "uni") return vacio;
+  const vacio = { tabs: new Set(), rutas: {}, ali: false, areas: new Set(), deps: new Set(), depsLd: new Set() };
+  if (D.calPlano !== "1" || !D.PLANO || !D.PLANO.dis) return vacio;
   const n = k => parseFloat(D[k]) || 0,
     R = planoCalc(D.PLANO, ctx(D), { al_p: n("al_p"), tg_p: n("tg_p"), tc_p: n("tc_p"), hEnt: n("hEnt") || 3.1 });
   if (!R) return vacio;
@@ -240,7 +240,10 @@ function planoDatos(D) {
       .filter(([n, o]) => +n > 0 && (o.tech || o.ext || o.aulas))
       .map(([n]) => +n)
   );
-  return { tabs, rutas: R.rutas, ali: tabs.size > 0 && !!R.rutas.TG, areas };
+  // Edificio: tipos de departamento con tableros en el plano y los que tienen su alimentador desde el banco
+  const deps = new Set(R.tabs.filter(t => Number.isInteger(t.dep) && t.circs.length).map(t => t.dep)),
+    depsLd = new Set(R.tabs.filter(t => Number.isInteger(t.dep) && R.desdeMed[t.id]).map(t => t.dep));
+  return { tabs, rutas: R.rutas, ali: !!R.rutas.TG, areas, deps, depsLd };
 }
 // Resumen del diseño en Salidas (Diseño en el plano) y avisos en los datos que salen del plano
 function planoResumen(r) {
@@ -251,11 +254,7 @@ function planoResumen(r) {
     av = P ? P.avisos.filter(a => a.t !== "info").length : 0,
     btn = `<button type="button" class="linkbtn" data-act="datosplano">Ver los datos del plano</button>`;
   let h = "";
-  if (MODE === "multi")
-    h = usa
-      ? "Por ahora, el cálculo con el diseño es para vivienda unifamiliar y otros usos: el edificio se calcula con los datos escritos."
-      : "";
-  else if (!usa)
+  if (!usa)
     h = hay ? `El plano tiene tableros con circuitos o áreas: elija «Del diseño» para calcular con ellos. ${btn}` : "";
   else if (!hay)
     h =
@@ -264,6 +263,23 @@ function planoResumen(r) {
     h = `<b>Del plano:</b> ${P.tabs.length ? `${P.tabs.join(", ")} · ${nc} circuito${nc === 1 ? "" : "s"}` : "ningún tablero del cálculo"}${P.areas && P.areas.length ? ` · áreas de ${P.areas.length} piso${P.areas.length > 1 ? "s" : ""}` : ""}${P.ali ? " · alimentador medido en el plano" : ""}${av ? ` · <b class="w">${av} aviso${av === 1 ? "" : "s"}</b>` : ""}. ${btn}`;
   $("plCalRes").innerHTML = h;
   $("plCalRes").hidden = !h;
+  PLANO_CAMPOS = (P && P.campos) || {};
+  document.querySelectorAll(".del-plano").forEach(e => {
+    e.classList.remove("del-plano");
+    e.readOnly = false;
+    const c = e.parentElement && e.parentElement.querySelector(".pl-chip");
+    if (c) c.remove();
+  });
+  Object.entries(PLANO_CAMPOS).forEach(([k, v]) => {
+    const e = $(k);
+    if (!e) return;
+    e.classList.add("del-plano");
+    e.readOnly = true;
+    e.insertAdjacentHTML(
+      "afterend",
+      `<span class="pl-chip" title="Sale del diseño en el plano (Calcular con el diseño)">del plano: ${fmt(v, 2)}</span>`
+    );
+  });
   const T = P ? P.tabs : [],
     nota = (id, t) => {
       $(id).innerHTML = t;
@@ -293,6 +309,8 @@ function planoResumen(r) {
     va.length ? `<b>Calcular con el diseño:</b> ${va.join("; ")}. Esos datos escritos no se usan.` : ""
   );
 }
+// Datos que salen del plano en el último cálculo (clave del campo → valor), para mostrarlos en las ventanas
+let PLANO_CAMPOS = {};
 // El aviso «del plano» de un formulario, para las ventanas de datos (sin sus botones)
 const planoNota = id => {
   const e = $(id);
@@ -361,7 +379,8 @@ function faltantes(p = null) {
       if (p.tc_n > 0 && !pl) req(`pisos_tc_L_${i}`, `${n}: longitud de cocina`, vacio(p.tc_L));
     });
   } else {
-    req("Lgen", "Longitud del alimentador general");
+    const PD = planoDatos(D);
+    if (!PD.ali) req("Lgen", "Longitud del alimentador general");
     if (!tipos.length) F.push({ id: "add_tipos", l: "Agregue al menos un tipo de departamento" });
     tipos.forEach((t, i) => {
       const n = t.nombre || `Tipo ${i + 1}`;
@@ -372,14 +391,18 @@ function faltantes(p = null) {
         ["nAl", "salidas de alumbrado"],
         ["nTo", "tomacorrientes"],
         ["Lc", "longitud de los circuitos"]
-      ].forEach(([k, l]) => req(`tipos_${k}_${i}`, `${n}: ${l}`, vacio(t[k])));
+      ].forEach(([k, l]) => {
+        // Con el diseño: las salidas y la longitud de los circuitos del tipo salen de sus tableros del plano
+        if ((["nAl", "nTo", "Lc"].includes(k) && PD.deps.has(i)) || (k === "Ld" && PD.depsLd.has(i))) return;
+        req(`tipos_${k}_${i}`, `${n}: ${l}`, vacio(t[k]));
+      });
     });
     cargasT.forEach((x, i) => {
       const n = x.nombre || `Carga especial ${i + 1}`;
       req(`cargasT_p_${i}`, `${n}: potencia`, vacio(x.p));
       req(`cargasT_L_${i}`, `${n}: longitud`, vacio(x.L));
     });
-    if (serv.length) req("Lms", "Longitud al tablero de servicios generales");
+    if (serv.length && !PD.rutas.TSG) req("Lms", "Longitud al tablero de servicios generales");
     serv.forEach((x, i) => {
       const n = x.nombre || `Carga común ${i + 1}`;
       req(`serv_p_${i}`, `${n}: potencia`, vacio(x.p));

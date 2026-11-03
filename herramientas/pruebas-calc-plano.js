@@ -155,6 +155,44 @@ module.exports = function probarPlano(ctx) {
     r5.plano.avisos.some(x => x.k === "area"),
     true
   );
+  // Alimentador por una tubería que llega al medidor, sin marcarla como alimentador
+  const d6 = JSON.parse(JSON.stringify(PROY));
+  delete d6.PLANO.dis.els.find(e => e.id === "d16").ali;
+  ver("alimentador sin marcar, por llegar al medidor", calc({ ...d6, calPlano: "1" }).alims[0].L, 12.9);
+  // Edificio multifamiliar: banco de medidores, TG y el tablero de un departamento del tipo A
+  const M = {
+    MODE: "multi",
+    sistG: "tri380",
+    tipos: [{ nombre: "Tipo A", cant: 2, area: 80, Ld: 30, nAl: 10, nTo: 12, Lc: 15 }],
+    PLANO: {
+      nombre: "edificio.dxf",
+      sha: "1".repeat(40),
+      f: 1,
+      plantas: [],
+      dis: {
+        capas: [],
+        els: [
+          sim("d1", "bmed", 0, 0),
+          sim("d2", "tab", 5, 0, { nom: "TG", nc: 1, fs: 3 }),
+          sim("d3", "tab", 20, 0, { nom: "TD-A1", nc: 2, ct: ["al", "tg"], dep: 0 }),
+          sim("d4", "luz", 20, 3, { cir: "C-1", tab: "d3" }),
+          sim("d5", "luz", 20, 6, { cir: "C-1", tab: "d3" }),
+          sim("d6", "toma", 23, 0, { cir: "C-2", tab: "d3" }),
+          tub("d10", [0, 0, 5, 0], { modo: "piso", c0: "d1", c1: "d2" }),
+          tub("d11", [0, 0, 20, 0], { modo: "piso", c0: "d1", c1: "d3" }),
+          tub("d12", [20, 0, 20, 3], { cir: "C-1", tab: "d3", c0: "d3", c1: "d4" }),
+          tub("d13", [20, 3, 20, 6], { cir: "C-1", tab: "d3", c0: "d4", c1: "d5" }),
+          tub("d14", [20, 0, 23, 0], { modo: "piso", cir: "C-2", tab: "d3", c0: "d3", c1: "d6" })
+        ]
+      }
+    }
+  };
+  const rm = calc({ ...M, calPlano: "1" });
+  ver("edificio: alimentador general del banco al TG (1.1 + 5 + 1.8)", rm.alims[0].L, 7.9);
+  ver("edificio: alimentador del departamento A desde el banco (1.1 + 20 + 1.8)", rm.T[0].Ld, 22.9);
+  ver("edificio: salidas del tipo A del plano", [rm.T[0].nAl, rm.T[0].nTo], [2, 1]);
+  ver("edificio: circuito más largo del tipo A (1.1 + 6)", rm.T[0].Lc, 7.1);
+  ver("edificio sin el modo: datos escritos", calc(M).T[0].Ld, 30);
   const s = ((Date.now() - t0) / 1000).toFixed(2);
   if (fallas.length) {
     console.log("✘ Cálculo con el diseño:");

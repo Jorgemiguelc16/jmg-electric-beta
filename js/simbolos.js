@@ -541,6 +541,28 @@ function simboloDGE(o, k, x, y, z = 1) {
       L(x - w / 2, y - h / 2 + 5 * z, x + w / 2, y - h / 2 + 5 * z, 1);
       T(x, y + 5.5 * z, "Wh", { s: 5.5 * z, b: 1, a: "middle" });
     },
+    // Contador de energía trifásico: el mismo 08-80-22 con «3∼» (corriente alterna trifásica, IEC 60617) arriba
+    med3: () => {
+      const w = 13 * z,
+        h = 17 * z;
+      R(x - w / 2, y - h / 2, w, h, { fi: "#fff" });
+      L(x - w / 2, y - h / 2 + 5 * z, x + w / 2, y - h / 2 + 5 * z, 1);
+      T(x, y - h / 2 + 4 * z, "3∼", { s: 3.8 * z, b: 1, a: "middle" });
+      T(x, y + 5.5 * z, "Wh", { s: 5.5 * z, b: 1, a: "middle" });
+    },
+    // Banco de medidores (criterio de la plataforma, no es un símbolo de la norma): una caja con cuatro contadores
+    // 08-80-22 en fila y «BM» abajo, como se ve en planta
+    bmed: () => {
+      const w = 40 * z,
+        h = 17 * z;
+      R(x - w / 2, y - h / 2, w, h, { fi: "#fff" });
+      for (let i = 0; i < 4; i++) {
+        const cx = x - w / 2 + (i + 0.5) * (w / 4);
+        R(cx - 3.5 * z, y - h / 2 + 2 * z, 7 * z, 8 * z, { fi: "#fff" });
+        L(cx - 3.5 * z, y - h / 2 + 4.5 * z, cx + 3.5 * z, y - h / 2 + 4.5 * z, 0.8);
+      }
+      T(x, y + 6 * z, "BM", { s: 5 * z, b: 1, a: "middle" });
+    },
     // Caja (09-93-08) y canalizaciones hacia arriba y hacia abajo (09-93-05/06)
     caja: () => {
       C(x, y, 5 * z);

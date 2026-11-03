@@ -322,6 +322,28 @@ function edAplicar() {
   edAutoguardar(true);
   if (PROY.calPlano === "1") calcularAhora();
   toast("Cambios del diseño aplicados al proyecto");
+  const D = EPL && EPL.dis;
+  if (
+    PROY.calPlano !== "1" &&
+    !ED.ofrecio &&
+    D &&
+    D.els.some(e => (e.k === "tab" && e.nc) || e.ar || PL_MED.has(e.k))
+  ) {
+    ED.ofrecio = true;
+    confirmar(
+      "¿Calcular con el diseño?",
+      "<p>El diseño tiene datos para el cálculo (tableros con circuitos, áreas o medidores), pero el proyecto todavía se calcula con los datos escritos. Con <b>Calcular con el diseño</b>, el área, las salidas, las longitudes y los alimentadores salen del plano.</p>",
+      "Calcular con el diseño",
+      ok => {
+        if (!ok) return;
+        const s = $("calPlano");
+        s.value = "1";
+        s.dispatchEvent(new Event("input", { bubbles: true }));
+        s.dispatchEvent(new Event("change", { bubbles: true }));
+        toast("El proyecto se calcula con el diseño del plano");
+      }
+    );
+  }
 }
 function edCancelar() {
   if (edSnap() === ED.base) return edCerrar();

@@ -1,12 +1,37 @@
 /* CÁLCULO · EDIFICIO MULTIFAMILIAR
    calcMulti(): máxima demanda del edificio (Regla 050-202), alimentador general, de servicios generales y de cada
    departamento, circuitos, balance de los suministros entre fases, cortocircuito y puesta a tierra. Parte del motor
-   de js/calculo.js. */
+   de js/calculo.js. Con «Calcular con el diseño» (dato calPlano), el plano da la longitud del alimentador general
+   (del medidor o banco de medidores al TG), la del tablero de servicios generales (del TG al TSG) y, por cada tipo de
+   departamento (el elegido en la ventana de sus tableros), la del alimentador desde el banco de medidores, las salidas
+   de alumbrado y tomacorrientes y la longitud de sus circuitos (planoCalc, js/calculo-plano.js). */
 function calcMulti(c) {
   SFX = (P.SECF || {}).multi || {};
   const sk = pv("sistG") || "tri380",
-    Lgen = pn("Lgen") || 1,
-    Lms = pn("Lms") || 1;
+    PLD =
+      pv("calPlano") === "1" && P.PLANO
+        ? planoCalc(P.PLANO, c, { al_p: c.pAl, tg_p: c.pTo, tc_p: c.pTo, hEnt: pn("hEnt") || 3.1 })
+        : null,
+    rG = PLD && PLD.rutas.TG,
+    rS = PLD && PLD.rutas.TSG,
+    Lgen = rG ? Math.max(rG.L, 0.5) : pn("Lgen") || 1,
+    Lms = rS ? Math.max(rS.L, 0.5) : pn("Lms") || 1,
+    // Tableros del plano de cada tipo de departamento: su alimentador más largo desde los medidores y sus salidas
+    // (las del tablero con más salidas: los departamentos de un tipo son iguales) y su circuito más largo
+    dPlano = i => {
+      const tbs = PLD ? PLD.tabs.filter(t => t.dep === i && t.circs.length) : [];
+      if (!tbs.length) return null;
+      const n = (t, ks) => t.circs.filter(q => ks.includes(q.tipo)).reduce((s, q) => s + q.n, 0),
+        Ls = tbs.map(t => PLD.desdeMed[t.id]).filter(Boolean),
+        m = tbs.reduce((a, t) => (n(t, ["al", "tg", "tc"]) > n(a, ["al", "tg", "tc"]) ? t : a));
+      return {
+        nAl: n(m, ["al"]),
+        nTo: n(m, ["tg", "tc"]),
+        Lc: Math.max(0.5, ...tbs.flatMap(t => t.circs.filter(q => q.tipo !== "esp").map(q => q.L))),
+        ...(Ls.length ? { Ld: Math.max(0.5, ...Ls.map(r => r.L)) } : {}),
+        n: tbs.length
+      };
+    };
   // Cargas especiales de cada tipo de departamento (lista cargasT): sumadas por tipo para la máxima demanda,
   // su potencia total (Pesp) para la carga instalada y su número (nEsp) para el metrado
   const espT = i => P.cargasT.filter(x => Math.round(+x.dep || 0) === i && x.p > 0);
@@ -15,7 +40,14 @@ function calcMulti(c) {
     .filter(t => t.cant > 0)
     .map(t => {
       const ce = espT(t._i),
-        u = { ...t, ...cargasMD(ce), Pesp: ce.reduce((s, x) => s + x.p, 0), nEsp: ce.length };
+        dp = dPlano(t._i),
+        u = {
+          ...t,
+          ...(dp ? { nAl: dp.nAl, nTo: dp.nTo, Lc: dp.Lc, ...(dp.Ld ? { Ld: dp.Ld } : {}), plano: dp } : {}),
+          ...cargasMD(ce),
+          Pesp: ce.reduce((s, x) => s + x.p, 0),
+          nEsp: ce.length
+        };
       return { ...u, cant: Math.round(t.cant), md: mdVivienda(u, true) };
     })
     .sort((a, b) => b.md.sinAire - a.md.sinAire);
@@ -93,6 +125,7 @@ function calcMulti(c) {
   });
   gen.iccO = c.iccE;
   gen.pdc = pdcPara(c.iccE, c.pdcMin);
+  if (rG) gen.plano = { Lh: rG.Lh, de: rG.de };
   const iccTG = iccAbajo(c.iccE, gen.s, gen.L, gen.S);
   const alims = [gen],
     tabs = [];
@@ -109,6 +142,7 @@ function calcMulti(c) {
     );
     f.iccO = iccTG;
     f.pdc = pdcPara(iccTG, c.pdcMin);
+    if (rS) f.plano = { Lh: rS.Lh, de: rS.de };
     alims.push(f);
     const icc = iccAbajo(iccTG, f.s, f.L, f.S);
     tabs.push({ tab: "TSG", desc: "Tablero de servicios generales", feeder: 1, icc, pdc: pdcPara(icc, c.pdcMin) });
@@ -128,6 +162,7 @@ function calcMulti(c) {
     );
     f.iccO = iccTG;
     f.pdc = pdcPara(iccTG, c.pdcMin);
+    if (t.plano && t.plano.Ld) f.plano = { n: t.plano.n };
     alims.push(f);
     const icc = iccAbajo(iccTG, f.s, f.L, f.S);
     tabs.push({
@@ -246,6 +281,33 @@ function calcMulti(c) {
     pat: pozo(c.pat),
     contratada: Math.ceil(MD / 500) / 2,
     conexion: "Conexión en derivación con banco de medidores (Norma DGE, 301.C)",
+    ...(PLD
+      ? {
+          plano: {
+            tabs: [...new Set(PLD.tabs.filter(t => Number.isInteger(t.dep) && t.circs.length).map(t => t.dep))].map(
+              i => "TD-" + ((P.tipos[i] || {}).nombre || "").replace(/^Tipo\s*/i, "")
+            ),
+            ali: !!rG,
+            avisos: PLD.avisos,
+            campos: Object.fromEntries(
+              [
+                rG ? ["Lgen", Lgen] : null,
+                rS ? ["Lms", Lms] : null,
+                ...T.flatMap(t =>
+                  t.plano
+                    ? [
+                        [`tipos_nAl_${t._i}`, t.nAl],
+                        [`tipos_nTo_${t._i}`, t.nTo],
+                        [`tipos_Lc_${t._i}`, t.Lc],
+                        t.plano.Ld ? [`tipos_Ld_${t._i}`, t.Ld] : null
+                      ]
+                    : []
+                )
+              ].filter(Boolean)
+            )
+          }
+        }
+      : {}),
     Selec: tierraElectrodo(gen.Izc)
   };
 }

@@ -683,6 +683,8 @@ function disValido(v) {
           ...(e.k === "tab" && e.nom ? { nom: txt(e.nom, 20) } : {}),
           ...(e.k === "tab" && n(e.nc) && e.nc >= 1 ? { nc: Math.min(60, Math.round(e.nc)) } : {}),
           ...(e.k === "tab" && Array.isArray(e.cd) ? { cd: e.cd.slice(0, 60).map(d => txt(d, 60)) } : {}),
+          // Tablero de un departamento: índice de su tipo (edificio multifamiliar)
+          ...(e.k === "tab" && Number.isInteger(e.dep) && e.dep >= 0 && e.dep < 100 ? { dep: e.dep } : {}),
           // Tipo de cada circuito del tablero (alumbrado, tomacorrientes, cocina, carga especial o reserva)
           ...(e.k === "tab" && Array.isArray(e.ct)
             ? { ct: e.ct.slice(0, 60).map(x => (["al", "tg", "tc", "esp", "res"].includes(x) ? x : "")) }
