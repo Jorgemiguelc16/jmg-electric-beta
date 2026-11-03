@@ -25,6 +25,15 @@ function plPisoPlanta(p, i) {
   const m = /(\d+)/.exec(n);
   return m ? +m[1] : i + 1;
 }
+// ¿El punto está dentro del polígono [x0, y0, x1, y1…]?
+function plDentro(x, y, p) {
+  let d = false;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2)
+    if (p[i + 1] > y !== p[j + 1] > y && x < ((p[j] - p[i]) * (y - p[i + 1])) / (p[j + 1] - p[i + 1]) + p[i]) d = !d;
+  return d;
+}
+// Ambientes de cocina y lavandería (por el nombre del área): sus tomacorrientes son del circuito de cocina
+const PL_COCINA = /cocina|lavander|kitchen/i;
 // Área de un polígono (unidades del dibujo al cuadrado)
 function plAreaPol(p) {
   let a = 0;
@@ -189,7 +198,11 @@ function planoCalc(PL, c, v) {
     sims = els.filter(e => e.t === "sim"),
     // La tubería que llega a un medidor es de un alimentador, aunque no esté marcada
     medIds = new Set(sims.filter(s => PL_MED.has(s.k)).map(s => s.id)),
-    esAli = t => t.ali || medIds.has(t.c0) || medIds.has(t.c1),
+    patIds = new Set(sims.filter(s => s.k === "pat").map(s => s.id)),
+    esAli = t => t.ali || [t.c0, t.c1].some(id => medIds.has(id) || patIds.has(id)),
+    // Ambientes de cocina o lavandería marcados como áreas
+    cocinas = els.filter(e => e.ar && e.t === "lin" && PL_COCINA.test(e.ar.n || "") && e.pts.length >= 6),
+    enCocina = s => cocinas.some(a => plDentro(s.x, s.y, a.pts)),
     tubs = tubs0,
     tabs = sims.filter(e => e.k === "tab"),
     lums = new Map((dis.lums || []).map(x => [x.id, x])),
@@ -302,7 +315,18 @@ function planoCalc(PL, c, v) {
       cargo.forEach(s => cnt[plArt(s.k)[0]]++);
       // Tipo del circuito: el elegido en la ventana Tablero o, si no, el de sus salidas
       const ct = (tb.ct || [])[i],
-        auto = cnt.esp && !cnt.al && !cnt.to ? "esp" : cnt.al > cnt.to ? "al" : cnt.to ? "tg" : "",
+        tomas = cargo.filter(s => plArt(s.k)[0] === "to"),
+        // Tomacorrientes, todos dentro de la cocina o la lavandería: circuito de cocina
+        auto =
+          cnt.esp && !cnt.al && !cnt.to
+            ? "esp"
+            : cnt.al > cnt.to
+              ? "al"
+              : cnt.to
+                ? tomas.every(enCocina)
+                  ? "tc"
+                  : "tg"
+                : "",
         tipo = PL_TCIR[ct] ? ct : auto;
       if (tipo === "res") continue;
       if (!cargo.length) {
@@ -365,6 +389,7 @@ function planoCalc(PL, c, v) {
             fases: f3 ? 3 : 1,
             elec: s.elc ? 1 : 0,
             tab: nom,
+            tabId: tb.id,
             cir,
             id: s.id
           });
@@ -484,6 +509,10 @@ function planoCalc(PL, c, v) {
         const d = desde.D.get(`D:${m.id}`);
         if (d != null && (!rutas.TG || d < rutas.TG.L)) rutas.TG = { L: d, Lh: desde.H.get(`D:${m.id}`), de: m.id };
       });
+    patIds.forEach(id => {
+      const d = desde.D.get(`D:${id}`);
+      if (d != null && (!rutas.PAT || d < rutas.PAT.L)) rutas.PAT = { L: d, Lh: desde.H.get(`D:${id}`), de: id };
+    });
     tabs.forEach(tb => {
       if (tb === TG) return;
       const d = desde.D.get(`D:${tb.id}`);
@@ -492,6 +521,7 @@ function planoCalc(PL, c, v) {
   }
   // Áreas: polilíneas cerradas con datos de área (ar), sumadas por piso y por tipo (m²)
   const areas = [],
+    areaDep = {},
     pisos = {},
     sumar = (n, k, m2) => {
       const o = (pisos[n] = pisos[n] || { tech: 0, ext: 0, aulas: 0, sot: 0, libre: 0 });
@@ -510,8 +540,15 @@ function planoCalc(PL, c, v) {
       piso = plantas.length ? (ip >= 0 ? plPisoPlanta(plantas[ip], ip) : null) : 1,
       m2 = plAreaPol(e.pts) * f * f,
       tp = PL_TAREA[e.ar.tp] ? e.ar.tp : "tech";
-    areas.push({ id: e.id, n: e.ar.n || "", tp, piso, m2 });
+    areas.push({ id: e.id, n: e.ar.n || "", tp, piso, m2, ...(Number.isInteger(e.ar.dep) ? { dep: e.ar.dep } : {}) });
     if (tp === "no") return;
+    // Edificio: las áreas de un departamento (su tipo) van a ese tipo, no al piso
+    if (Number.isInteger(e.ar.dep) && (tp === "tech" || tp === "ext")) {
+      const o = (areaDep[e.ar.dep] = areaDep[e.ar.dep] || { m2: 0, plantas: new Set() });
+      o.m2 += m2;
+      o.plantas.add(ip);
+      return;
+    }
     if (piso === null)
       return aviso(
         "aviso",
@@ -532,5 +569,5 @@ function planoCalc(PL, c, v) {
       [...medIds],
       "ali"
     );
-  return { tabs: R, cargas, rutas, desdeMed, avisos, areas, pisos };
+  return { tabs: R, cargas, rutas, desdeMed, avisos, areas, pisos, areaDep };
 }

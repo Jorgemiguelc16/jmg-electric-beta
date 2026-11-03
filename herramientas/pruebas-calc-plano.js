@@ -155,6 +155,29 @@ module.exports = function probarPlano(ctx) {
     r5.plano.avisos.some(x => x.k === "area"),
     true
   );
+  // Pozo de tierra unido al TG: el conductor de tierra mide 3 m por el piso y 1.8 m hasta el tablero
+  const d7 = JSON.parse(JSON.stringify(PROY));
+  d7.PLANO.dis.els.push(
+    sim("d40", "pat", 0, -3),
+    tub("d41", [0, -3, 0, 0], { modo: "piso", ali: true, c0: "d40", c1: "d1" })
+  );
+  ver("conductor de tierra del pozo dibujado", calc({ ...d7, calPlano: "1" }).c.pozo.cond, 4.8);
+  // Tomacorrientes dentro de la cocina: el circuito automático es de cocina
+  const d8 = JSON.parse(JSON.stringify(PROY));
+  d8.PLANO.dis.els.find(e => e.id === "d1").ct = ["al", "", "esp", "res"];
+  d8.PLANO.dis.els.push({
+    id: "d42",
+    t: "lin",
+    c: true,
+    capa: "E-AREAS",
+    pts: [-3, -6, 4, -6, 4, -4, -3, -4],
+    ar: { tp: "tech", n: "Cocina" }
+  });
+  ver(
+    "tomacorrientes en la cocina: circuito de cocina",
+    calc({ ...d8, calPlano: "1" }).circ.find(q => q.id === "C-2").plano.ct,
+    "tc"
+  );
   // Alimentador por una tubería que llega al medidor, sin marcarla como alimentador
   const d6 = JSON.parse(JSON.stringify(PROY));
   delete d6.PLANO.dis.els.find(e => e.id === "d16").ali;
@@ -193,6 +216,36 @@ module.exports = function probarPlano(ctx) {
   ver("edificio: salidas del tipo A del plano", [rm.T[0].nAl, rm.T[0].nTo], [2, 1]);
   ver("edificio: circuito más largo del tipo A (1.1 + 6)", rm.T[0].Lc, 7.1);
   ver("edificio sin el modo: datos escritos", calc(M).T[0].Ld, 30);
+  ver(
+    "edificio: circuitos del departamento A, los del plano",
+    rm.circ.filter(q => q.tab === "TD-A").map(q => [q.id, q.n, !!q.plano]),
+    [
+      ["C-1", 2, true],
+      ["C-2", 1, true]
+    ]
+  );
+  // Servicios generales dibujados (TSG con una electrobomba) y área de un departamento del tipo A
+  const M2 = JSON.parse(JSON.stringify(M));
+  M2.PLANO.dis.els.push(
+    sim("d30", "tab", 5, -6, { nom: "TSG", nc: 1, ct: ["esp"] }),
+    sim("d31", "fza", 9, -6, { cir: "C-1", tab: "d30", p: 1500, ctp: "motor", cn: "Electrobomba" }),
+    tub("d32", [5, 0, 5, -6], { modo: "piso", ali: true, c0: "d2", c1: "d30" }),
+    tub("d33", [5, -6, 9, -6], { modo: "piso", cir: "C-1", tab: "d30", c0: "d30", c1: "d31" }),
+    {
+      id: "d34",
+      t: "lin",
+      c: true,
+      capa: "E-AREAS",
+      pts: [0, 10, 8, 10, 8, 20, 0, 20],
+      ar: { tp: "tech", n: "Dpto A", dep: 0 }
+    }
+  );
+  const rm2 = calc({ ...M2, calPlano: "1" }),
+    s1 = rm2.circ.find(q => q.tab === "TSG");
+  ver("TSG del plano: la electrobomba como motor", [s1 && s1.id, s1 && s1.P, rm2.SV[0].tipo], ["C-1", 1500, "motor"]);
+  ver("alimentador TG → TSG del plano (1.8 + 6 + 1.8)", rm2.alims[1].L, 9.6);
+  ver("área del tipo A, marcada en el plano", rm2.T[0].area, 80);
+
   const s = ((Date.now() - t0) / 1000).toFixed(2);
   if (fallas.length) {
     console.log("✘ Cálculo con el diseño:");

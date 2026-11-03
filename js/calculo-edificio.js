@@ -24,7 +24,11 @@ function calcMulti(c) {
       const n = (t, ks) => t.circs.filter(q => ks.includes(q.tipo)).reduce((s, q) => s + q.n, 0),
         Ls = tbs.map(t => PLD.desdeMed[t.id]).filter(Boolean),
         m = tbs.reduce((a, t) => (n(t, ["al", "tg", "tc"]) > n(a, ["al", "tg", "tc"]) ? t : a));
+      const ce = PLD.cargas.filter(x => x.tabId === m.id);
       return {
+        tb: m,
+        ce,
+        Pno: m.circs.reduce((s, q) => s + q.sal.reduce((u, o) => u + (o.cl === "esp" ? 0 : o.p), 0), 0),
         nAl: n(m, ["al"]),
         nTo: n(m, ["tg", "tc"]),
         Lc: Math.max(0.5, ...tbs.flatMap(t => t.circs.filter(q => q.tipo !== "esp").map(q => q.L))),
@@ -39,11 +43,15 @@ function calcMulti(c) {
     .map((t, i) => ({ ...t, _i: i }))
     .filter(t => t.cant > 0)
     .map(t => {
-      const ce = espT(t._i),
-        dp = dPlano(t._i),
+      const dp = dPlano(t._i),
+        // Con el tablero del tipo en el plano, sus cargas especiales son las dibujadas
+        ce = dp ? dp.ce : espT(t._i),
+        // Áreas marcadas de un departamento de este tipo (Regla 050-110: dimensiones interiores)
+        aD = PLD && PLD.areaDep[t._i],
         u = {
           ...t,
           ...(dp ? { nAl: dp.nAl, nTo: dp.nTo, Lc: dp.Lc, ...(dp.Ld ? { Ld: dp.Ld } : {}), plano: dp } : {}),
+          ...(aD && aD.m2 > 0 ? { area: aD.m2, areaPlano: true } : {}),
           ...cargasMD(ce),
           Pesp: ce.reduce((s, x) => s + x.p, 0),
           nEsp: ce.length
@@ -113,7 +121,33 @@ function calcMulti(c) {
   }
   const mdDeptos = units.reduce((s, u) => s + u.dem, 0),
     aireTot = T.reduce((s, t) => s + t.aire * t.cant, 0);
-  const SV = P.serv.map((s, i) => ({ ...s, _i: i })).filter(s => s.p > 0);
+  if (PLD)
+    Object.entries(PLD.areaDep).forEach(([i, o]) => {
+      if (o.plantas.size > 1)
+        PLD.avisos.push({
+          t: "aviso",
+          m: `Las áreas del ${(P.tipos[i] || {}).nombre || "tipo"} están en ${o.plantas.size} plantas: marque las de un solo departamento`,
+          ids: [],
+          k: "area"
+        });
+    });
+  // Servicios generales: los circuitos del TSG dibujado (si lo hay); si no, los escritos
+  const tsg = PLD && PLD.tabs.find(t => t.nom === "TSG" && t.circs.length),
+    SV = tsg
+      ? tsg.circs.map((q0, i) => {
+          const mot = PLD.cargas.some(x => x.tabId === tsg.id && x.cir === q0.cir && x.tipo === "motor");
+          return {
+            nombre: q0.desc || (q0.tipo === "al" ? "Alumbrado de áreas comunes" : PL_DESC[q0.tipo] || "Carga común"),
+            tipo: mot ? "motor" : q0.tipo === "al" ? "alum" : "otra",
+            fases: q0.f3 ? 3 : 1,
+            p: q0.P,
+            L: q0.L,
+            elec: q0.elec ? 1 : 0,
+            _i: i,
+            plano: { tab: tsg.id, cir: q0.cir, q0 }
+          };
+        })
+      : P.serv.map((s, i) => ({ ...s, _i: i })).filter(s => s.p > 0);
   const Pserv = SV.reduce((s, x) => s + x.p, 0),
     maxMot = Math.max(0, ...SV.filter(x => x.tipo === "motor").map(x => x.p)),
     mdServ = 0.75 * Pserv;
@@ -123,6 +157,8 @@ function calcMulti(c) {
     fd: c.fdA,
     viv: true
   });
+  const rP = PLD && PLD.rutas.PAT;
+  if (rP) c.pozo = { ...c.pozo, cond: Math.max(rP.L, 0.5), pvc: Math.max(rP.L, 0.5) };
   gen.iccO = c.iccE;
   gen.pdc = pdcPara(c.iccE, c.pdcMin);
   if (rG) gen.plano = { Lh: rG.Lh, de: rG.de };
@@ -180,7 +216,7 @@ function calcMulti(c) {
       const q = circuito(
         {
           tab: "TSG",
-          id: "S-" + (i + 1),
+          id: x.plano ? x.plano.cir : "S-" + (i + 1),
           desc: x.nombre || "Carga común",
           tipo: TSERV[x.tipo],
           n: 1,
@@ -193,7 +229,8 @@ function calcMulti(c) {
         f.dvAc,
         1
       );
-      q.src = { t: "serv", i: x._i };
+      q.src = x.plano ? { t: "plano", tab: x.plano.tab, cir: x.plano.cir } : { t: "serv", i: x._i };
+      if (x.plano) q.plano = { lej: x.plano.q0.lej, Lh: x.plano.q0.Lh, Lv: x.plano.q0.Lv, est: x.plano.q0.est };
       q.elec = !!+x.elec;
       return q;
     });
@@ -202,6 +239,36 @@ function calcMulti(c) {
   T.forEach((t, ti) => {
     const fi = alims.findIndex(a => a.pKey === "tipo" && a.ti === ti),
       up = alims[fi].dvAc;
+    if (t.plano) {
+      const L2 = t.plano.tb.circs.map(q0 => {
+        const esp = q0.tipo === "esp",
+          cg = t.plano.ce.filter(x => x.cir === q0.cir),
+          m = cg.reduce((a, x) => (!a || x.p > a.p ? x : a), null),
+          q = circuito(
+            {
+              tab: t.tab,
+              id: q0.cir,
+              desc: q0.desc || (esp ? (cg.length === 1 ? m.nombre : "Cargas especiales") : PL_DESC[q0.tipo]),
+              tipo: esp ? TIPOS[m ? m.tipo : "otra"].split(" (")[0] : PL_TIPO[q0.tipo],
+              n: q0.n,
+              P: q0.P,
+              L: q0.L,
+              fases: 1
+            },
+            { ...c, fa: fa5C(q0.ng), fc: c.ft * fa5C(q0.ng) },
+            up,
+            fi
+          );
+        q.src = { t: "plano", tab: t.plano.tb.id, cir: q0.cir };
+        q.grp = { n: q0.ng, fa: fa5C(q0.ng) };
+        q.elec = q0.elec;
+        q.plano = { lej: q0.lej, Lh: q0.Lh, Lv: q0.Lv, est: q0.est, Lmet: q0.Lmet, auto: q0.auto, ct: q0.tipo };
+        return q;
+      });
+      asignarID(L2, c);
+      circ.push(...L2);
+      return;
+    }
     const list = grupos(
       [
         { n: t.nAl, p: c.pAl, ...alT(t), L: t.Lc || 1, desc: "Alumbrado", tipo: "Alumbrado" },
@@ -254,7 +321,12 @@ function calcMulti(c) {
   const emerg = SV.some(s => /emergencia/i.test(s.nombre));
   const CI =
     T.reduce(
-      (s, t) => s + t.cant * (t.nAl * c.pAl + (exT(t)?.P || 0) + t.nTo * c.pTo + (exTt(t)?.P || 0) + t.Pesp),
+      (s, t) =>
+        s +
+        t.cant *
+          (t.plano
+            ? t.plano.Pno + t.Pesp
+            : t.nAl * c.pAl + (exT(t)?.P || 0) + t.nTo * c.pTo + (exTt(t)?.P || 0) + t.Pesp),
       0
     ) + Pserv;
   return {
@@ -293,6 +365,9 @@ function calcMulti(c) {
               [
                 rG ? ["Lgen", Lgen] : null,
                 rS ? ["Lms", Lms] : null,
+                rP ? ["pzCond", c.pozo.cond] : null,
+                rP ? ["pzPvc", c.pozo.pvc] : null,
+                ...T.filter(t => t.areaPlano).map(t => [`tipos_area_${t._i}`, t.area]),
                 ...T.flatMap(t =>
                   t.plano
                     ? [

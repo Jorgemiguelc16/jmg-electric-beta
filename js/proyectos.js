@@ -738,7 +738,9 @@ function disValido(v) {
             ? {
                 ar: {
                   tp: ["tech", "ext", "sot", "libre", "aulas", "no"].includes(e.ar.tp) ? e.ar.tp : "tech",
-                  n: txt(e.ar.n, 60)
+                  n: txt(e.ar.n, 60),
+                  // Edificio: tipo de departamento del área
+                  ...(Number.isInteger(e.ar.dep) && e.ar.dep >= 0 && e.ar.dep < 100 ? { dep: e.ar.dep } : {})
                 }
               }
             : {}),

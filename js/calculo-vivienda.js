@@ -98,6 +98,9 @@ function calcUni(c) {
       if (a.aulas) p.aE = a.aulas;
       p.areaPlano = true;
     });
+  // Pozo de tierra dibujado: el conductor de tierra y su tubo de protección miden el recorrido del TG al pozo
+  const rP = PLD && PLD.rutas.PAT;
+  if (rP) c.pozo = { ...c.pozo, cond: Math.max(rP.L, 0.5), pvc: Math.max(rP.L, 0.5) };
   const areaT = PS.reduce((s, p) => s + p.area, 0),
     sot = AP && sumaA("sot") > 0 ? sumaA("sot") : pn("sot"),
     area = areaT + fSot * sot,
@@ -340,6 +343,8 @@ function calcUni(c) {
             campos: Object.fromEntries(
               [
                 rTG ? ["Lalim", Lalim] : null,
+                rP ? ["pzCond", c.pozo.cond] : null,
+                rP ? ["pzPvc", c.pozo.pvc] : null,
                 AP && sumaA("sot") > 0 ? ["sot", sot] : null,
                 AP && sumaA("libre") > 0 ? ["aLib", sumaA("libre")] : null,
                 ...PS.flatMap(p => {

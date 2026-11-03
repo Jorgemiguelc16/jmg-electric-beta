@@ -3456,6 +3456,12 @@ function dsProps(c) {
           .map(([k, t]) => `<option value="${k}"${k === el.ar.tp ? " selected" : ""}>${t}</option>`)
           .join("")}</select>`
       ) +
+      (MODE === "multi"
+        ? campo(
+            "Departamento",
+            `<select data-dsp="ardep"><option value="">— Áreas comunes o del piso —</option>${tipos.map((t, i) => `<option value="${i}"${el.ar.dep === i ? " selected" : ""}>${esc(t.nombre || "Tipo " + (i + 1))}</option>`).join("")}</select>`
+          )
+        : "") +
       fila("Área", `${fmt(dsM2(el), 2)} m²`) +
       fila("Perímetro", `${plFm(dsLargo(el))} m`) +
       `<p class="ds-crit">Vivienda: suma las áreas techadas por dimensiones interiores (Regla 050-110). Otros usos: el contorno exterior del piso (Regla 050-210). El área no se imprime en la lámina.</p>` +
@@ -3641,7 +3647,10 @@ function dsPropCambio(e) {
     else if (k === "p") el.p = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "arn" && el.ar) el.ar.n = v.replace(/[<>]/g, "").slice(0, 60);
     else if (k === "artp" && el.ar) el.ar.tp = PL_TAREA[v] ? v : "tech";
-    else if (k === "cx" && el.t === "tub") {
+    else if (k === "ardep" && el.ar) {
+      if (v === "") delete el.ar.dep;
+      else el.ar.dep = +v;
+    } else if (k === "cx" && el.t === "tub") {
       const s = new Set(el.cx || []);
       if (f.checked) s.add(f.value);
       else s.delete(f.value);
@@ -4229,7 +4238,12 @@ function dsVerificar() {
   );
   const sinCir = [
     ...sims.filter(e => !e.cir && !["can", "tie"].includes(DS_CAT[e.k].s) && !PL_MED.has(e.k)),
-    ...tubs.filter(e => !e.cir && !e.ali && ![e.c0, e.c1].some(id => por.get(id) && PL_MED.has(por.get(id).k)))
+    ...tubs.filter(
+      e =>
+        !e.cir &&
+        !e.ali &&
+        ![e.c0, e.c1].some(id => por.get(id) && (PL_MED.has(por.get(id).k) || por.get(id).k === "pat"))
+    )
   ];
   add(
     "aviso",

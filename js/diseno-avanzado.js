@@ -663,6 +663,85 @@ function dcDatos() {
       );
   return { R, noms, c };
 }
+/* Revisión cruzada: cada dato del cálculo, si sale del plano (verde) o de lo escrito (gris), para que se vea de
+   un vistazo qué falta dibujar */
+function dcCruce(R, noms) {
+  const filas = [],
+    f = (dato, pl, txt) => filas.push([dato, pl, txt]),
+    m2 = v => `${fmt(v, 2)} m²`,
+    m = v => `${fmt(v, 2)} m`,
+    con = new Map(R.tabs.filter(t => t.circs.length).map(t => [t.nom, t]));
+  if (MODE === "multi") {
+    f(
+      "Alimentador general (medidor o banco → TG)",
+      !!R.rutas.TG,
+      R.rutas.TG ? m(R.rutas.TG.L) : `escrito: ${PROY.Lgen || "—"} m`
+    );
+    if (serv.length || con.has("TSG"))
+      f(
+        "Tablero de servicios generales TSG",
+        con.has("TSG"),
+        con.has("TSG") ? `${con.get("TSG").circs.length} circuitos del plano` : "servicios escritos"
+      );
+    tipos.forEach((t, i) => {
+      const tb = R.tabs.filter(x => x.dep === i && x.circs.length),
+        a = R.areaDep[i],
+        dm = tb.map(x => R.desdeMed[x.id]).filter(Boolean);
+      f(`${t.nombre || "Tipo"}: área`, !!(a && a.m2), a && a.m2 ? m2(a.m2) : `escrita: ${t.area || "—"} m²`);
+      f(
+        `${t.nombre || "Tipo"}: circuitos`,
+        tb.length > 0,
+        tb.length ? `del tablero ${tb[0].nom}${tb.length > 1 ? ` (${tb.length} tableros)` : ""}` : "escritos"
+      );
+      f(
+        `${t.nombre || "Tipo"}: alimentador desde el banco`,
+        dm.length > 0,
+        dm.length ? m(Math.max(...dm.map(r => r.L))) : `escrito: ${t.Ld || "—"} m`
+      );
+    });
+  } else {
+    const viv = usoAct() === "viv";
+    [1, ...pisos.map((p, i) => i + 2)].forEach(n => {
+      const o = R.pisos[n],
+        v = o ? (viv ? o.tech : o.ext || o.tech) : 0,
+        esc0 = n === 1 ? PROY.area : pisos[n - 2].area;
+      f(`Área del ${ORD(n)} piso`, v > 0, v > 0 ? m2(v) : `escrita: ${esc0 || "—"} m²`);
+    });
+    const so = R.pisos[0];
+    if (so || +PROY.sot)
+      f("Área del sótano", !!(so && so.sot), so && so.sot ? m2(so.sot) : `escrita: ${PROY.sot || 0} m²`);
+    f("Alimentador medidor → TG", !!R.rutas.TG, R.rutas.TG ? m(R.rutas.TG.L) : `escrito: ${PROY.Lalim || "—"} m`);
+    noms.forEach(n =>
+      f(
+        `Tablero ${n}: circuitos y salidas`,
+        con.has(n),
+        con.has(n) ? `${con.get(n).circs.length} circuitos del plano` : "escritos (Salidas)"
+      )
+    );
+    if (noms.length > 1)
+      noms
+        .filter(n => n !== "TG")
+        .forEach(n => f(`Alimentador TG → ${n}`, !!R.rutas[n], R.rutas[n] ? m(R.rutas[n].L) : "escrito"));
+    const ce = R.cargas.filter(x => noms.includes(x.tab));
+    f("Cargas especiales", ce.length > 0, ce.length ? `${ce.length} del plano` : `escritas: ${cargas.length}`);
+  }
+  f(
+    "Conductor de tierra (TG → pozo)",
+    !!R.rutas.PAT,
+    R.rutas.PAT ? m(R.rutas.PAT.L) : `escrito: ${PROY.pzCond || "—"} m`
+  );
+  const np = filas.filter(x => x[1]).length;
+  return (
+    `<h4>Qué toma el cálculo del plano<small>${np} de ${filas.length} datos del plano · los grises se dibujan o se escriben</small></h4><table class="dc-t dc-cruce"><tbody>` +
+    filas
+      .map(
+        ([d, pl, t]) =>
+          `<tr><td><i class="dc-dot${pl ? " ok" : ""}"></i>${esc(d)}</td><td>${pl ? "del plano" : "escrito"}</td><td class="n">${esc(t)}</td></tr>`
+      )
+      .join("") +
+    "</tbody></table>"
+  );
+}
 // Avisos para la revisión del diseño (solo si el diseño tiene tableros con circuitos)
 function dcAvisos() {
   if (!EPL || !dsD() || !dsD().els.some(e => (e.k === "tab" && e.nc) || e.ar)) return [];
@@ -699,6 +778,7 @@ function dcRender() {
       : "El cálculo usa este diseño.";
   let h = "";
   const tabs = R ? R.tabs : [];
+  if (R) h += dcCruce(R, noms);
   if (!tabs.length)
     h +=
       '<p class="rev-ok">El diseño aún no tiene tableros. Ponga el tablero (Biblioteca › Tableros y medición), defina sus circuitos con doble clic y saque las tuberías desde sus salidas.</p>';
@@ -787,9 +867,23 @@ function dcRender() {
       ).join("");
   h += `<p class="dc-nota"><b>Cómo se mide (criterio de la plataforma):</b> el recorrido es el camino más corto por las tuberías del circuito, desde el tablero hasta cada salida, con las derivaciones. Se suman los tramos verticales: la tubería por el techo va a la altura del techo (${m(+PROY.hTecho || 2.9)} m) y la del piso a 0 m; en cada artefacto se sube o se baja hasta su altura de montaje (la suya o la de Parámetros › Alturas) y en el tablero desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza. Cada montante suma la altura de entrepiso (${m(+PROY.hEnt || 3.1)} m) por piso. La potencia de cada salida es la suya o, si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). La caída de tensión se calcula con la carga conectada del circuito hasta la salida más alejada (Regla 050-102); la sección es la menor que cumple la capacidad y esa caída. Agrupamiento: cada circuito usa el factor de la Tabla 5C (ítem 1) según el mayor número de circuitos que van juntos en alguna de sus tuberías (entre dos columnas de la tabla, la del número mayor). Áreas: en vivienda se suman las techadas por dimensiones interiores (Regla 050-110) y el sótano al 75 %; en otros usos, el contorno exterior (Regla 050-210); el piso de cada área es el de su planta. Los tableros y pisos que no están dibujados se calculan con los datos escritos.</p>`;
   if (L)
-    h += `<p class="dc-nota"><button type="button" class="vw-btn" data-dc="escribir">Escribir en el plano los conductores y diámetros del cálculo</button> Pone en cada tubería sus conductores (fases, neutros y tierra), sus secciones y el diámetro de la tubería según todos los circuitos que lleva (40 % de ocupación). Las tuberías de los interruptores (retornos) quedan como están.</p>`;
+    h += `<p class="dc-nota"><button type="button" class="vw-btn" data-dc="escribir">Escribir en el plano los conductores y diámetros del cálculo</button> Pone en cada tubería sus conductores (fases, neutros y tierra), sus secciones y el diámetro de la tubería según todos los circuitos que lleva (40 % de ocupación). En las tuberías de los interruptores, sus retornos (criterio: unipolar 2, doble o de tres vías 3, de cuatro vías 4 conductores, sin tierra).</p>`;
   $("dcC").innerHTML = h;
 }
+/* Conductores de la tubería de un interruptor (retornos; criterio de la plataforma, editable en la tubería): el
+   unipolar lleva la fase y su retorno (2), el bipolar o doble la fase y dos retornos (3), el de tres vías tres
+   conductores (3) y el de cuatro vías cuatro (4); sin conductor de protección */
+const DC_RET = {
+  int2: 3,
+  int2G: 3,
+  int2PE: 3,
+  int3: 3,
+  int3PA: 3,
+  conm: 3,
+  int2v: 3,
+  int4: 4,
+  conmInt: 4
+};
 /* Conductores y diámetro de cada tubería según el último cálculo con el diseño: suma los de todos los circuitos que
    lleva; en monofásico 220 V los dos conductores son fases, con 380/220 V fase y neutro; una tierra, la mayor */
 function dcEscribir() {
@@ -801,12 +895,55 @@ function dcEscribir() {
   let n = 0,
     ret = 0;
   D.els.forEach(t => {
+    // Alimentadores y conductor de tierra: los del cálculo, según el tablero o el pozo al que llegan
+    const fin = [t.c0, t.c1].map(id => por.get(id)).filter(Boolean),
+      pozo = fin.some(s => s.k === "pat"),
+      tbF = fin.find(s => s.k === "tab");
+    if (
+      t.t === "tub" &&
+      !t.cir &&
+      (pozo || tbF) &&
+      fin.some(s => s.k === "pat" || PL_MED.has(s.k) || s.k === "tab") &&
+      (t.ali || pozo || fin.some(s => PL_MED.has(s.k)))
+    ) {
+      if (pozo) {
+        const S = LAST.Selec;
+        t.cond = { f: 0, n: 0, t: true };
+        t.sec = `1×${S} mm² (tierra)`;
+        n++;
+        return;
+      }
+      const a = LAST.alims.find(x =>
+        tbF.dep != null && LAST.mode === "multi"
+          ? x.pKey === "tipo" && LAST.T[x.ti] && LAST.T[x.ti]._i === tbF.dep
+          : (tbF.nom || "TG") === "TG"
+            ? x === LAST.alims[0]
+            : x.desc.endsWith("→ " + tbF.nom) ||
+              x.desc.includes("→ " + tbF.nom + " ") ||
+              (tbF.nom === "TSG" && x.pKey === "servP")
+      );
+      if (!a) return;
+      const fa = a.s.tri ? 3 : 2;
+      t.cond = { f: fa, n: Math.max(0, a.s.n - fa), t: true };
+      if (a.tubo && DS_DIAS.includes(a.tubo.mm)) t.dia = a.tubo.mm;
+      t.sec = `${a.s.n}-1×${a.S} + 1×${a.St} T mm² (alimentador)`;
+      n++;
+      return;
+    }
     if (t.t !== "tub" || t.ali || !t.cir || !t.tab) return;
-    if ([t.c0, t.c1].some(id => por.get(id) && DS_CAT[por.get(id).k] && DS_CAT[por.get(id).k].g === "Interruptores")) {
+    const qs = [t.cir, ...(t.cx || [])].map(c => Q.get(t.tab + "|" + c)).filter(Boolean);
+    const sw = [t.c0, t.c1].map(id => por.get(id)).filter(s => s && DS_CAT[s.k] && DS_CAT[s.k].g === "Interruptores");
+    if (sw.length) {
+      if (!qs.length) return;
+      const k = Math.max(...sw.map(s => DC_RET[s.k] || 2)),
+        a = (k * OD[qs[0].S] ** 2 * Math.PI) / 4,
+        tb = TUBOS.find(([, , di]) => a <= (0.4 * Math.PI * di * di) / 4);
+      t.cond = { f: k, n: 0, t: false };
+      if (tb && DS_DIAS.includes(tb[0])) t.dia = tb[0];
+      t.sec = `${k}-1×${qs[0].S} mm² (retornos)`;
       ret++;
       return;
     }
-    const qs = [t.cir, ...(t.cx || [])].map(c => Q.get(t.tab + "|" + c)).filter(Boolean);
     if (!qs.length) return;
     let fa = 0,
       ne = 0,
@@ -833,7 +970,7 @@ function dcEscribir() {
   D.cirt = true;
   edCambio();
   toast(
-    `Conductores y diámetros del cálculo en ${n} tubería${n === 1 ? "" : "s"}${ret ? `; ${ret} de interruptores (retornos) quedan como estaban` : ""}`
+    `Conductores y diámetros del cálculo en ${n + ret} tubería${n + ret === 1 ? "" : "s"}${ret ? ` (${ret} de interruptores, con sus retornos)` : ""}`
   );
 }
 $("dcDlg").addEventListener("click", e => {

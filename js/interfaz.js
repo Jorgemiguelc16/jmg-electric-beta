@@ -143,15 +143,48 @@ function hdrEstado() {
   b.querySelector("b").textContent = n;
   b.dataset.ayuda = n ? `Abrir «${n}» en el espacio de trabajo` : "";
 }
+/* Datos que salen del plano con «Calcular con el diseño» (ids de los campos): no se revisan ni se piden */
+function planoOmitidos(D) {
+  const PD = planoDatos(D),
+    S = new Set();
+  if (D.MODE === "multi") {
+    if (PD.ali) S.add("Lgen");
+    if (PD.rutas.TSG) S.add("Lms");
+    PD.deps.forEach(i => ["nAl", "nTo", "Lc"].forEach(k => S.add(`tipos_${k}_${i}`)));
+    PD.depsLd.forEach(i => S.add(`tipos_Ld_${i}`));
+    PD.depsArea.forEach(i => S.add(`tipos_area_${i}`));
+    return S;
+  }
+  const P = D.pisos || [],
+    tabDe = n => (!P.length || (n === 1 && D.esqPisos === "tg") ? "TG" : tabPiso(n)),
+    sal = (n, pre) =>
+      PD.tabs.has(tabDe(n)) && ["al", "tg", "tc"].forEach(k => ["_n", "_L"].forEach(s => S.add(pre + k + s)));
+  if (PD.ali) S.add("Lalim");
+  if (PD.areas.has(1)) S.add("area");
+  if (PD.rutas["TD-1"]) S.add("Ltd1");
+  sal(1, "");
+  P.forEach((p, i) => {
+    if (PD.areas.has(i + 2)) S.add(`pisos_area_${i}`);
+    if (PD.rutas[tabPiso(i + 2)]) S.add(`pisos_Ld_${i}`);
+    if (PD.tabs.has(tabPiso(i + 2)))
+      ["al", "tg", "tc"].forEach(k => ["_n", "_L"].forEach(s => S.add(`pisos_${k}${s}_${i}`)));
+  });
+  (D.cargas || []).forEach((x, i) => {
+    const k = Math.round(+x.piso || 0);
+    if (PD.tabs.has(P.length && k >= 1 ? tabDe(k) : "TG")) ["p", "L"].forEach(c => S.add(`cargas_${c}_${i}`));
+  });
+  return S;
+}
 function validar() {
-  const E = [],
+  const OM = planoOmitidos(estado()),
+    E = [],
     v = id => {
       const x = $(id).value.trim();
       return x === "" ? 0 : parseFloat(x);
     };
   document.querySelectorAll(".inv").forEach(e => e.classList.remove("inv"));
   const chk = (id, ok, msg) => {
-    if (ok) return;
+    if (ok || OM.has(id)) return;
     const el = $(id);
     if (el) el.classList.add("inv");
     E.push(msg);
@@ -228,7 +261,15 @@ let RESUMEN = null;
 /* Con «Calcular con el diseño»: los tableros del plano que tienen circuitos y los alimentadores medidos en él (para
    no pedir los datos que salen del plano). Sin el modo, o sin diseño, nada. */
 function planoDatos(D) {
-  const vacio = { tabs: new Set(), rutas: {}, ali: false, areas: new Set(), deps: new Set(), depsLd: new Set() };
+  const vacio = {
+    tabs: new Set(),
+    rutas: {},
+    ali: false,
+    areas: new Set(),
+    deps: new Set(),
+    depsLd: new Set(),
+    depsArea: new Set()
+  };
   if (D.calPlano !== "1" || !D.PLANO || !D.PLANO.dis) return vacio;
   const n = k => parseFloat(D[k]) || 0,
     R = planoCalc(D.PLANO, ctx(D), { al_p: n("al_p"), tg_p: n("tg_p"), tc_p: n("tc_p"), hEnt: n("hEnt") || 3.1 });
@@ -242,8 +283,13 @@ function planoDatos(D) {
   );
   // Edificio: tipos de departamento con tableros en el plano y los que tienen su alimentador desde el banco
   const deps = new Set(R.tabs.filter(t => Number.isInteger(t.dep) && t.circs.length).map(t => t.dep)),
-    depsLd = new Set(R.tabs.filter(t => Number.isInteger(t.dep) && R.desdeMed[t.id]).map(t => t.dep));
-  return { tabs, rutas: R.rutas, ali: !!R.rutas.TG, areas, deps, depsLd };
+    depsLd = new Set(R.tabs.filter(t => Number.isInteger(t.dep) && R.desdeMed[t.id]).map(t => t.dep)),
+    depsArea = new Set(
+      Object.entries(R.areaDep)
+        .filter(([, o]) => o.m2 > 0)
+        .map(([i]) => +i)
+    );
+  return { tabs, rutas: R.rutas, ali: !!R.rutas.TG, areas, deps, depsLd, depsArea };
 }
 // Resumen del diseño en Salidas (Diseño en el plano) y avisos en los datos que salen del plano
 function planoResumen(r) {
@@ -393,7 +439,12 @@ function faltantes(p = null) {
         ["Lc", "longitud de los circuitos"]
       ].forEach(([k, l]) => {
         // Con el diseño: las salidas y la longitud de los circuitos del tipo salen de sus tableros del plano
-        if ((["nAl", "nTo", "Lc"].includes(k) && PD.deps.has(i)) || (k === "Ld" && PD.depsLd.has(i))) return;
+        if (
+          (["nAl", "nTo", "Lc"].includes(k) && PD.deps.has(i)) ||
+          (k === "Ld" && PD.depsLd.has(i)) ||
+          (k === "area" && PD.depsArea.has(i))
+        )
+          return;
         req(`tipos_${k}_${i}`, `${n}: ${l}`, vacio(t[k]));
       });
     });

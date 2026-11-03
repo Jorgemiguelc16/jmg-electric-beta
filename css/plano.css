@@ -2062,6 +2062,19 @@ input.del-plano,
 .lu-lista {
   overflow-x: hidden;
 }
+/* Revisión cruzada: punto verde (del plano) o gris (escrito) */
+.dc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #b9c0c8;
+  vertical-align: middle;
+}
+.dc-dot.ok {
+  background: #2e7d32;
+}
 .dc-nota {
   margin: 10px 0 2px;
   color: var(--dl-mute, #5b6470);
