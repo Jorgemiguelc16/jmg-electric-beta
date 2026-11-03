@@ -1718,7 +1718,7 @@ plLienzo.addEventListener("dblclick", e => {
   }
 });
 // Herramientas que aceptan una longitud escrita (desde el último punto, en la dirección del cursor)
-const PL_CON_LONG = ["dist", "rec", "lin", "pol", "rect", "cir", "tubT", "tubP", "fila"];
+const PL_CON_LONG = ["dist", "rec", "lin", "pol", "rect", "cir", "tubT", "tubP", "fila", "areaP", "areaR"];
 function plLongitudEscrita(tecla) {
   plPedir(
     PLH.h === "cir" ? "Radio (m)" : "Longitud del tramo (m)",
@@ -1945,10 +1945,16 @@ function plPanel() {
   $("plPlantas").innerHTML = P.length
     ? P.map(
         (p, i) =>
-          `<div class="pl-fila" data-plp="${i}"><button type="button" class="pl-nom" data-plv="${i}" title="Ver la planta">${esc(p.n)}</button><span class="pl-dim">${(n => (n ? n + " elem. · " : ""))(dsD() ? dsD().els.filter(el => dpPlantaEl(el) === i).length : 0)}${plFm(p.x1 - p.x0)} × ${plFm(p.y1 - p.y0)} m</span><button type="button" class="pl-x" data-plq="${i}" title="Quitar la planta (el dibujo no cambia)" aria-label="Quitar la planta">×</button></div>`
+          `<div class="pl-fila" data-plp="${i}"><button type="button" class="pl-nom" data-plv="${i}" title="Ver la planta">${esc(p.n)}</button><select class="pl-piso" data-plpi="${i}" title="Piso del cálculo al que pertenece esta planta (sus áreas, tableros y montantes)" aria-label="Piso del cálculo">${DP_PISOS.map(([v, t]) => `<option value="${v}"${v === plPisoPlanta(p, i) ? " selected" : ""}>${t}</option>`).join("")}</select><span class="pl-dim">${(n => (n ? n + " elem. · " : ""))(dsD() ? dsD().els.filter(el => dpPlantaEl(el) === i).length : 0)}${plFm(p.x1 - p.x0)} × ${plFm(p.y1 - p.y0)} m</span><button type="button" class="pl-x" data-plq="${i}" title="Quitar la planta (el dibujo no cambia)" aria-label="Quitar la planta">×</button></div>`
       ).join("")
     : `<p class="pl-nota">Encuadre cada planta del edificio con <b>Encuadrar planta</b>: así se ve con un clic.</p>`;
 }
+$("plLado").addEventListener("change", e => {
+  const s = e.target.closest("[data-plpi]");
+  if (!s) return;
+  EPL.plantas[+s.dataset.plpi].piso = +s.value;
+  edCambio();
+});
 $("plLado").addEventListener("click", e => {
   const v = e.target.closest("[data-plv]"),
     q = e.target.closest("[data-plq]");
@@ -2136,6 +2142,10 @@ const ED_CMD = {
   REP: ["rep", "Repartir en ambiente"],
   RM: ["rmur", "A lo largo del muro"],
   MET: ["metrado", "Metrado del diseño"],
+  AA: ["areaC", "Área de un ambiente (clic adentro)"],
+  AX: ["areaE", "Contorno exterior del piso (clic adentro)"],
+  APU: ["areaP", "Área por puntos"],
+  ARE: ["areaR", "Área rectangular"],
   DC: ["calc", "Datos para el cálculo"],
   LUM: ["lums", "Tipos de luminaria"],
   CU: ["cua", "Cuadro de circuitos"],

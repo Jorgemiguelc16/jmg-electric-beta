@@ -592,7 +592,15 @@ function planoValido(v) {
       ? v.plantas
           .filter(p => p && ["x0", "y0", "x1", "y1"].every(k => n(p[k])) && p.x1 > p.x0 && p.y1 > p.y0)
           .slice(0, 60)
-          .map(p => ({ n: txt(p.n, 60) || "Planta", x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1 }))
+          .map(p => ({
+            n: txt(p.n, 60) || "Planta",
+            x0: p.x0,
+            y0: p.y0,
+            x1: p.x1,
+            y1: p.y1,
+            // Piso del cálculo de la planta: 1, 2… (0 sótano, −1 no se cuenta)
+            ...(Number.isInteger(p.piso) && p.piso >= -1 && p.piso <= 60 ? { piso: p.piso } : {})
+          }))
       : [],
     tenue: v.tenue === true,
     // Objetos de la arquitectura borrados de la vista (su número de objeto en el DXF; el archivo no cambia)
@@ -723,6 +731,15 @@ function disValido(v) {
           t: e.t,
           pts: e.pts.slice(),
           c: e.c === true,
+          // Área marcada (polilínea cerrada): tipo para el cálculo y nombre del ambiente
+          ...(e.t === "lin" && e.c === true && e.ar && typeof e.ar === "object"
+            ? {
+                ar: {
+                  tp: ["tech", "ext", "sot", "libre", "aulas", "no"].includes(e.ar.tp) ? e.ar.tp : "tech",
+                  n: txt(e.ar.n, 60)
+                }
+              }
+            : {}),
           // Curvatura de cada tramo (como en las polilíneas de AutoCAD), entre −1 y 1 (media circunferencia)
           ...(Array.isArray(e.b) && e.b.some(k => n(k) && k)
             ? { b: e.b.slice(0, e.pts.length / 2).map(k => (n(k) ? Math.max(-1, Math.min(1, k)) : 0)) }
@@ -736,6 +753,14 @@ function disValido(v) {
                 // Artefactos a los que está conectada en su inicio (c0) y en su final (c1)
                 ...(typeof e.c0 === "string" && /^d[0-9]{1,7}$/.test(e.c0) ? { c0: e.c0 } : {}),
                 ...(typeof e.c1 === "string" && /^d[0-9]{1,7}$/.test(e.c1) ? { c1: e.c1 } : {}),
+                // Otros circuitos del mismo tablero que van en la tubería (para el agrupamiento, Tabla 5C)
+                ...(Array.isArray(e.cx) && e.cx.length
+                  ? {
+                      cx: [...new Set(e.cx.filter(x => typeof x === "string" && /^C-[0-9]{1,2}$/.test(x)))].slice(0, 30)
+                    }
+                  : {}),
+                // Conductores que le dio el cálculo (texto: «2-1×2.5 + 1×2.5 T mm²»)
+                ...(e.sec ? { sec: txt(e.sec, 80) } : {}),
                 // Tubería de un alimentador (del medidor al tablero o entre tableros), sin circuito
                 ...(e.ali === true ? { ali: true } : {}),
                 // Diámetro nominal de la tubería (mm)
@@ -744,9 +769,10 @@ function disValido(v) {
                 ...(e.cond && typeof e.cond === "object"
                   ? {
                       cond: {
-                        f: Number.isInteger(e.cond.f) ? Math.max(0, Math.min(6, e.cond.f)) : 0,
-                        // Neutros: 0 a 2 (antes era sí o no)
-                        n: Number.isInteger(e.cond.n) ? Math.max(0, Math.min(2, e.cond.n)) : e.cond.n === true ? 1 : 0,
+                        // Hasta 12 fases y 6 neutros: una tubería puede llevar varios circuitos
+                        f: Number.isInteger(e.cond.f) ? Math.max(0, Math.min(12, e.cond.f)) : 0,
+                        // Neutros (antes era sí o no)
+                        n: Number.isInteger(e.cond.n) ? Math.max(0, Math.min(6, e.cond.n)) : e.cond.n === true ? 1 : 0,
                         t: e.cond.t === true
                       }
                     }

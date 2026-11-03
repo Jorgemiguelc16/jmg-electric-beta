@@ -118,6 +118,43 @@ module.exports = function probarPlano(ctx) {
     r2.plano.avisos.map(a => a.k),
     ["ruta"]
   );
+  // Áreas marcadas (vivienda: dimensiones interiores, Regla 050-110) y una tubería con dos circuitos (Tabla 5C)
+  const d3 = JSON.parse(JSON.stringify(PROY)),
+    rect = (id, x0, y0, x1, y1, tp) => ({
+      id,
+      t: "lin",
+      c: true,
+      capa: "E-AREAS",
+      pts: [x0, y0, x1, y0, x1, y1, x0, y1],
+      ar: { tp, n: id }
+    });
+  d3.PLANO.dis.els.push(
+    rect("d20", 0, 0, 5, 4, "tech"),
+    rect("d21", 5, 0, 11, 5, "tech"),
+    rect("d22", 0, 10, 5, 12, "libre")
+  );
+  d3.PLANO.dis.els.find(e => e.id === "d10").cx = ["C-2"];
+  const r3 = calc({ ...d3, calPlano: "1", wLib: "5" }),
+    q3 = id => r3.circ.find(x => x.id === id);
+  ver("área techada del plano (20 + 30 m²)", r3.areaT, 50);
+  ver("área libre del plano: 10 m² × 5 W/m²", r3.md.libre, 50);
+  ver("máxima demanda con las áreas del plano (2500 + 1500 + 50)", r3.md.MD, 4050);
+  ver("C-1 agrupado con el C-2 en una tubería: Tabla 5C, 2 circuitos", q3("C-1").grp, { n: 2, fa: 0.8 });
+  ver("C-2 también agrupado", q3("C-2").grp.fa, 0.8);
+  ver("C-3 solo en sus tuberías", q3("C-3").grp.fa, 1);
+  ver("capacidad corregida del C-1 con su agrupamiento", q3("C-1").Izc, q3("C-1").Iz * r3.c.ft * 0.8);
+  ver("la tubería compartida no cambia el recorrido del C-2", q3("C-2").L, 10.2);
+  // Otros usos: el área por el contorno exterior (Regla 050-210)
+  const d4 = JSON.parse(JSON.stringify(d3));
+  d4.PLANO.dis.els.push(rect("d23", -0.15, -0.15, 11.15, 5.15, "ext"));
+  const r4 = calc({ ...d4, calPlano: "1", uso: "oficina" });
+  ver("otros usos: área exterior (11.3 × 5.3 m²)", r4.areaT, 11.3 * 5.3);
+  const r5 = calc({ ...d3, calPlano: "1", uso: "oficina" });
+  ver(
+    "otros usos sin contorno exterior: aviso",
+    r5.plano.avisos.some(x => x.k === "area"),
+    true
+  );
   const s = ((Date.now() - t0) / 1000).toFixed(2);
   if (fallas.length) {
     console.log("✘ Cálculo con el diseño:");

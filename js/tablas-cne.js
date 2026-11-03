@@ -42,6 +42,24 @@ const FT = {
   xl: { 20: 1.08, 25: 1.04, 30: 1, 35: 0.96, 40: 0.91, 45: 0.87 }
 }; // Tabla 5A
 const FA = { 1: 1, 2: 0.8, 3: 0.7, 4: 0.65, 5: 0.6, 6: 0.57 }; // Tabla 5C, ítem 1
+/* Tabla 5C, ítem 1 completo (agrupados en el aire, sobre una superficie, empotrados o encerrados; métodos A a F):
+   [número de circuitos, factor]. Entre dos columnas de la tabla se usa la del número mayor (lado seguro); más de 20,
+   el factor de 20 con un aviso. Lo usan los circuitos del plano según los circuitos que van juntos en sus tuberías. */
+const T5C1 = [
+  [1, 1],
+  [2, 0.8],
+  [3, 0.7],
+  [4, 0.65],
+  [5, 0.6],
+  [6, 0.57],
+  [7, 0.54],
+  [8, 0.52],
+  [9, 0.5],
+  [12, 0.45],
+  [16, 0.41],
+  [20, 0.38]
+];
+const fa5C = n => (T5C1.find(([k]) => n <= k) || T5C1[T5C1.length - 1])[1];
 const T16 = [
   [20, 2.5],
   [30, 4],

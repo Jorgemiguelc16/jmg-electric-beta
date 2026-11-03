@@ -31,7 +31,8 @@ const DS_SIS = {
   cto: { capa: "E-CIRCUITOS", col: "#6a1b9a", n: "Circuitos y directrices" },
   cot: { capa: "E-COTAS", col: "#00796b", n: "Cotas" },
   txt: { capa: "E-TEXTOS", col: "#263238", n: "Textos" },
-  dib: { capa: "E-DIBUJO", col: "#37474f", n: "Dibujo" }
+  dib: { capa: "E-DIBUJO", col: "#37474f", n: "Dibujo" },
+  are: { capa: "E-AREAS", col: "#8d6e63", n: "Áreas para el cálculo" }
 };
 /* Símbolos que se pueden colocar (toda la sección 093 de la Norma DGE «Instalaciones en edificaciones» y los tableros
    de la sección 091): nombre y código de la norma, sistema (capa), grupo de la biblioteca, altura de montaje por
@@ -304,7 +305,11 @@ const DS_HERR = {
   cotL: "Cota lineal",
   dir: "Directriz",
   ley: "Leyenda",
-  cua: "Cuadro de circuitos"
+  cua: "Cuadro de circuitos",
+  areaC: "Área de un ambiente (clic adentro)",
+  areaE: "Contorno exterior del piso (clic adentro)",
+  areaP: "Área por puntos",
+  areaR: "Área rectangular"
 };
 Object.keys(DS_HERR).forEach(k => (PL_NOMH[k] = DS_HERR[k]));
 const dsEsTub = h => h === "tubT" || h === "tubP";
@@ -1631,7 +1636,7 @@ function dsPintar(g) {
     vista = new Set(dsEnZona(a[0] - m, a[1] - m, b[0] + m, b[1] + m));
   }
   for (const el of D.els) {
-    if (!dsVis(el) || (vista && !vista.has(el))) continue;
+    if (!dsVis(el) || (vista && !vista.has(el)) || (el.ar && DS_EXPORT)) continue;
     // Capa del elemento para la lámina y el DXF (el lienzo de grabación la anota)
     g.capa = el.capa;
     // Color propio del elemento o, si no tiene, el de su capa
@@ -1680,10 +1685,44 @@ function dsPintar(g) {
       g.setLineDash([]);
       if (el.t === "tub" && (D.etq !== "no" || D.cirt)) dsEtiquetasTub(g, el, col, s);
       if (el.t === "tub" && el.cond && DSU.marcas) dsMarcas(g, el, col, s, dsGrosor(cap));
+      if (el.ar) dsDibArea(g, el, col, s);
     }
   }
   g.restore();
   dsDibSueltos(g);
+}
+// Área marcada: relleno suave, nombre, m² y tipo en su centro
+const dsM2 = el => plAreaPol(dsCurva(el).slice(0, -2)) * EPL.f * EPL.f;
+function dsDibArea(g, el, col, s) {
+  g.save();
+  g.fillStyle = col;
+  g.globalAlpha = 0.08;
+  g.beginPath();
+  plRuta(g, dsCurva(el), false);
+  g.closePath();
+  g.fill();
+  g.restore();
+  const hp = dsMm(2.5) * s;
+  if (hp < 5) return;
+  const b = dsBBox(el),
+    [X, Y] = plAPant((b[0] + b[2]) / 2, (b[1] + b[3]) / 2),
+    L = [el.ar.n || "", `${fmt(dsM2(el), 2)} m²`, el.ar.tp !== "tech" ? PL_TAREA[el.ar.tp].toLowerCase() : ""].filter(
+      Boolean
+    );
+  g.save();
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.lineJoin = "round";
+  L.forEach((t, i) => {
+    g.font = `${i === 0 && el.ar.n ? 600 : 400} ${(i === 2 ? 0.8 : 1) * (hp / 0.72)}px Arial, sans-serif`;
+    const y = Y + (i - (L.length - 1) / 2) * hp * 1.5;
+    g.lineWidth = 3 * plDpr();
+    g.strokeStyle = PL_FONDO;
+    g.strokeText(t, X, y);
+    g.fillStyle = col;
+    g.fillText(t, X, y);
+  });
+  g.restore();
 }
 // Longitudes de una tubería: la total en su tramo central o la de cada tramo; texto de 2 mm impreso, a lo largo del
 // tramo y del lado de afuera de la curva (en un tramo recto, a su izquierda), sin tocar la línea
@@ -1717,7 +1756,12 @@ function dsEtiquetasTub(g, el, col, s) {
   // Circuito y diámetro, al otro lado de la tubería, en el medio de su recorrido
   if (dsD().cirt && (el.cir || el.dia) && T.length) {
     const t = T[Math.floor((T.length - 1) / 2)];
-    etq({ ...t, k: -(t.k || -1e-9) }, [el.cir, el.dia ? `Ø${el.dia} mm` : ""].filter(Boolean).join(" · "));
+    etq(
+      { ...t, k: -(t.k || -1e-9) },
+      [[el.cir, ...(el.cx || [])].filter(Boolean).join(", "), el.sec || "", el.dia ? `Ø${el.dia} mm` : ""]
+        .filter(Boolean)
+        .join(" · ")
+    );
   }
 }
 /* Marcas de conductores sobre la tubería (Norma DGE): una raya oblicua por fase; el neutro con un punto en su
@@ -1892,13 +1936,16 @@ function dsInfoEl(el) {
   if (el.t === "tub")
     return [
       `Tubería en ${el.modo === "piso" ? "piso" : el.modo === "pared" ? "pared" : "techo"}`,
-      el.ali ? "alimentador" : el.cir || "",
+      el.ali ? "alimentador" : [el.cir, ...(el.cx || [])].filter(Boolean).join(", "),
+      el.sec || "",
       `${fmt(dsLargo(el) * f, 2)} m`,
       el.cond ? dpCond(el.cond) : "",
       el.dia ? `Ø ${el.dia} mm` : ""
     ]
       .filter(Boolean)
       .join(" · ");
+  if (el.t === "lin" && el.ar)
+    return [el.ar.n, `${fmt(dsM2(el), 2)} m²`, PL_TAREA[el.ar.tp].toLowerCase()].filter(Boolean).join(" · ");
   if (el.t === "lin") return `Línea · ${fmt(dsLargo(el) * f, 2)} m`;
   return "";
 }
@@ -2327,7 +2374,7 @@ function dsSobre(g) {
     g.lineWidth = dsGrosor(dsCapa(capa));
     g.setLineDash(h === "tubP" ? [dsMm(3) * PLV.s, dsMm(1.5) * PLV.s] : []);
     g.beginPath();
-    if (h === "rect") {
+    if (h === "rect" || h === "areaR") {
       const [a, b] = plAPant(pts[0][0], pts[0][1]),
         [c, e] = plAPant(q[0], q[1]);
       g.rect(a, b, c - a, e - b);
@@ -2508,7 +2555,9 @@ const dsCapaPara = h =>
           ? DS_SIS.txt.capa
           : h === "dir"
             ? DS_SIS.cto.capa
-            : dsD().actual;
+            : /^area/.test(h)
+              ? DS_SIS.are.capa
+              : dsD().actual;
 // Cota en curso con los dos puntos tomados y el cursor como posición de la línea de cota
 function dsCotaNueva(q) {
   if (PLH.pts.length < 2) return null;
@@ -2630,6 +2679,7 @@ function dsPunto(p) {
     return;
   }
   if (dsEsTub(h)) return dsPuntoTub(p);
+  if (h === "areaC" || h === "areaE") return dpAreaClic(p, h === "areaE");
   PLH.pts.push(p);
   const n = PLH.pts.length,
     capa = dsCapaPara(h);
@@ -2638,7 +2688,7 @@ function dsPunto(p) {
     PLH.cirIni = PLH.eng[3];
     toast(`Tubería del circuito ${PLH.cirIni.cir}${PLH.cirIni.nom ? " del tablero " + PLH.cirIni.nom : ""}`);
   }
-  if ((h === "lin" || h === "rect" || h === "cir") && n === 2) {
+  if ((h === "lin" || h === "rect" || h === "cir" || h === "areaR") && n === 2) {
     const [a, b] = PLH.pts;
     PLH.pts = [];
     if (Math.hypot(b[0] - a[0], b[1] - a[1]) * PLV.s < 2) return plOrden();
@@ -2646,6 +2696,16 @@ function dsPunto(p) {
     if (h === "lin") dsAgregar({ t: "lin", pts: [a[0], a[1], b[0], b[1]], c: false, capa });
     else if (h === "rect")
       dsAgregar({ t: "lin", pts: [a[0], a[1], b[0], a[1], b[0], b[1], a[0], b[1]], c: true, capa });
+    else if (h === "areaR")
+      return dpAreaNueva(
+        dsAgregar({
+          t: "lin",
+          pts: [a[0], a[1], b[0], a[1], b[0], b[1], a[0], b[1]],
+          c: true,
+          capa,
+          ar: { tp: dpAreaTipo(false) }
+        })
+      );
     else dsAgregar({ t: "cir", x: a[0], y: a[1], rad: Math.hypot(b[0] - a[0], b[1] - a[1]), capa });
     edCambio();
   } else if ((h === "cotA" || h === "cotL") && n === 3) {
@@ -2913,8 +2973,8 @@ function dsFantasma(g, el, tr, col) {
 // Termina la polilínea o la tubería en curso (Intro, doble clic o Esc); conFin: artefacto al que llega
 function dsTerminar(conFin, tabFin) {
   const h = PLH.h;
-  if (!(h === "pol" || dsEsTub(h)) || PLH.pts.length < 2) {
-    if (h === "pol" || dsEsTub(h)) {
+  if (!(h === "pol" || h === "areaP" || dsEsTub(h)) || PLH.pts.length < (h === "areaP" ? 3 : 2)) {
+    if (h === "pol" || h === "areaP" || dsEsTub(h)) {
       // Una tubería que solo tenía su inicio en un artefacto: se descarta y se sigue en la herramienta
       const habia = dsEsTub(h) && PLH.pts.length === 1 && PLH.conIni;
       PLH.pts = [];
@@ -2931,6 +2991,14 @@ function dsTerminar(conFin, tabFin) {
   }
   const capa = dsCapaPara(h);
   dsCapa(capa);
+  if (h === "areaP") {
+    const el = dsAgregar({ t: "lin", pts: PLH.pts.flat(), c: true, capa, ar: { tp: dpAreaTipo(false) } });
+    PLH.pts = [];
+    PLH.bul = [];
+    plOrden();
+    dpAreaNueva(el);
+    return el;
+  }
   const el = { t: h === "pol" ? "lin" : "tub", pts: PLH.pts.flat(), c: false, capa };
   if (dsEsTub(h)) {
     el.modo = h === "tubP" ? "piso" : PLH.modoT === "pared" ? "pared" : "techo";
@@ -3151,7 +3219,8 @@ function dsSelTipo(tipo) {
   edProps();
   plSobreDibujar();
 }
-const dsTipo = el => (el.t === "sim" ? el.k : el.t === "tub" ? "tub-" + (el.modo === "piso" ? "piso" : "techo") : el.t);
+const dsTipo = el =>
+  el.t === "sim" ? el.k : el.t === "tub" ? "tub-" + (el.modo === "piso" ? "piso" : "techo") : el.ar ? "area" : el.t;
 // Curvatura de las líneas y tuberías seleccionadas: curvar, enderezar o invertir todos sus tramos
 function dsCurvar(modo) {
   const sel = dsSel().filter(el => (el.t === "lin" || el.t === "tub") && dsEditable(el));
@@ -3369,6 +3438,25 @@ function dsProps(c) {
       campo("Título", `<input type="text" data-dsp="tit" value="${esc(el.tit || "LEYENDA")}" maxlength="60">`) +
       fila("Filas", dsFilasLey().length) +
       campo("Capa", capas(el.capa));
+  } else if (el.t === "lin" && el.ar) {
+    const ip = dpPlantaEl(el),
+      pl = ip >= 0 ? EPL.plantas[ip] : null;
+    h =
+      `<div class="ed-pt">Área para el cálculo<small>${pl ? `${esc(pl.n)} · ${dpNomPiso(plPisoPlanta(pl, ip))}` : EPL.plantas.length ? "fuera de las plantas encuadradas" : "1er piso"}</small></div>` +
+      campo(
+        "Ambiente",
+        `<input type="text" data-dsp="arn" value="${esc(el.ar.n || "")}" maxlength="60" placeholder="Sala, cocina, pasillo…">`
+      ) +
+      campo(
+        "Tipo",
+        `<select data-dsp="artp">${Object.entries(PL_TAREA)
+          .map(([k, t]) => `<option value="${k}"${k === el.ar.tp ? " selected" : ""}>${t}</option>`)
+          .join("")}</select>`
+      ) +
+      fila("Área", `${fmt(dsM2(el), 2)} m²`) +
+      fila("Perímetro", `${plFm(dsLargo(el))} m`) +
+      `<p class="ds-crit">Vivienda: suma las áreas techadas por dimensiones interiores (Regla 050-110). Otros usos: el contorno exterior del piso (Regla 050-210). El área no se imprime en la lámina.</p>` +
+      campo("Capa", capas(el.capa));
   } else if (el.t === "cir") {
     h =
       `<div class="ed-pt">Círculo</div>` +
@@ -3403,7 +3491,8 @@ function dsProps(c) {
             "Uso",
             `<select data-dsp="ali"><option value="">Circuito</option><option value="1"${el.ali ? " selected" : ""}>Alimentador (sin circuito)</option></select>`
           ) +
-          (el.ali ? "" : campo("Circuito", circ(el.cir)) + lista) +
+          (el.ali ? "" : campo("Circuito", circ(el.cir)) + lista + dsCampoCx(campo, el)) +
+          (el.sec ? fila("Del cálculo", esc(el.sec)) : "") +
           dsCampoCond(campo, [el])
         : "") +
       `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices.</p>` +
@@ -3447,6 +3536,21 @@ function dsCamposVarios(campo, sel) {
       : "")
   );
 }
+/* Otros circuitos del mismo tablero que van en la tubería (cuentan para el agrupamiento de la Tabla 5C y para el
+   recorrido de esos circuitos) */
+function dsCampoCx(campo, el) {
+  const tb = el.tab && dsD().els.find(e => e.id === el.tab);
+  if (!tb || !el.cir) return "";
+  const S = dsSalidasTab(tb).filter(o => o.n !== el.cir);
+  if (!S.length) return "";
+  return (
+    campo(
+      "Lleva también",
+      `<span class="ds-cx">${S.map(o => `<label title="${esc(o.d || "")}"><input type="checkbox" data-dsp="cx" value="${o.n}"${(el.cx || []).includes(o.n) ? " checked" : ""}>${o.n}</label>`).join("")}</span>`
+    ) +
+    `<p class="ds-crit">Circuitos de ${esc(tb.nom || "este tablero")} que van juntos en esta tubería: el cálculo aplica la Tabla 5C con ellos.</p>`
+  );
+}
 // Diámetros nominales de las tuberías (mm)
 const DS_DIAS = [15, 20, 25, 35, 40, 50, 65, 80];
 // Campo de conductores de las tuberías (fases, neutro, tierra), su diámetro y botón para todo el circuito
@@ -3468,10 +3572,10 @@ function dsCampoCond1(campo, ts) {
     campo(
       "Conductores",
       `<span class="ds-cond"><select data-dsp="condF" title="Fases o conductores activos (también los retornos)">${[
-        0, 1, 2, 3, 4, 5, 6
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
       ]
         .map(n => `<option value="${n}"${igual && (c.f || 0) === n ? " selected" : ""}>${n} F</option>`)
-        .join("")}</select><select data-dsp="condN" title="Neutros">${[0, 1, 2]
+        .join("")}</select><select data-dsp="condN" title="Neutros">${[0, 1, 2, 3, 4, 5, 6]
         .map(n => `<option value="${n}"${igual && dsNeutros(c) === n ? " selected" : ""}>${n} N</option>`)
         .join("")}</select><label><input type="checkbox" data-dsp="condT"${c.t ? " checked" : ""}>T</label></span>`
     ) +
@@ -3488,6 +3592,7 @@ const dsNomTipo = t =>
         "tub-techo": "Tubería en techo o pared",
         "tub-piso": "Tubería en piso",
         lin: "Línea o polilínea",
+        area: "Área para el cálculo",
         cir: "Círculo",
         txt: "Texto",
         cot: "Cota",
@@ -3504,8 +3609,8 @@ function dsPropCambio(e) {
     if (k === "condF" || k === "condN" || k === "condT") {
       if (el.t !== "tub") return;
       const c = { f: 0, n: false, t: false, ...(el.cond || {}) };
-      if (k === "condF") c.f = Math.max(0, Math.min(6, parseInt(v, 10) || 0));
-      else if (k === "condN") c.n = Math.max(0, Math.min(2, parseInt(v, 10) || 0));
+      if (k === "condF") c.f = Math.max(0, Math.min(12, parseInt(v, 10) || 0));
+      else if (k === "condN") c.n = Math.max(0, Math.min(6, parseInt(v, 10) || 0));
       else c.t = !!v;
       c.n = dsNeutros(c);
       if (c.f || c.n || c.t) el.cond = c;
@@ -3531,7 +3636,16 @@ function dsPropCambio(e) {
     else if (k === "col") el.col = /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : el.col;
     else if (k === "h") el.h = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "p") el.p = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
-    else if (k === "lt") {
+    else if (k === "arn" && el.ar) el.ar.n = v.replace(/[<>]/g, "").slice(0, 60);
+    else if (k === "artp" && el.ar) el.ar.tp = PL_TAREA[v] ? v : "tech";
+    else if (k === "cx" && el.t === "tub") {
+      const s = new Set(el.cx || []);
+      if (f.checked) s.add(f.value);
+      else s.delete(f.value);
+      s.delete(el.cir);
+      el.cx = [...s].sort((a, b) => parseInt(a.slice(2), 10) - parseInt(b.slice(2), 10));
+      if (!el.cx.length) delete el.cx;
+    } else if (k === "lt") {
       if (v !== "-") el.lt = /^L[0-9]{1,3}$/.test(v) ? v : undefined;
     } else if (k === "cn") el.cn = v.replace(/[<>]/g, "").trim().slice(0, 60) || undefined;
     else if (k === "ctp") el.ctp = TIPOS[v] ? v : undefined;
@@ -3647,6 +3761,7 @@ function dsResumen0() {
     ...Object.keys(DS_CAT),
     "tub-techo",
     "tub-piso",
+    "area",
     "lin",
     "cir",
     "txt",

@@ -63,8 +63,30 @@ function calcUni(c) {
         p.LdPlano = true;
       }
     });
+  // Áreas del plano (si están marcadas): vivienda, las techadas por dimensiones interiores (Regla 050-110); otros
+  // usos, el contorno exterior (Regla 050-210). Cada piso con áreas toma la suya; los demás, las escritas.
+  const AP = PLD && PLD.areas.length ? PLD.pisos : null,
+    sumaA = k => Object.values(AP || {}).reduce((s, o) => s + o[k], 0);
+  if (AP)
+    PS.forEach(p => {
+      const a = AP[p.n];
+      if (!a || !(a.tech || a.ext || a.aulas)) return;
+      if (viv) p.area = a.tech;
+      else {
+        p.area = a.ext || a.tech;
+        if (!a.ext)
+          PLD.avisos.push({
+            t: "aviso",
+            m: `${ORD(p.n)} piso: la Regla 050-210 pide el área por las dimensiones exteriores; marque el contorno exterior del piso (se usan las áreas interiores)`,
+            ids: [],
+            k: "area"
+          });
+      }
+      if (a.aulas) p.aE = a.aulas;
+      p.areaPlano = true;
+    });
   const areaT = PS.reduce((s, p) => s + p.area, 0),
-    sot = pn("sot"),
+    sot = AP && sumaA("sot") > 0 ? sumaA("sot") : pn("sot"),
     area = areaT + fSot * sot,
     sk = pv("sist") || "mono220",
     rTG = PT_.size && PLD.rutas.TG,
@@ -91,7 +113,7 @@ function calcUni(c) {
     viv ? mdVivienda({ area: a, ...cargasMD(list) }, false) : mdUso(c.uso, a, list, aE);
   // Áreas libres no techadas (patios, jardines, cocheras abiertas): carga unitaria elegida por el proyectista (p. ej. 5 W/m²), al 100 %;
   // no figura en el CNE, se suma a la máxima demanda general y a la del 1er piso cuando este tiene tablero propio
-  const libre = c.aLib * c.wLib,
+  const libre = (AP && sumaA("libre") > 0 ? sumaA("libre") : c.aLib) * c.wLib,
     conLib = m => (libre > 0 ? { ...m, libre, sinAire: m.sinAire + libre, MD: m.MD + libre } : { ...m, libre: 0 });
   const md = conLib(
     mdDe(
@@ -214,11 +236,12 @@ function calcUni(c) {
               fases: q0.f3 ? 3 : 1,
               skTri: sk
             },
-            c,
+            { ...c, fa: fa5C(q0.ng), fc: c.ft * fa5C(q0.ng) },
             up,
             tb.feeder
           );
         q.src = { t: "plano", tab: pt.id, cir: q0.cir };
+        q.grp = { n: q0.ng, fa: fa5C(q0.ng) };
         q.elec = q0.elec;
         q.plano = { lej: q0.lej, Lh: q0.Lh, Lv: q0.Lv, est: q0.est, Lmet: q0.Lmet, auto: q0.auto, ct: q0.tipo };
         circ.push(q);
@@ -300,6 +323,9 @@ function calcUni(c) {
             tabs: [...PT_.keys()],
             ali: !!rTG,
             Ld: PS.filter(p => p.LdPlano).map(p => tabDe(p.n)),
+            areas: PS.filter(p => p.areaPlano).map(p => p.n),
+            sot: !!(AP && sumaA("sot") > 0),
+            libre: !!(AP && sumaA("libre") > 0),
             avisos: PLD.avisos
           }
         }

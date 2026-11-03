@@ -146,7 +146,8 @@ function excelCalculos(X) {
       cell(wsC, k, 9, F(`H${k}*${R.fd}`, q.Id), { ...val, fmt: "0.00" });
       cell(wsC, k, 10, q.itm, { ...inp, fmt: `0" · ${q.curva}"` });
       cell(wsC, k, 11, q.S, { ...inp, fmt: "0.0" });
-      cell(wsC, k, 12, F(fIz(k, q.col, R.fc, q.f3), q.Izc), { ...val, fmt: "0.0" });
+      // Circuito del plano: su propio agrupamiento (Tabla 5C con los circuitos de sus tuberías)
+      cell(wsC, k, 12, F(fIz(k, q.col, q.grp ? `${R.ft}*${q.grp.fa}` : R.fc, q.f3), q.Izc), { ...val, fmt: "0.0" });
       cell(wsC, k, 13, q.L, { ...inp, fmt: "0.0" });
       cell(wsC, k, 14, F(fDV(k), q.dVp), { ...val, fmt: "0.00" });
       cell(wsC, k, 15, F(`N${k}+$O$${f._row}`, q.dVt), { ...val, fmt: "0.00", bold: 1 });

@@ -538,7 +538,7 @@ async function arrastrarPlano(a, b) {
 prueba("Editor de diseño: símbolos DGE, enganche, mover, girar, borrar, tuberías, capas y guardado", async ok => {
   await ejemplo("uni");
   await abrirPlano();
-  ok(await ev("EPL.dis && EPL.dis.capas.length === 13 && !EPL.dis.els.length"), "diseño nuevo con sus 13 capas");
+  ok(await ev("EPL.dis && EPL.dis.capas.length === 14 && !EPL.dis.els.length"), "diseño nuevo con sus 14 capas (con la de áreas)");
   // Una luminaria en el centro de la sala y un tomacorriente que se encaja en el muro
   await clic('#editor [data-pl="col:luz"]');
   await clicPlano(OX + 1.5, OY + 6, 0);
@@ -1837,6 +1837,28 @@ prueba("Calcular con el diseño: tipo de circuito, luminarias, carga especial, a
     "ficha del circuito: datos del plano"
   );
   await ev("cerrarFicha(); 1");
+  // Áreas: clic dentro de un ambiente del plano de prueba (cocina y dormitorio, de 4 × 8 m entre muros de una línea)
+  await ev("edAbrir(); 1");
+  for (let i = 0; i < 40 && !(await ev("!!PL_MOD && !!dsD()")); i++) await esperar(100);
+  const ar = await J(
+    `(() => { const r = dpAreaDetectar([${OX} + 8, ${OY} + 6], false); if (r.err) return r; return { m2: plAreaPol(r.pts) * EPL.f * EPL.f }; })()`
+  );
+  ok(ar.m2 > 31 && ar.m2 < 32, `área de un ambiente con un clic (${JSON.stringify(ar)})`);
+  // Una tubería con dos circuitos: agrupamiento de la Tabla 5C y conductores escritos en el plano
+  await ev(
+    `(() => { const t = dsD().els.find(e => e.t === "tub" && e.cir === "C-1" && e.c0 === "${ids.tb}"); t.cx = ["C-2"]; edCambio(); edAplicar(); return 1; })()`
+  );
+  await esperar(200);
+  ok(
+    (await J("LAST.circ.find(q => q.plano && q.id === 'C-1').grp")).fa === 0.8,
+    "C-1 con el C-2 en su tubería: factor 0.80 de la Tabla 5C"
+  );
+  await ev(`dcAbrir(); $('dcC').querySelector('[data-dc="escribir"]').click(); dcCerrar(); 1`);
+  ok(
+    (await J("dsD().els.find(e => e.t === 'tub' && e.cx).sec")) === "4-1×2.5 + 1×2.5 T mm²",
+    "conductores del cálculo escritos en la tubería compartida"
+  );
+  await clic('[data-ed="aceptar"]');
   // Se vuelve a los datos escritos
   await ev(
     "$('calPlano').value = ''; $('calPlano').dispatchEvent(new Event('input', { bubbles: true })); $('calPlano').dispatchEvent(new Event('change', { bubbles: true })); 1"

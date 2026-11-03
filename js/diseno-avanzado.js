@@ -111,6 +111,253 @@ function dpVerificar(add) {
     );
 }
 
+/* ---------- Áreas para el cálculo ----------
+   Cuatro formas de marcarlas: clic dentro de un ambiente (se detecta su contorno), clic dentro del edificio (su
+   contorno exterior), por puntos o con un rectángulo. Cada área es una polilínea cerrada en la capa E-AREAS con su
+   tipo (techada, contorno exterior, sótano, libre, aulas) y el nombre del ambiente; su piso es el de la planta
+   encuadrada donde está. No se imprime en las láminas. */
+const DP_PISOS = [
+  [0, "Sótano"],
+  ...Array.from({ length: 12 }, (v, i) => [i + 1, `${ORD(i + 1)} piso`]),
+  [-1, "No se cuenta"]
+];
+const dpNomPiso = n => (DP_PISOS.find(([v]) => v === n) || [0, n + "° piso"])[1];
+// Tipo de un área nueva: el contorno exterior en otros usos (Regla 050-210); si no, techada (Regla 050-110)
+const dpAreaTipo = ext => (ext ? "ext" : "tech");
+// Nombre del ambiente al terminar un área; luego queda elegida para ver o cambiar su tipo
+function dpAreaNueva(el) {
+  DS_SEL.clear();
+  DS_SEL.add(el.id);
+  edCambio();
+  plPedir(el.ar.tp === "ext" ? "Nombre (opcional)" : "Ambiente", el.ar.tp === "ext" ? "Contorno exterior" : "", v => {
+    plPedir(null);
+    if (v) el.ar.n = String(v).replace(/[<>]/g, "").slice(0, 60);
+    edCambio();
+    plOrden();
+    toast(`${el.ar.n || "Área"}: ${fmt(dsM2(el), 2)} m² · ${PL_TAREA[el.ar.tp].toLowerCase()}`);
+  });
+}
+// Capas que no son muros al buscar un contorno: cotas, ejes, muebles y textos
+const DP_NO_MURO = /cota|dimens|^ejes?$|^a-?anno|mobil|muebl|texto|^text/i;
+// Huecos (puertas y vanos) que se cierran al buscar el contorno, en m (criterio, se puede cambiar)
+let DP_HUECO = 1.0;
+/* Contorno de un ambiente (o del edificio, ext) alrededor del punto p, sobre las líneas visibles de la
+   arquitectura: se dibujan en una cuadrícula fina, se cierran los huecos de hasta DP_HUECO m, se rellena desde el
+   punto y se saca el borde. Devuelve { pts } (polígono en el dibujo) o { err }. */
+function dpAreaDetectar(p, ext) {
+  const f = EPL.f,
+    ip = dpPlantaDe(p[0], p[1]),
+    mg = 1 / f;
+  let [x0, y0, x1, y1] =
+    ip >= 0
+      ? [EPL.plantas[ip].x0, EPL.plantas[ip].y0, EPL.plantas[ip].x1, EPL.plantas[ip].y1]
+      : [...plADib(0, plH()), ...plADib(plW(), 0)];
+  x0 -= mg;
+  y0 -= mg;
+  x1 += mg;
+  y1 += mg;
+  const cel = Math.max(0.01 / f, Math.sqrt(((x1 - x0) * (y1 - y0)) / 4e6), (x1 - x0) / 4000, (y1 - y0) / 4000),
+    W = Math.ceil((x1 - x0) / cel),
+    H = Math.ceil((y1 - y0) / cel),
+    N = W * H;
+  // Líneas visibles de la arquitectura (solo sus bordes: las tramas de piso no tapan el ambiente)
+  const cv = document.createElement("canvas");
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext("2d", { willReadFrequently: true }),
+    oc = new Set(EPL.ocultas);
+  g.lineWidth = 1;
+  g.strokeStyle = "#000";
+  g.beginPath();
+  PL_MOD.trazos.forEach(t => {
+    // Como al encajar en el muro: solo las líneas continuas (los ejes y las líneas ocultas no cierran ambientes);
+    // tampoco las cotas ni los muebles (por su tipo de objeto o el nombre de su capa)
+    if (oc.has(t.capa) || PL_BORR.has(t.e) || t.lt || t.ent === "DIMENSION" || DP_NO_MURO.test(t.capa)) return;
+    const q = t.p;
+    let fuera = true;
+    for (let j = 0; j < q.length && fuera; j += 2)
+      if (q[j] >= x0 && q[j] <= x1 && q[j + 1] >= y0 && q[j + 1] <= y1) fuera = false;
+    if (fuera && q.length < 8) return;
+    g.moveTo((q[0] - x0) / cel, H - (q[1] - y0) / cel);
+    for (let j = 2; j < q.length; j += 2) g.lineTo((q[j] - x0) / cel, H - (q[j + 1] - y0) / cel);
+    if (t.c) g.closePath();
+  });
+  g.stroke();
+  const img = g.getImageData(0, 0, W, H).data,
+    muro = new Uint8Array(N);
+  for (let i = 0; i < N; i++) muro[i] = img[4 * i + 3] > 40 ? 1 : 0;
+  // Dilatación cuadrada de r celdas (por filas y por columnas)
+  const dilatar = (src, r) => {
+    const a = new Uint8Array(N),
+      b = new Uint8Array(N);
+    for (let y = 0; y < H; y++) {
+      let c = 0;
+      const o = y * W;
+      for (let x = 0; x < Math.min(r, W); x++) c += src[o + x];
+      for (let x = 0; x < W; x++) {
+        if (x + r < W) c += src[o + x + r];
+        if (x - r - 1 >= 0) c -= src[o + x - r - 1];
+        a[o + x] = c > 0 ? 1 : 0;
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      let c = 0;
+      for (let y = 0; y < Math.min(r, H); y++) c += a[y * W + x];
+      for (let y = 0; y < H; y++) {
+        if (y + r < H) c += a[(y + r) * W + x];
+        if (y - r - 1 >= 0) c -= a[(y - r - 1) * W + x];
+        b[y * W + x] = c > 0 ? 1 : 0;
+      }
+    }
+    return b;
+  };
+  // Relleno desde unas celdas por las celdas libres; borde: si llegó al borde de la zona
+  const rellenar = (libre, semillas) => {
+    const out = new Uint8Array(N),
+      cola = new Int32Array(N);
+    let a = 0,
+      b = 0,
+      borde = false;
+    semillas.forEach(i => {
+      if (libre[i] && !out[i]) {
+        out[i] = 1;
+        cola[b++] = i;
+      }
+    });
+    while (a < b) {
+      const i = cola[a++],
+        x = i % W,
+        y = (i / W) | 0;
+      if (x === 0 || y === 0 || x === W - 1 || y === H - 1) borde = true;
+      if (x > 0 && libre[i - 1] && !out[i - 1]) (out[i - 1] = 1), (cola[b++] = i - 1);
+      if (x < W - 1 && libre[i + 1] && !out[i + 1]) (out[i + 1] = 1), (cola[b++] = i + 1);
+      if (y > 0 && libre[i - W] && !out[i - W]) (out[i - W] = 1), (cola[b++] = i - W);
+      if (y < H - 1 && libre[i + W] && !out[i + W]) (out[i + W] = 1), (cola[b++] = i + W);
+    }
+    return { out, borde };
+  };
+  const cx = Math.floor((p[0] - x0) / cel),
+    cy = Math.floor(H - (p[1] - y0) / cel),
+    ic = cy * W + cx,
+    r0 = Math.max(1, Math.ceil(DP_HUECO / 2 / f / cel));
+  if (cx < 0 || cy < 0 || cx >= W || cy >= H) return { err: "El punto está fuera de la zona" };
+  if (muro[ic]) return { err: "Haga clic dentro del ambiente, no sobre una línea" };
+  let R = null;
+  // Con huecos grandes, un pasillo angosto queda cerrado: se prueba con huecos menores
+  for (const r of [r0, Math.ceil(r0 / 2), Math.ceil(r0 / 4), 1]) {
+    const tapado = dilatar(muro, r),
+      libre = tapado.map(v => 1 - v);
+    if (ext) {
+      // Afuera: lo que se alcanza desde el borde de la zona; el edificio es lo demás
+      const sem = [];
+      for (let x = 0; x < W; x++) sem.push(x, (H - 1) * W + x);
+      for (let y = 0; y < H; y++) sem.push(y * W, y * W + W - 1);
+      const afuera = dilatar(rellenar(libre, sem).out, r),
+        edif = new Uint8Array(N);
+      for (let i = 0; i < N; i++) edif[i] = afuera[i] && !muro[i] ? 0 : 1;
+      if (!edif[ic]) return { err: "Haga clic dentro del edificio" };
+      const q = rellenar(edif, [ic]);
+      if (q.borde) return { err: "El edificio llega al borde de la planta encuadrada: agrande el encuadre" };
+      R = q.out;
+      break;
+    }
+    if (tapado[ic]) continue;
+    const q = rellenar(libre, [ic]);
+    if (q.borde) return { err: "abierto" };
+    const d = dilatar(q.out, r);
+    R = new Uint8Array(N);
+    for (let i = 0; i < N; i++) R[i] = d[i] && !muro[i] ? 1 : 0;
+    break;
+  }
+  if (!R) return { err: "El ambiente es muy angosto para detectarlo: dibuje su contorno por puntos" };
+  // Borde de la región: aristas de las celdas, encadenadas en lazos; se toma el mayor
+  const V = W + 1,
+    sig = new Map(),
+    add = (a, b) => {
+      if (!sig.has(a)) sig.set(a, []);
+      sig.get(a).push(b);
+    };
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!R[y * W + x]) continue;
+      if (y === 0 || !R[(y - 1) * W + x]) add(y * V + x + 1, y * V + x);
+      if (y === H - 1 || !R[(y + 1) * W + x]) add((y + 1) * V + x, (y + 1) * V + x + 1);
+      if (x === 0 || !R[y * W + x - 1]) add(y * V + x, (y + 1) * V + x);
+      if (x === W - 1 || !R[y * W + x + 1]) add((y + 1) * V + x + 1, y * V + x + 1);
+    }
+  let mejor = null,
+    mA = 0;
+  sig.forEach((l, ini) => {
+    while (l.length) {
+      const lazo = [ini];
+      let v = l.pop();
+      for (let k = 0; v !== ini && k < 4 * N; k++) {
+        lazo.push(v);
+        const s = sig.get(v);
+        if (!s || !s.length) break;
+        v = s.pop();
+      }
+      const P = lazo.flatMap(u => [u % V, (u / V) | 0]),
+        A = plAreaPol(P);
+      if (A > mA) {
+        mA = A;
+        mejor = P;
+      }
+    }
+  });
+  if (!mejor) return { err: "No se encontró el contorno" };
+  // Sin puntos alineados y simplificado (Douglas-Peucker, 1 celda)
+  const P = [];
+  for (let i = 0; i < mejor.length; i += 2) P.push([mejor[i], mejor[i + 1]]);
+  const dp = (pts, tol) => {
+    if (pts.length < 3) return pts;
+    const [a, b] = [pts[0], pts[pts.length - 1]],
+      L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    let im = 0,
+      dm = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const d = Math.abs((b[0] - a[0]) * (a[1] - pts[i][1]) - (a[0] - pts[i][0]) * (b[1] - a[1])) / L;
+      if (d > dm) (dm = d), (im = i);
+    }
+    return dm > tol ? [...dp(pts.slice(0, im + 1), tol).slice(0, -1), ...dp(pts.slice(im), tol)] : [a, b];
+  };
+  // El lazo cerrado se parte en su punto más lejano al primero
+  let lej = 0;
+  P.forEach((q, i) => {
+    if (Math.hypot(q[0] - P[0][0], q[1] - P[0][1]) > Math.hypot(P[lej][0] - P[0][0], P[lej][1] - P[0][1])) lej = i;
+  });
+  const S = [...dp(P.slice(0, lej + 1), 1.01).slice(0, -1), ...dp([...P.slice(lej), P[0]], 1.01).slice(0, -1)];
+  if (S.length < 3) return { err: "No se encontró el contorno" };
+  return { pts: S.flatMap(([x, y]) => [x0 + x * cel, y0 + (H - y) * cel]), cel: cel * f };
+}
+function dpAreaClic(p, ext) {
+  if (!PL_MOD) return;
+  const t0 = performance.now(),
+    r = dpAreaDetectar(p, ext);
+  if (r.err === "abierto")
+    return plPedir(
+      "El ambiente no está cerrado. Cerrar huecos de hasta (m)",
+      String(+(DP_HUECO + 0.5).toFixed(2)),
+      v => {
+        plPedir(null);
+        const h = parseFloat(String(v).replace(",", "."));
+        if (!(h > 0 && h <= 6)) return toast("Escriba un ancho entre 0.1 y 6 m");
+        DP_HUECO = h;
+        dpAreaClic(p, ext);
+      }
+    );
+  if (r.err) return toast(r.err);
+  if (plAreaPol(r.pts) * EPL.f * EPL.f < 0.5)
+    return toast(
+      "El contorno encontrado es muy pequeño: ¿hizo clic dentro de un mueble, una columna o un símbolo? Haga clic en una parte libre del ambiente u oculte esa capa"
+    );
+  const capa = DS_SIS.are.capa;
+  dsCapa(capa);
+  const el = dsAgregar({ t: "lin", pts: r.pts, c: true, capa, ar: { tp: dpAreaTipo(ext) } });
+  dpAreaNueva(el);
+  console.debug(`Área detectada en ${Math.round(performance.now() - t0)} ms (celda ${fmt(r.cel * 100, 1)} cm)`);
+}
+
 /* ---------- Ver elementos: los elige y los muestra en pantalla ---------- */
 function dsVerIds(ids) {
   DS_SEL.clear();
@@ -163,6 +410,113 @@ function lumCerrar() {
   $("lumDlg").hidden = true;
   vwFondo();
 }
+/* Biblioteca de luminarias de uso común hoy, con potencias típicas del mercado (criterio de la plataforma: se
+   reemplazan con las de la ficha técnica del fabricante): [descripción, W, control, uso] */
+const LU_BIB = [
+  [
+    "Vivienda",
+    [
+      ["Foco LED A60", 9],
+      ["Foco LED A60", 12],
+      ["Foco LED A70", 15],
+      ["Dicroico LED GU10", 5],
+      ["Dicroico LED MR16", 7],
+      ["Spot LED empotrado", 7],
+      ["Spot LED empotrado orientable", 12],
+      ["Panel LED redondo empotrado", 12],
+      ["Panel LED redondo empotrado", 18],
+      ["Panel LED cuadrado adosado", 18],
+      ["Plafón LED", 24],
+      ["Lámpara colgante decorativa (3 × 9 W)", 27],
+      ["Lámpara de pie o de mesa (tomacorriente)", 9],
+      ["Aplique o braquete de pared LED", 10],
+      ["Luminaria para gradas o escalón LED", 3],
+      ["Luminaria LED con sensor de presencia", 12, "sensor"],
+      ["Espejo de baño con luz LED", 15],
+      ["Tira LED (5 m × 10 W/m)", 50],
+      ["Ventilador de techo con luz LED", 20]
+    ]
+  ],
+  [
+    "Oficinas y comercio",
+    [
+      ["Panel LED 60 × 60 cm", 40],
+      ["Panel LED 30 × 120 cm", 40],
+      ["Downlight LED comercial", 18],
+      ["Downlight LED comercial", 24],
+      ["Luminaria lineal LED suspendida", 40],
+      ["Luminaria lineal LED de sobreponer", 36],
+      ["Proyector LED en riel", 30],
+      ["Tubo LED T8 de 1.20 m", 18],
+      ["Luminaria hermética IP65 (2 × 18 W)", 36],
+      ["Panel LED con sensor de presencia (pasillos)", 18, "sensor"],
+      ["Luminaria de vitrina LED", 10],
+      ["Panel LED regulable (atenuador)", 40, "dimmer"]
+    ]
+  ],
+  [
+    "Industrial y almacenes",
+    [
+      ["Campana LED (high bay)", 100],
+      ["Campana LED (high bay)", 150],
+      ["Campana LED (high bay)", 200],
+      ["Luminaria lineal industrial LED", 60],
+      ["Luminaria hermética IP65 de 1.50 m", 50],
+      ["Luminaria a prueba de explosión LED", 60]
+    ]
+  ],
+  [
+    "Exteriores",
+    [
+      ["Reflector LED", 30],
+      ["Reflector LED", 50],
+      ["Reflector LED", 100],
+      ["Reflector LED con sensor de movimiento", 30, "sensor"],
+      ["Braquete de exterior LED IP65", 12],
+      ["Braquete de exterior con fotocelda", 12, "foto"],
+      ["Poste de jardín LED", 10],
+      ["Estaca de jardín LED", 7],
+      ["Empotrado de piso LED", 5],
+      ["Luminaria de piscina LED (12 V)", 18],
+      ["Alumbrado de vía LED", 60, "foto"],
+      ["Alumbrado de vía LED", 100, "foto"],
+      ["Luminaria de fachada LED (wall washer)", 24]
+    ]
+  ],
+  [
+    "Emergencia y señalización",
+    [
+      ["Equipo de alumbrado de emergencia LED (2 faros)", 4, "", "emer"],
+      ["Luminaria de emergencia LED empotrada", 3, "", "emer"],
+      ["Luminaria de emergencia LED adosada", 3, "", "emer"],
+      ["Señalización «Salida» LED", 3, "", "senal"],
+      ["Señalización «Salida» con flecha LED", 3, "", "senal"],
+      ["Señalización de ruta de evacuación LED", 3, "", "senal"]
+    ]
+  ],
+  [
+    "Control",
+    [
+      ["Luminaria con temporizador (pasillos, escaleras)", 12, "temp"],
+      ["Luminaria con fotocelda (cocheras)", 18, "foto"]
+    ]
+  ]
+];
+let LU_VERBIB = false;
+function luBibHTML() {
+  const q = ($("luBusca") && $("luBusca").value.trim().toLowerCase()) || "";
+  return LU_BIB.map(([g, L]) => {
+    const it = L.map((x, i) => [x, i]).filter(([x]) => !q || x[0].toLowerCase().includes(q));
+    return it.length
+      ? `<div class="lu-bg"><b>${g}</b>${it
+          .map(
+            ([x, i]) =>
+              `<button type="button" class="lu-bi" data-lu-bib="${LU_BIB.findIndex(([gg]) => gg === g)}|${i}" title="Agregar como tipo nuevo">${esc(x[0])}<em>${x[1]} W${x[2] ? " · " + DS_CTRL[x[2]].toLowerCase() : ""}</em></button>`
+          )
+          .join("")}</div>`
+      : "";
+  }).join("");
+}
 function lumRender() {
   const D = dsD(),
     L = D.lums || [],
@@ -173,6 +527,8 @@ function lumRender() {
       Object.entries(o)
         .map(([k, n]) => `<option value="${k}"${k === (v || "") ? " selected" : ""}>${esc(n)}</option>`)
         .join("");
+  $("luBib").hidden = !LU_VERBIB;
+  if (LU_VERBIB) $("luBibL").innerHTML = luBibHTML();
   $("luLista").innerHTML = L.length
     ? `<div class="lu-fila lu-cab"><span>Tipo</span><span>Descripción</span><span>Potencia</span><span>Control</span><span>Uso</span><span>En el plano</span><span></span></div>` +
       L.map(
@@ -189,6 +545,24 @@ $("lumDlg").addEventListener("click", e => {
     D = dsD();
   if (b && b.dataset.lu === "cerrar") return lumCerrar();
   if (b && b.dataset.lu === "max") return LU_VW.maximizar();
+  if (b && b.dataset.lu === "bib") {
+    LU_VERBIB = !LU_VERBIB;
+    lumRender();
+    if (LU_VERBIB) $("luBusca").focus();
+    return;
+  }
+  const bi = e.target.closest("[data-lu-bib]");
+  if (bi) {
+    const [gi, ii] = bi.dataset.luBib.split("|").map(Number),
+      [n, w, ctrl, emer] = LU_BIB[gi][1][ii],
+      L = (D.lums = D.lums || []);
+    let k = 1;
+    while (L.some(t => t.id === "L" + k)) k++;
+    L.push({ id: "L" + k, n, w, ...(ctrl ? { ctrl } : {}), ...(emer ? { emer } : {}) });
+    edCambio();
+    lumRender();
+    return toast(`L${k} · ${n} · ${w} W (potencia típica: verifique la del fabricante)`);
+  }
   if (b && b.dataset.lu === "nuevo") {
     const L = (D.lums = D.lums || []);
     let k = 1;
@@ -218,6 +592,9 @@ $("lumDlg").addEventListener("click", e => {
     toast(`Tipo ${t.id} en ${s.length} luminaria${s.length > 1 ? "s" : ""}`);
   }
 });
+$("lumDlg").addEventListener("input", e => {
+  if (e.target.id === "luBusca") $("luBibL").innerHTML = luBibHTML();
+});
 $("lumDlg").addEventListener("change", e => {
   const c = e.target.closest("[data-lu-k]");
   if (!c) return;
@@ -240,7 +617,7 @@ $("lumDlg").addEventListener("keydown", e => {
 
 /* ---------- Datos del diseño para el cálculo (planoCalc, js/calculo-plano.js) ---------- */
 const DC_VW = ventanaMovil(document.querySelector("#dcDlg .vw"), "jmg-electric-datos-calculo", {
-  w: 900,
+  w: 1000,
   h: 600,
   minW: 520,
   minH: 320
@@ -331,13 +708,13 @@ function dcRender() {
       return;
     }
     h +=
-      `<table class="dc-t"><thead><tr><th>Circuito</th><th>Tipo</th><th>Salidas</th><th>Carga conectada</th><th>Hasta la salida más alejada</th>${L ? "<th>ΔV total</th>" : ""}<th></th></tr></thead><tbody>` +
+      `<table class="dc-t"><thead><tr><th>Circuito</th><th>Tipo</th><th>Salidas</th><th>Carga conectada</th><th>Hasta la salida más alejada</th><th>Agrupados</th>${L ? "<th>ΔV total</th>" : ""}</tr></thead><tbody>` +
       tb.circs
         .map(q => {
           const qq = L && L.circ.find(x => x.src && x.src.t === "plano" && x.src.tab === tb.id && x.src.cir === q.cir),
             pd = q.sal.filter(o => o.de === "Parámetros").length,
             tp = [...new Set(q.sal.filter(o => o.de.startsWith("tipo")).map(o => o.de.slice(5)))];
-          return `<tr><td><b>${q.cir}</b>${q.desc ? `<small>${esc(q.desc)}</small>` : ""}</td><td>${PL_TCIR[q.tipo]}${q.auto ? "<small>automático</small>" : ""}</td><td class="n"><button type="button" class="linkbtn" data-dcv="${q.sal.map(o => o.id).join(",")}" title="Elige y muestra sus salidas">${q.n}</button></td><td class="n">${fmt(q.P, 0)} W<small>${[pd ? `${pd} con la de Parámetros` : "", tp.length ? `tipo ${tp.join(", ")}` : ""].filter(Boolean).join(" · ")}</small></td><td class="n${q.est ? " bad" : ""}">${m(q.L)} m<small>${q.est ? "estimada: hay salidas sin tubería" : `${m(q.Lh)} tubería + ${m(q.Lv)} vertical`}</small></td>${L ? `<td class="n ${qq && qq.ok ? "ok" : "bad"}">${qq ? m(qq.dVt) + " %" : "—"}</td>` : ""}<td>${ver(q.lej ? [q.lej] : [], "Más alejada")}</td></tr>`;
+          return `<tr><td><b>${q.cir}</b>${q.desc ? `<small>${esc(q.desc)}</small>` : ""}</td><td>${PL_TCIR[q.tipo]}${q.auto ? "<small>automático</small>" : ""}</td><td class="n"><button type="button" class="linkbtn" data-dcv="${q.sal.map(o => o.id).join(",")}" title="Elige y muestra sus salidas">${q.n}</button></td><td class="n">${fmt(q.P, 0)} W<small>${[pd ? `${pd} con la de Parámetros` : "", tp.length ? `tipo ${tp.join(", ")}` : ""].filter(Boolean).join(" · ")}</small></td><td class="n${q.est ? " bad" : ""}">${q.lej ? `<button type="button" class="linkbtn" data-dcv="${q.lej}" title="Ver la salida más alejada">${m(q.L)} m</button>` : `${m(q.L)} m`}<small>${q.est ? "estimada: hay salidas sin tubería" : `${m(q.Lh)} tubería + ${m(q.Lv)} vertical`}</small></td><td class="n">${q.ng}<small>Tabla 5C: ${fmt(fa5C(q.ng), 2)}</small></td>${L ? `<td class="n ${qq && qq.ok ? "ok" : "bad"}">${qq ? m(qq.dVt) + " %" : "—"}</td>` : ""}</tr>`;
         })
         .join("") +
       "</tbody></table>";
@@ -360,6 +737,30 @@ function dcRender() {
         .join("") +
       "</tbody></table>";
   }
+  // Áreas por piso
+  if (R && R.areas.length) {
+    const viv = usoAct() === "viv",
+      P = Object.keys(R.pisos)
+        .map(Number)
+        .sort((a, b) => a - b),
+      cel = v => (v ? `${fmt(v, 2)} m²` : "—");
+    h +=
+      `<h4>Áreas<small>${viv ? "vivienda: techadas por dimensiones interiores (Regla 050-110)" : "otros usos: contorno exterior (Regla 050-210)"}</small> ${ver(
+        R.areas.map(a => a.id),
+        "Ver todas"
+      )}</h4><table class="dc-t"><thead><tr><th>Piso</th><th>Techada (interior)</th><th>Contorno exterior</th><th>Aulas o alta intensidad</th><th>Libre no techada</th><th>Para el cálculo</th></tr></thead><tbody>` +
+      P.map(n => {
+        const o = R.pisos[n],
+          usa = n === 0 ? o.sot * 0.75 : viv ? o.tech : o.ext || o.tech;
+        return `<tr><td>${dpNomPiso(n)}</td><td class="n">${cel(n === 0 ? o.sot : o.tech)}</td><td class="n">${cel(o.ext)}</td><td class="n">${cel(o.aulas)}</td><td class="n">${cel(o.libre)}</td><td class="n"><b>${n === 0 ? (viv ? `${fmt(o.sot, 2)} × 75 %` : cel(o.sot)) : cel(usa)}</b>${!viv && n > 0 && !o.ext && o.tech ? '<small class="bad">falta el contorno exterior</small>' : ""}</td></tr>`;
+      }).join("") +
+      "</tbody></table>";
+    // Pisos del plano que el cálculo aún no tiene
+    const max = Math.max(...P),
+      faltan = max - 1 - pisos.length;
+    if (faltan > 0 && MODE === "uni")
+      h += `<p class="dc-nota">El plano tiene áreas hasta el ${dpNomPiso(max)}; el cálculo tiene ${pisos.length + 1} piso${pisos.length ? "s" : ""}. <button type="button" class="linkbtn" data-dc="pisos">Agregar ${faltan} piso${faltan > 1 ? "s" : ""} al cálculo</button></p>`;
+  }
   // Cargas especiales
   if (R && R.cargas.length)
     h +=
@@ -380,8 +781,56 @@ function dcRender() {
         (a, i) =>
           `<div class="rev-it ${a.t === "error" ? "aviso" : "info"}"><i>${a.t === "info" ? "ℹ" : "⚠"}</i><span>${esc(a.m)}<small>${esc(DC_AYUDA[a.k] || "")}</small></span><span class="pla-b"><button type="button" class="vw-btn" data-dca="${i}">Ver</button></span></div>`
       ).join("");
-  h += `<p class="dc-nota"><b>Cómo se mide (criterio de la plataforma):</b> el recorrido es el camino más corto por las tuberías del circuito, desde el tablero hasta cada salida, con las derivaciones. Se suman los tramos verticales: la tubería por el techo va a la altura del techo (${m(+PROY.hTecho || 2.9)} m) y la del piso a 0 m; en cada artefacto se sube o se baja hasta su altura de montaje (la suya o la de Parámetros › Alturas) y en el tablero desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza. Cada montante suma la altura de entrepiso (${m(+PROY.hEnt || 3.1)} m) por piso. La potencia de cada salida es la suya o, si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). La caída de tensión se calcula con la carga conectada del circuito hasta la salida más alejada (Regla 050-102). Los tableros que no están dibujados se calculan con los datos escritos.</p>`;
+  h += `<p class="dc-nota"><b>Cómo se mide (criterio de la plataforma):</b> el recorrido es el camino más corto por las tuberías del circuito, desde el tablero hasta cada salida, con las derivaciones. Se suman los tramos verticales: la tubería por el techo va a la altura del techo (${m(+PROY.hTecho || 2.9)} m) y la del piso a 0 m; en cada artefacto se sube o se baja hasta su altura de montaje (la suya o la de Parámetros › Alturas) y en el tablero desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza. Cada montante suma la altura de entrepiso (${m(+PROY.hEnt || 3.1)} m) por piso. La potencia de cada salida es la suya o, si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). La caída de tensión se calcula con la carga conectada del circuito hasta la salida más alejada (Regla 050-102); la sección es la menor que cumple la capacidad y esa caída. Agrupamiento: cada circuito usa el factor de la Tabla 5C (ítem 1) según el mayor número de circuitos que van juntos en alguna de sus tuberías (entre dos columnas de la tabla, la del número mayor). Áreas: en vivienda se suman las techadas por dimensiones interiores (Regla 050-110) y el sótano al 75 %; en otros usos, el contorno exterior (Regla 050-210); el piso de cada área es el de su planta. Los tableros y pisos que no están dibujados se calculan con los datos escritos.</p>`;
+  if (L)
+    h += `<p class="dc-nota"><button type="button" class="vw-btn" data-dc="escribir">Escribir en el plano los conductores y diámetros del cálculo</button> Pone en cada tubería sus conductores (fases, neutros y tierra), sus secciones y el diámetro de la tubería según todos los circuitos que lleva (40 % de ocupación). Las tuberías de los interruptores (retornos) quedan como están.</p>`;
   $("dcC").innerHTML = h;
+}
+/* Conductores y diámetro de cada tubería según el último cálculo con el diseño: suma los de todos los circuitos que
+   lleva; en monofásico 220 V los dos conductores son fases, con 380/220 V fase y neutro; una tierra, la mayor */
+function dcEscribir() {
+  if (!LAST || !LAST.plano) return toast("Primero calcule con el diseño");
+  const D = dsD(),
+    por = new Map(D.els.map(e => [e.id, e])),
+    Q = new Map(LAST.circ.filter(q => q.src && q.src.t === "plano").map(q => [q.src.tab + "|" + q.id, q])),
+    n380 = LAST.sk === "tri380";
+  let n = 0,
+    ret = 0;
+  D.els.forEach(t => {
+    if (t.t !== "tub" || t.ali || !t.cir || !t.tab) return;
+    if ([t.c0, t.c1].some(id => por.get(id) && DS_CAT[por.get(id).k] && DS_CAT[por.get(id).k].g === "Interruptores")) {
+      ret++;
+      return;
+    }
+    const qs = [t.cir, ...(t.cx || [])].map(c => Q.get(t.tab + "|" + c)).filter(Boolean);
+    if (!qs.length) return;
+    let fa = 0,
+      ne = 0,
+      St = 0,
+      a = 0;
+    const sec = new Map();
+    qs.forEach(q => {
+      const f = q.f3 ? 3 : n380 ? 1 : 2,
+        nn = n380 ? 1 : 0;
+      fa += f;
+      ne += nn;
+      St = Math.max(St, q.St);
+      a += (f + nn) * OD[q.S] ** 2;
+      // Conductores de la misma sección, juntos: «4-1×2.5»
+      sec.set(q.S, (sec.get(q.S) || 0) + f + nn);
+    });
+    a = ((a + OD[St] ** 2) * Math.PI) / 4;
+    const tb = TUBOS.find(([, , di]) => a <= (0.4 * Math.PI * di * di) / 4);
+    t.cond = { f: Math.min(12, fa), n: Math.min(6, ne), t: true };
+    if (tb && DS_DIAS.includes(tb[0])) t.dia = tb[0];
+    t.sec = `${[...sec].map(([S, k]) => `${k}-1×${S}`).join(" + ")} + 1×${St} T mm²`;
+    n++;
+  });
+  D.cirt = true;
+  edCambio();
+  toast(
+    `Conductores y diámetros del cálculo en ${n} tubería${n === 1 ? "" : "s"}${ret ? `; ${ret} de interruptores (retornos) quedan como estaban` : ""}`
+  );
 }
 $("dcDlg").addEventListener("click", e => {
   if (e.target.id === "dcDlg") return dcCerrar();
@@ -392,6 +841,20 @@ $("dcDlg").addEventListener("click", e => {
   if (b && b.dataset.dc === "max") return DC_VW.maximizar();
   if (b && b.dataset.dc === "aplicar") {
     edAplicar();
+    return dcRender();
+  }
+  if (b && b.dataset.dc === "escribir") {
+    dcEscribir();
+    return dcRender();
+  }
+  if (b && b.dataset.dc === "pisos") {
+    // Se agregan con el mismo botón del formulario (el cálculo, el historial y las listas funcionan igual)
+    const R = dcDatos().R,
+      falta = Math.max(...Object.keys(R.pisos).map(Number)) - 1 - pisos.length;
+    for (let i = 0; i < falta; i++) $("add_pisos").click();
+    toast(
+      `${falta} piso${falta > 1 ? "s" : ""} agregado${falta > 1 ? "s" : ""} al cálculo (Vivienda › Pisos y tableros)`
+    );
     return dcRender();
   }
   if (v || a) {

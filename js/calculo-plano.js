@@ -12,7 +12,37 @@
      suma lo que sube o baja hasta su altura de montaje (la suya o la de Parámetros › Alturas), y en el tablero
      desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza;
    - montantes: cada par subida–bajada suma la altura de entrepiso por cada piso que atraviesa;
-   - potencia de cada salida: la suya; si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). */
+   - potencia de cada salida: la suya; si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida);
+   - agrupamiento (Tabla 5C, ítem 1): el mayor número de circuitos que van juntos en alguna tubería del circuito;
+   - áreas: las marcadas en el plano, por piso (Regla 050-110: dimensiones interiores en vivienda; Regla 050-210:
+     exteriores en otros usos; esa elección la hace calcUni). */
+// Piso del cálculo de una planta encuadrada: el elegido o, si no, el de su nombre («Sótano» 0, «2do piso» 2…) o su orden
+function plPisoPlanta(p, i) {
+  if (Number.isInteger(p.piso)) return p.piso;
+  const n = String(p.n || "");
+  if (/s[oó]tano/i.test(n)) return 0;
+  if (/azotea|techo/i.test(n)) return -1;
+  const m = /(\d+)/.exec(n);
+  return m ? +m[1] : i + 1;
+}
+// Área de un polígono (unidades del dibujo al cuadrado)
+function plAreaPol(p) {
+  let a = 0;
+  for (let i = 0, n = p.length; i < n; i += 2) {
+    const j = (i + 2) % n;
+    a += p[i] * p[j + 1] - p[j] * p[i + 1];
+  }
+  return Math.abs(a) / 2;
+}
+// Tipos de área (para el cálculo): techada, sótano, libre no techada, de aulas o alta intensidad, contorno exterior
+const PL_TAREA = {
+  tech: "Techada (dimensiones interiores)",
+  ext: "Contorno exterior del piso",
+  sot: "Sótano",
+  libre: "Libre no techada",
+  aulas: "Aulas o alta intensidad",
+  no: "No se cuenta"
+};
 
 // Tipos de circuito del tablero (ventana Tablero del editor)
 const PL_TCIR = {
@@ -215,7 +245,10 @@ function planoCalc(PL, c, v) {
       if (!o || s.id > o.id || !G.has(`D:${s.id}`) || !G.has(`D:${o.id}`)) return;
       const pi = plantaDe(s.x, s.y),
         pj = plantaDe(o.x, o.y),
-        k = Math.max(1, pi >= 0 && pj >= 0 ? Math.abs(pi - pj) : 1);
+        k = Math.max(
+          1,
+          pi >= 0 && pj >= 0 ? Math.abs(plPisoPlanta(plantas[pi], pi) - plPisoPlanta(plantas[pj], pj)) : 1
+        );
       arista(`D:${s.id}`, `D:${o.id}`, k * v.hEnt, 0);
     });
     return G;
@@ -224,11 +257,14 @@ function planoCalc(PL, c, v) {
   const tubC = new Map(),
     simC = new Map(),
     clave = (tb, cir) => `${tb}·${cir}`;
+  const cirsDe = t => [...new Set([t.cir, ...(t.cx || [])].filter(Boolean))];
   tubs.forEach(t => {
     if (!t.cir || !t.tab || t.ali) return;
-    const k = clave(t.tab, t.cir);
-    if (!tubC.has(k)) tubC.set(k, []);
-    tubC.get(k).push(t);
+    cirsDe(t).forEach(cir => {
+      const k = clave(t.tab, cir);
+      if (!tubC.has(k)) tubC.set(k, []);
+      tubC.get(k).push(t);
+    });
   });
   sims.forEach(s => {
     if (!s.cir || !s.tab || s.k === "tab") return;
@@ -360,6 +396,14 @@ function planoCalc(PL, c, v) {
           }
         });
       }
+      // Agrupamiento: el mayor número de circuitos que van juntos en una de sus tuberías (Tabla 5C)
+      const ng = tt.reduce((m, t) => Math.max(m, cirsDe(t).length), 1);
+      if (ng > 20)
+        aviso(
+          "aviso",
+          `${nom} ${cir}: va en una tubería con ${ng} circuitos; la Tabla 5C llega a 20 (se usa su factor)`,
+          [tb.id]
+        );
       // Metrado: todas las tuberías del circuito y sus tramos verticales
       let Lmet = 0;
       G.forEach(a => a.forEach(([, w]) => (Lmet += w / 2)));
@@ -379,6 +423,7 @@ function planoCalc(PL, c, v) {
         lej: lej ? lej.id : null,
         f3: tri,
         elec,
+        ng,
         Lmet: Math.max(Lmet, L)
       });
     }
@@ -403,5 +448,40 @@ function planoCalc(PL, c, v) {
       if (d != null) rutas[tb.nom || "TG"] = { L: d, Lh: desde.H.get(`D:${tb.id}`), de: TG.id };
     });
   }
-  return { tabs: R, cargas, rutas, avisos };
+  // Áreas: polilíneas cerradas con datos de área (ar), sumadas por piso y por tipo (m²)
+  const areas = [],
+    pisos = {},
+    sumar = (n, k, m2) => {
+      const o = (pisos[n] = pisos[n] || { tech: 0, ext: 0, aulas: 0, sot: 0, libre: 0 });
+      o[k] += m2;
+    };
+  els.forEach(e => {
+    if (!e.ar || e.t !== "lin" || !Array.isArray(e.pts) || e.pts.length < 6) return;
+    let cx = 0,
+      cy = 0;
+    for (let i = 0; i < e.pts.length; i += 2) {
+      cx += e.pts[i];
+      cy += e.pts[i + 1];
+    }
+    const k = e.pts.length / 2,
+      ip = plantaDe(cx / k, cy / k),
+      piso = plantas.length ? (ip >= 0 ? plPisoPlanta(plantas[ip], ip) : null) : 1,
+      m2 = plAreaPol(e.pts) * f * f,
+      tp = PL_TAREA[e.ar.tp] ? e.ar.tp : "tech";
+    areas.push({ id: e.id, n: e.ar.n || "", tp, piso, m2 });
+    if (tp === "no") return;
+    if (piso === null)
+      return aviso(
+        "aviso",
+        `El área ${e.ar.n || ""} está fuera de las plantas encuadradas (no se cuenta)`,
+        [e.id],
+        "area"
+      );
+    if (piso < 0) return;
+    // El sótano: el área marcada como tal o la techada de una planta declarada sótano
+    if (tp === "sot" || (piso === 0 && tp === "tech")) return sumar(0, "sot", m2);
+    if (tp === "libre") return sumar(piso, "libre", m2);
+    sumar(piso, tp, m2);
+  });
+  return { tabs: R, cargas, rutas, avisos, areas, pisos };
 }

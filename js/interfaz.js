@@ -228,18 +228,24 @@ let RESUMEN = null;
 /* Con «Calcular con el diseño»: los tableros del plano que tienen circuitos y los alimentadores medidos en él (para
    no pedir los datos que salen del plano). Sin el modo, o sin diseño, nada. */
 function planoDatos(D) {
-  const vacio = { tabs: new Set(), rutas: {}, ali: false };
+  const vacio = { tabs: new Set(), rutas: {}, ali: false, areas: new Set() };
   if (D.calPlano !== "1" || !D.PLANO || !D.PLANO.dis || D.MODE !== "uni") return vacio;
   const n = k => parseFloat(D[k]) || 0,
     R = planoCalc(D.PLANO, ctx(D), { al_p: n("al_p"), tg_p: n("tg_p"), tc_p: n("tc_p"), hEnt: n("hEnt") || 3.1 });
   if (!R) return vacio;
   const tabs = new Set(R.tabs.filter(t => t.circs.length).map(t => t.nom));
-  return { tabs, rutas: R.rutas, ali: tabs.size > 0 && !!R.rutas.TG };
+  // Pisos con áreas marcadas en el plano (su área no se pide)
+  const areas = new Set(
+    Object.entries(R.pisos)
+      .filter(([n, o]) => +n > 0 && (o.tech || o.ext || o.aulas))
+      .map(([n]) => +n)
+  );
+  return { tabs, rutas: R.rutas, ali: tabs.size > 0 && !!R.rutas.TG, areas };
 }
 // Resumen del diseño en Salidas (Diseño en el plano) y avisos en los datos que salen del plano
 function planoResumen(r) {
   const usa = PROY.calPlano === "1",
-    hay = !!(PLANO && PLANO.dis && PLANO.dis.els.some(e => e.k === "tab" && e.nc)),
+    hay = !!(PLANO && PLANO.dis && PLANO.dis.els.some(e => (e.k === "tab" && e.nc) || e.ar)),
     P = r && r.plano,
     nc = P ? r.circ.filter(q => q.plano).length : 0,
     av = P ? P.avisos.filter(a => a.t !== "info").length : 0,
@@ -250,12 +256,12 @@ function planoResumen(r) {
       ? "Por ahora, el cálculo con el diseño es para vivienda unifamiliar y otros usos: el edificio se calcula con los datos escritos."
       : "";
   else if (!usa)
-    h = hay ? `El plano tiene tableros con circuitos: elija «Del diseño» para calcular con ellos. ${btn}` : "";
+    h = hay ? `El plano tiene tableros con circuitos o áreas: elija «Del diseño» para calcular con ellos. ${btn}` : "";
   else if (!hay)
     h =
-      "<b>El plano aún no tiene tableros con circuitos</b>: se calcula con los datos escritos. Dibuje el diseño en Planos › Editor de diseño.";
+      "<b>El plano aún no tiene tableros con circuitos ni áreas</b>: se calcula con los datos escritos. Dibuje el diseño en Planos › Editor de diseño.";
   else if (P)
-    h = `<b>Del plano:</b> ${P.tabs.length ? `${P.tabs.join(", ")} · ${nc} circuito${nc === 1 ? "" : "s"}` : "ningún tablero coincide con el cálculo"}${P.ali ? " · alimentador medido en el plano" : ""}${av ? ` · <b class="w">${av} aviso${av === 1 ? "" : "s"}</b>` : ""}. ${btn}`;
+    h = `<b>Del plano:</b> ${P.tabs.length ? `${P.tabs.join(", ")} · ${nc} circuito${nc === 1 ? "" : "s"}` : "ningún tablero del cálculo"}${P.areas && P.areas.length ? ` · áreas de ${P.areas.length} piso${P.areas.length > 1 ? "s" : ""}` : ""}${P.ali ? " · alimentador medido en el plano" : ""}${av ? ` · <b class="w">${av} aviso${av === 1 ? "" : "s"}</b>` : ""}. ${btn}`;
   $("plCalRes").innerHTML = h;
   $("plCalRes").hidden = !h;
   const T = P ? P.tabs : [],
@@ -275,11 +281,16 @@ function planoResumen(r) {
       ? `<b>Calcular con el diseño:</b> las cargas especiales de ${T.join(", ")} salen del plano; las de esos tableros escritas aquí no se usan.`
       : ""
   );
+  // Vivienda: áreas y alimentador del plano
+  const va = [
+    P && P.areas && P.areas.length
+      ? `el área de ${P.areas.map(n => ORD(n) + " piso").join(", ")} sale de las áreas marcadas (${r.viv ? "dimensiones interiores, Regla 050-110" : "contorno exterior, Regla 050-210"})${P.sot ? ", también la del sótano" : ""}${P.libre ? " y la libre no techada" : ""}`
+      : "",
+    P && P.ali ? `el alimentador del medidor al TG mide ${fmt(r.alims[0].L, 2)} m en el plano` : ""
+  ].filter(Boolean);
   nota(
     "aliPlanoN",
-    P && P.ali
-      ? `<b>Calcular con el diseño:</b> el alimentador del medidor al TG mide ${fmt(r.alims[0].L, 2)} m en el plano; esta longitud no se usa.`
-      : ""
+    va.length ? `<b>Calcular con el diseño:</b> ${va.join("; ")}. Esos datos escritos no se usan.` : ""
   );
 }
 // El aviso «del plano» de un formulario, para las ventanas de datos (sin sus botones)
@@ -310,7 +321,7 @@ function faltantes(p = null) {
     const PD = planoDatos(D),
       tabDe = n => (!pisos.length || (n === 1 && val("esqPisos") === "tg") ? "TG" : tabPiso(n)),
       delPlano = n => PD.tabs.has(tabDe(n));
-    req("area", "Área techada de la vivienda");
+    if (!PD.areas.has(1)) req("area", "Área techada de la vivienda");
     if (!PD.ali) req("Lalim", "Longitud del alimentador");
     [
       ["al", "alumbrado"],
@@ -344,7 +355,7 @@ function faltantes(p = null) {
         ["tg_n", "tomacorrientes"],
         ["tg_L", "longitud de tomacorrientes"]
       ].forEach(([k, l]) => {
-        if (k === "area" || (k === "Ld" ? !PD.rutas[tabPiso(i + 2)] : !pl))
+        if (k === "area" ? !PD.areas.has(i + 2) : k === "Ld" ? !PD.rutas[tabPiso(i + 2)] : !pl)
           req(`pisos_${k}_${i}`, `${n}: ${l}`, vacio(p[k]));
       });
       if (p.tc_n > 0 && !pl) req(`pisos_tc_L_${i}`, `${n}: longitud de cocina`, vacio(p.tc_L));
