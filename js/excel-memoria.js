@@ -131,6 +131,10 @@ function excelMemoria(X) {
       LM,
       "Las celdas sombreadas en azul son datos de entrada: al modificarlas, el libro recalcula los resultados."
     ) + 1;
+  // Con el diseño en el plano: el origen de los datos
+  const fuente = planoFuente(r);
+  fuente.forEach((t, i) => (m = nota(wsM, m, LM, (i ? "" : "Origen de los datos (diseño en el plano): ") + t)));
+  if (fuente.length) m++;
 
   m = seccion(wsM, m, LM, "2.  CÁLCULO DE LA MÁXIMA DEMANDA");
   let MDREF,

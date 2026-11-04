@@ -102,6 +102,10 @@ module.exports = function probarPlano(ctx) {
   ver("máxima demanda", r.md.MD, 5000);
   ver("carga instalada (118 + 360 + 1500)", r.CI, 1978);
   ver("sin avisos", r.plano.avisos, []);
+  // La memoria y el expediente dicen de dónde salen los datos (solo con el diseño)
+  const fuente = vm.runInContext("planoFuente", ctx);
+  ver("origen de los datos: circuitos, longitudes, agrupamiento, alimentador y cargas", fuente(r).length, 5);
+  ver("sin el diseño, sin origen de los datos", fuente(r0).length, 0);
   ver(
     "caída de tensión del C-2 con la carga conectada",
     q("C-2").dVp,

@@ -603,6 +603,15 @@ function planoValido(v) {
           }))
       : [],
     tenue: v.tenue === true,
+    // Capas de la arquitectura que cierran los ambientes (detección de áreas); sin ellas, por su nombre
+    ...(Array.isArray(v.mur) && v.mur.length
+      ? {
+          mur: v.mur
+            .filter(x => typeof x === "string")
+            .slice(0, 300)
+            .map(x => txt(x, 120))
+        }
+      : {}),
     // Objetos de la arquitectura borrados de la vista (su número de objeto en el DXF; el archivo no cambia)
     ...(Array.isArray(v.borr) && v.borr.length
       ? { borr: [...new Set(v.borr.filter(i => Number.isInteger(i) && i >= 0 && i < 1e7))].slice(0, 500000) }

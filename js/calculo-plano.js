@@ -120,6 +120,37 @@ const PL_MED = new Set(["med", "med3", "bmed"]);
 const PL_DESC = { al: "Alumbrado", tg: "Tomacorrientes", tc: "Tomacorrientes cocina / lavandería" };
 const PL_TIPO = { al: "Alumbrado", tg: "Tomacorriente", tc: "Tomacorriente" };
 
+/* Origen de los datos de un resultado calculado con el diseño (para la memoria y el expediente): frases que dicen
+   qué se midió en el plano y con qué criterio. Sin el diseño, ninguna. */
+function planoFuente(r) {
+  const P = r && r.plano;
+  if (!P) return [];
+  const L = [],
+    nc = r.circ.filter(q => q.plano).length,
+    multi = r.mode === "multi",
+    areas = multi ? r.T.some(t => t.areaPlano) : P.areas && P.areas.length;
+  if (areas)
+    L.push(
+      multi || r.viv
+        ? "Las áreas de vivienda se midieron sobre el plano de arquitectura por las dimensiones interiores de los ambientes techados (Regla 050-110)."
+        : "Las áreas se midieron sobre el plano de arquitectura por el contorno exterior de cada piso (Regla 050-210)."
+    );
+  if (nc)
+    L.push(
+      `Los ${nc} circuitos derivados de ${P.tabs.join(", ")} son los del plano de distribución: sus salidas y su carga conectada se contaron en el plano; la potencia de cada salida es la indicada en el diseño o, si no la tiene, la de los parámetros de diseño (W por salida).`,
+      "La longitud de cada circuito es el recorrido de sus tuberías desde el tablero hasta la salida más alejada, más los tramos verticales según las alturas de montaje (criterio de medición del proyectista); la caída de tensión se calcula con la carga conectada a esa distancia (Regla 050-102).",
+      "El factor de corrección por agrupamiento de cada circuito (Tabla 5C) corresponde al mayor número de circuitos que van juntos en una tubería de su recorrido."
+    );
+  if (P.ali || (P.Ld && P.Ld.length) || r.alims.some((a, i) => i && a.plano))
+    L.push(
+      "Las longitudes de los alimentadores se midieron por el recorrido de sus tuberías en el plano, desde el medidor o el tablero de origen, incluidos los montantes y los tramos verticales."
+    );
+  if ((r.cs || []).some(x => x.plano) || (multi && r.T.some(t => t.plano && t.plano.ce.length)))
+    L.push("Las cargas especiales son las dibujadas en el plano, con su potencia, su tipo y su número de fases.");
+  if (P.campos && P.campos.pzCond)
+    L.push("La longitud del conductor de puesta a tierra se midió en el plano, del tablero general al pozo de tierra.");
+  return L;
+}
 // Longitud de cada tramo de una tubería (recta o arco, con la curvatura «b» como en js/diseno.js), en unidades
 function plTramosL(t) {
   const p = t.pts,

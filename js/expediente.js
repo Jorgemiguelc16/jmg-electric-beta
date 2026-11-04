@@ -129,7 +129,9 @@ function expediente(r, estilo = "formal") {
         ]
       ],
       "Datos de la vivienda",
-      "Fuente: datos del proyecto; área computable según la Regla 050-110 del CNE-Utilización."
+      r.plano && r.plano.areas && r.plano.areas.length
+        ? "Fuente: áreas medidas en el diseño sobre el plano (ver Origen de los datos); área computable según la Regla 050-110 del CNE-Utilización."
+        : "Fuente: datos del proyecto; área computable según la Regla 050-110 del CNE-Utilización."
     );
     const pw = { al: num("al_p"), tg: num("tg_p"), tc: num("tc_p") };
     B += tbl(
@@ -144,7 +146,9 @@ function expediente(r, estilo = "formal") {
       ]),
       "",
       "Salidas por piso",
-      "Fuente: datos del proyecto."
+      r.PS.some(p => p.plano)
+        ? "Fuente: salidas contadas en el diseño sobre el plano (ver Origen de los datos)."
+        : "Fuente: datos del proyecto."
     );
   } else {
     B += tbl(
@@ -182,6 +186,12 @@ function expediente(r, estilo = "formal") {
         "Cargas de servicios generales (tablero TSG)",
         "Fuente: datos del proyecto."
       );
+  }
+  // Con el diseño en el plano: qué datos se midieron en él y con qué criterio
+  const fuente = planoFuente(r);
+  if (fuente.length) {
+    B += sub("Origen de los datos");
+    B += `<p>Los datos de cálculo se obtuvieron del diseño de las instalaciones dibujado sobre el plano de arquitectura del proyecto:</p><ul class="ex-list">${fuente.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
   }
   B += sub("Suministro de energía");
   B += kv(

@@ -3062,6 +3062,7 @@ $("editor").addEventListener("click", e => {
   if (a === "metrado") return metAbrir();
   if (a === "calc") return dcAbrir();
   if (a === "lums") return lumAbrir();
+  if (a === "muros") return murAbrir();
   if (a === "buscar") return buAbrir();
   if (a === "presentar") return edPresentar(true);
   if (a === "atajos") return atjAbrir();

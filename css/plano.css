@@ -1966,6 +1966,20 @@ input.del-plano,
   font-style: normal;
   color: var(--dl-mute, #5b6470);
 }
+/* Capas de muros */
+.mu-fila {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font: 12px var(--f-body);
+}
+.mu-fila em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--dl-mute, #5b6470);
+}
 /* Panel Plantas: piso del cálculo de cada planta (las medidas pasan a la segunda línea) */
 .pl-fila:has(.pl-piso) .pl-dim {
   grid-column: 1 / 3;

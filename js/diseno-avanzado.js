@@ -139,6 +139,31 @@ function dpAreaNueva(el) {
 }
 // Capas que no son muros al buscar un contorno: cotas, ejes, muebles y textos
 const DP_NO_MURO = /cota|dimens|^ejes?$|^a-?anno|mobil|muebl|texto|^text/i;
+// Capas que parecen de muros, columnas, puertas y ventanas (por su nombre, en español o en las normas de capas usuales)
+const DP_MURO = /muro|wall|pared|tabiq|column|placa|estruct|divis|puert|door|ventan|window|vidri|glaz|vano|alba[ñn]/i;
+/* Capas que cierran los ambientes: las elegidas por el proyectista (EPL.mur) o, si no eligió, las que parecen de
+   muros; si ninguna lo parece, null (todas las continuas menos cotas, ejes, muebles y textos) */
+function dpCapasMuro() {
+  if (Array.isArray(EPL.mur) && EPL.mur.length) return new Set(EPL.mur);
+  const c = new Set(PL_MOD.trazos.map(t => t.capa).filter(n => DP_MURO.test(n) && !DP_NO_MURO.test(n)));
+  return c.size ? c : null;
+}
+// Rectángulo que ocupa cada línea de la arquitectura (se calcula una vez y queda en la línea)
+function dpCaja(t) {
+  if (t._bb) return t._bb;
+  const p = t.p;
+  let a = Infinity,
+    b = Infinity,
+    c = -Infinity,
+    d = -Infinity;
+  for (let j = 0; j < p.length; j += 2) {
+    if (p[j] < a) a = p[j];
+    if (p[j] > c) c = p[j];
+    if (p[j + 1] < b) b = p[j + 1];
+    if (p[j + 1] > d) d = p[j + 1];
+  }
+  return (t._bb = [a, b, c, d]);
+}
 // Huecos (puertas y vanos) que se cierran al buscar el contorno, en m (criterio, se puede cambiar)
 let DP_HUECO = 1.0;
 /* Contorno de un ambiente (o del edificio, ext) alrededor del punto p, sobre las líneas visibles de la
@@ -169,15 +194,15 @@ function dpAreaDetectar(p, ext) {
   g.lineWidth = 1;
   g.strokeStyle = "#000";
   g.beginPath();
+  const mur = dpCapasMuro();
   PL_MOD.trazos.forEach(t => {
-    // Como al encajar en el muro: solo las líneas continuas (los ejes y las líneas ocultas no cierran ambientes);
-    // tampoco las cotas ni los muebles (por su tipo de objeto o el nombre de su capa)
-    if (oc.has(t.capa) || PL_BORR.has(t.e) || t.lt || t.ent === "DIMENSION" || DP_NO_MURO.test(t.capa)) return;
+    // Solo las capas de muros (o, sin ellas, las continuas que no son cotas, ejes, muebles ni textos), y solo las
+    // líneas que tocan la zona
+    if (oc.has(t.capa) || PL_BORR.has(t.e) || t.lt || t.ent === "DIMENSION") return;
+    if (mur ? !mur.has(t.capa) : DP_NO_MURO.test(t.capa)) return;
+    const [a, b, c, d] = dpCaja(t);
+    if (c < x0 || a > x1 || d < y0 || b > y1) return;
     const q = t.p;
-    let fuera = true;
-    for (let j = 0; j < q.length && fuera; j += 2)
-      if (q[j] >= x0 && q[j] <= x1 && q[j + 1] >= y0 && q[j + 1] <= y1) fuera = false;
-    if (fuera && q.length < 8) return;
     g.moveTo((q[0] - x0) / cel, H - (q[1] - y0) / cel);
     for (let j = 2; j < q.length; j += 2) g.lineTo((q[j] - x0) / cel, H - (q[j + 1] - y0) / cel);
     if (t.c) g.closePath();
@@ -330,13 +355,73 @@ function dpAreaDetectar(p, ext) {
   if (S.length < 3) return { err: "No se encontró el contorno" };
   return { pts: S.flatMap(([x, y]) => [x0 + x * cel, y0 + (H - y) * cel]), cel: cel * f };
 }
+const MU_VW = ventanaMovil(document.querySelector("#murDlg .vw"), "jmg-electric-capas-muros", {
+  w: 520,
+  h: 520,
+  minW: 380,
+  minH: 300
+});
+function murAbrir() {
+  if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
+  const sel = dpCapasMuro() || new Set(),
+    cnt = {};
+  PL_MOD.trazos.forEach(t => (cnt[t.capa] = (cnt[t.capa] || 0) + 1));
+  $("muLista").innerHTML = Object.keys(cnt)
+    .sort((a, b) => sel.has(b) - sel.has(a) || a.localeCompare(b))
+    .map(
+      n =>
+        `<label class="mu-fila"><input type="checkbox" value="${esc(n)}"${sel.has(n) ? " checked" : ""}><span>${esc(n)}</span><em>${cnt[n]} línea${cnt[n] === 1 ? "" : "s"}</em></label>`
+    )
+    .join("");
+  $("muNota").textContent =
+    Array.isArray(EPL.mur) && EPL.mur.length ? "Elegidas por usted" : "Elegidas por su nombre (automático)";
+  $("murDlg").hidden = false;
+  vwFondo();
+  MU_VW.abrir();
+}
+function murCerrar() {
+  $("murDlg").hidden = true;
+  vwFondo();
+}
+$("murDlg").addEventListener("click", e => {
+  if (e.target.id === "murDlg") return murCerrar();
+  const b = e.target.closest("[data-mu]");
+  if (!b) return;
+  const a = b.dataset.mu;
+  if (a === "cerrar") return murCerrar();
+  if (a === "auto") {
+    delete EPL.mur;
+    edCambio();
+    murAbrir();
+    return toast("Capas de muros: automáticas, por su nombre");
+  }
+  if (a === "ok") {
+    const v = [...$("muLista").querySelectorAll("input:checked")].map(i => i.value);
+    if (v.length) EPL.mur = v;
+    else delete EPL.mur;
+    edCambio();
+    murCerrar();
+    toast(
+      v.length
+        ? `${v.length} capa${v.length > 1 ? "s" : ""} de muros para detectar los ambientes`
+        : "Capas de muros: automáticas"
+    );
+  }
+});
+$("murDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    murCerrar();
+  }
+  e.stopPropagation();
+});
 function dpAreaClic(p, ext) {
   if (!PL_MOD) return;
   const t0 = performance.now(),
     r = dpAreaDetectar(p, ext);
   if (r.err === "abierto")
     return plPedir(
-      "El ambiente no está cerrado. Cerrar huecos de hasta (m)",
+      "El ambiente no está cerrado (¿falta la capa de puertas o ventanas en las capas de muros?). Cerrar huecos de hasta (m)",
       String(+(DP_HUECO + 0.5).toFixed(2)),
       v => {
         plPedir(null);
@@ -346,10 +431,10 @@ function dpAreaClic(p, ext) {
         dpAreaClic(p, ext);
       }
     );
-  if (r.err) return toast(r.err);
+  if (r.err) return toast(r.err + " · Revise las capas de muros (Áreas › Capas de muros)");
   if (plAreaPol(r.pts) * EPL.f * EPL.f < 0.5)
     return toast(
-      "El contorno encontrado es muy pequeño: ¿hizo clic dentro de un mueble, una columna o un símbolo? Haga clic en una parte libre del ambiente u oculte esa capa"
+      "El contorno encontrado es muy pequeño: alguna capa que no es muro corta el ambiente. Revise las capas de muros (Áreas › Capas de muros)"
     );
   const capa = DS_SIS.are.capa;
   dsCapa(capa);
