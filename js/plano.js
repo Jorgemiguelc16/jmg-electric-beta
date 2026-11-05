@@ -142,11 +142,16 @@ async function plAbrir(file) {
     } catch (e) {
       toast("El navegador no permitió guardar el plano: tendrá que abrirlo de nuevo la próxima vez");
     }
+    const ant = PL_MOD,
+      antE = EPL,
+      act = PLH.actArq && EPL && ant && EPL.sha !== sha;
+    PLH.actArq = false;
     PL_MOD = m;
     PL_SHA = sha;
     const nombre = file.name.replace(/[<>]/g, "").slice(0, 120),
-      // El mismo archivo (o una versión nueva con el mismo nombre) conserva la escala, las capas y las plantas
-      sigue = EPL && (EPL.sha === sha || EPL.nombre === nombre);
+      // El mismo archivo (o una versión nueva con el mismo nombre, o «Actualizar arquitectura») conserva la escala,
+      // las capas y las plantas
+      sigue = EPL && (EPL.sha === sha || EPL.nombre === nombre || act);
     EPL = {
       nombre,
       sha,
@@ -162,13 +167,20 @@ async function plAbrir(file) {
       tenue: sigue ? EPL.tenue : false,
       ...(sigue && EPL.sha === sha && EPL.borr ? { borr: EPL.borr } : {}),
       // El diseño eléctrico se conserva aunque cambie el archivo de arquitectura
-      dis: EPL && EPL.dis ? EPL.dis : dsNuevo()
+      dis: EPL && EPL.dis ? EPL.dis : dsNuevo(),
+      ...(sigue && EPL.mur ? { mur: EPL.mur } : {}),
+      // Versiones de la arquitectura usadas en el proyecto (la actual al final)
+      arqV: [
+        ...((EPL && EPL.arqV) || (EPL ? [{ n: EPL.nombre, sha: EPL.sha, f: "" }] : [])).filter(v => v.sha !== sha),
+        { n: nombre, sha, f: new Date().toISOString().slice(0, 16).replace("T", " ") }
+      ].slice(-20)
     };
     PLH.obj = -1;
     PL_ASEL.clear();
     plPreparar();
     if (!(sigue && plVistaGuardada())) plAjustar();
     edCambio();
+    if (act) return dpCompararArq(ant, m, antE);
     toast(
       sigue
         ? "Plano abierto: se conservan la escala, las capas ocultas y las plantas del proyecto"
@@ -754,6 +766,7 @@ function plSobreDibujar() {
     selc = PL_OSCURO ? "#5fb0ff" : "#1f6fd6";
   g.lineWidth = 1.5 * d;
   g.font = `600 ${11.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
+  if (typeof dpDibCambios === "function") dpDibCambios(g, d);
   // Plantas encuadradas
   EPL.plantas.forEach(p => {
     const [a, b] = plAPant(p.x0, p.y1),
@@ -3020,6 +3033,13 @@ $("editor").addEventListener("click", e => {
   if (!b || b.disabled) return;
   const a = b.dataset.pl;
   if (a === "abrir") return $("plArchivo").click();
+  if (a === "actarq") {
+    if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
+    PLH.actArq = true;
+    toast("Elija la versión nueva del plano de arquitectura (DXF): se compara con la actual y el diseño se conserva");
+    return $("plArchivo").click();
+  }
+  if (a === "cambios") return dpCambiosAbrir();
   if (a === "fondo") {
     const v = $("edFondo");
     v.hidden = !v.hidden;

@@ -4,6 +4,8 @@
    el resultado esperado; al final muestra cuáles pasaron. Las pruebas del cálculo son «npm test».
    Chrome lo abre herramientas/chrome.mjs. */
 import { join } from "node:path";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { abrirApp, esperar, raiz } from "./chrome.mjs";
 
 const { cdp, ev, J, cerrar } = await abrirApp();
@@ -1868,6 +1870,65 @@ prueba("Calcular con el diseño: tipo de circuito, luminarias, carga especial, a
   );
   await esperar(120);
   ok(!(await J("LAST.circ.some(q => q.plano)")), "sin el modo, los circuitos escritos");
+});
+
+prueba("Actualizar arquitectura: comparar versiones, mover el diseño y volver a medir las áreas", async ok => {
+  // Versiones del arquitecto: el muro interior (x = 6 m) movido a 6.5 m, y todo el dibujo desplazado 5 m y 3 m
+  const src = readFileSync(join(raiz, "pruebas", "plano-prueba.dxf"), "utf8"),
+    nl = src.includes("\r\n") ? "\r\n" : "\n",
+    L = src.split(nl),
+    dir = mkdtempSync(join(tmpdir(), "jmg-arq-")),
+    v1 = L.slice();
+  for (let i = 0; i + 2 < v1.length; i++)
+    if (v1[i].trim() === "LINE" && v1[i + 2].trim() === "MUROS") {
+      for (let j = i; j < i + 20; j++)
+        if (["10", "11"].includes(v1[j].trim()) && Math.abs(+v1[j + 1] - (OX + 6)) < 1e-6) v1[j + 1] = String(OX + 6.5);
+      break;
+    }
+  writeFileSync(join(dir, "plano-v2.dxf"), v1.join(nl));
+  const v2 = L.slice();
+  let en = false;
+  for (let i = 0; i + 1 < v2.length; i += 2) {
+    const c = v2[i].trim();
+    if (c === "2" && v2[i + 1].trim() === "ENTITIES") en = true;
+    else if (c === "0" && v2[i + 1].trim() === "ENDSEC") en = false;
+    if (en && /^1[0-8]$/.test(c)) v2[i + 1] = String(+v2[i + 1] + 5);
+    if (en && /^2[0-8]$/.test(c)) v2[i + 1] = String(+v2[i + 1] + 3);
+  }
+  writeFileSync(join(dir, "plano-v3.dxf"), v2.join(nl));
+  await ejemplo("uni");
+  await abrirPlano();
+  await ev(`(() => { dsAgregar({ t: "sim", k: "toma", x: ${OX} + 6.1, y: ${OY} + 3, r: 0, capa: "E-TOMACORRIENTES" });
+    dsAgregar({ t: "sim", k: "luz", x: ${OX} + 3, y: ${OY} + 5, r: 0, capa: "E-ALUMBRADO" });
+    dsAgregar({ t: "tub", pts: [${OX} + 5, ${OY} + 2, ${OX} + 7, ${OY} + 2], c: false, modo: "techo", capa: "E-TUBERIAS-TECHO" });
+    dpAreaClic([${OX} + 8, ${OY} + 6], false); plPedir(null); return 1; })()`);
+  const abrir = async f => {
+    await clic('#editor [data-pl="actarq"]');
+    const doc = await cdp("DOM.getDocument", {});
+    const q = await cdp("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: "#plArchivo" });
+    await cdp("DOM.setFileInputFiles", { nodeId: q.result.nodeId, files: [join(dir, f)] });
+    for (let i = 0; i < 100 && (await ev("$('cmpDlg').hidden")); i++) await esperar(100);
+  };
+  await abrir("plano-v2.dxf");
+  const c1 = await J(
+    "({ q: PL_CMP.quit.length, a: PL_CMP.agr.length, af: PL_CMP.afect.length, m: PL_CMP.areas.map(x => +x.m1.toFixed(2)), v: EPL.arqV.length })"
+  );
+  ok(c1.q === 1 && c1.a === 1, `una línea quitada y una agregada (${c1.q}, ${c1.a})`);
+  ok(c1.m[0] === 27.27, `área vuelta a medir: 31.27 → ${c1.m[0]} m² (el muro se movió 0.50 m)`);
+  ok(c1.af === 2, `tomacorriente junto al muro y tubería que lo cruza (${c1.af})`);
+  ok(c1.v === 2, "dos versiones de la arquitectura en el historial");
+  await ev("dpCambiosCerrar(); 1");
+  const x0 = await J("dsD().els.find(e => e.k === 'luz').x");
+  await abrir("plano-v3.dxf");
+  const c2 = await J("({ dx: PL_CMP.dx, dy: PL_CMP.dy, m: PL_CMP.areas.map(x => +x.m1.toFixed(2)) })");
+  ok(c2.dx === 5 && c2.dy === 3, `dibujo desplazado detectado (${c2.dx}, ${c2.dy})`);
+  ok(Math.abs((await J("dsD().els.find(e => e.k === 'luz').x")) - x0 - 5) < 1e-6, "el diseño se movió con el dibujo");
+  ok(c2.m[0] === 31.27, `área de nuevo con el muro en su lugar (${c2.m[0]} m²)`);
+  await ev("dpCambiosCerrar(); 1");
+  await clic('[data-ed="cancelar"]');
+  await ev(
+    "document.querySelector('.welcome:not([hidden]) .vw-btn.def, .welcome:not([hidden]) .btn:not(.sec)')?.click(); 1"
+  );
 });
 
 // Ejecución

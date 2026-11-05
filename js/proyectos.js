@@ -603,6 +603,15 @@ function planoValido(v) {
           }))
       : [],
     tenue: v.tenue === true,
+    // Versiones de la arquitectura usadas (nombre, huella y fecha)
+    ...(Array.isArray(v.arqV) && v.arqV.length
+      ? {
+          arqV: v.arqV
+            .filter(x => x && typeof x.sha === "string" && /^[0-9a-f]{40}$/.test(x.sha))
+            .slice(-20)
+            .map(x => ({ n: txt(x.n, 120), sha: x.sha, f: txt(x.f, 20) }))
+        }
+      : {}),
     // Capas de la arquitectura que cierran los ambientes (detección de áreas); sin ellas, por su nombre
     ...(Array.isArray(v.mur) && v.mur.length
       ? {
@@ -748,6 +757,7 @@ function disValido(v) {
                 ar: {
                   tp: ["tech", "ext", "sot", "libre", "aulas", "no"].includes(e.ar.tp) ? e.ar.tp : "tech",
                   n: txt(e.ar.n, 60),
+                  ...(Array.isArray(e.ar.p) && e.ar.p.length === 2 && e.ar.p.every(n) ? { p: e.ar.p.slice() } : {}),
                   // Edificio: tipo de departamento del área
                   ...(Number.isInteger(e.ar.dep) && e.ar.dep >= 0 && e.ar.dep < 100 ? { dep: e.ar.dep } : {})
                 }

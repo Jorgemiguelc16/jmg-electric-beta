@@ -3066,6 +3066,7 @@ function dsPresionar(id, p, suma) {
   plSobreDibujar();
 }
 function dsTrasladar(el, dx, dy) {
+  if (el.ar && el.ar.p) el.ar.p = [el.ar.p[0] + dx, el.ar.p[1] + dy];
   if (el.pts) el.pts = el.pts.map((v, i) => v + (i % 2 ? dy : dx));
   else if (el.a) {
     el.a = [el.a[0] + dx, el.a[1] + dy];
