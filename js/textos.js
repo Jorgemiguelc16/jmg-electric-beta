@@ -158,6 +158,10 @@ const FAQ = [
 ];
 const NOVEDADES = [
   [
+    "v3.0",
+    "Editor de diseño: el proyecto se diseña sobre el plano de arquitectura en DXF (símbolos de la Norma DGE, tableros con sus salidas, tuberías por techo, pared o piso, montantes, leyenda, cuadro de circuitos, láminas PDF y DXF del diseño) y se calcula con lo dibujado. Con «Calcular con el diseño», los circuitos son los del plano, con su carga conectada y la longitud hasta la salida más alejada por las tuberías y los tramos verticales (Regla 050-102); el agrupamiento sale de los circuitos de cada tubería (Tabla 5C); las áreas se marcan en el plano con un clic (dimensiones interiores en vivienda, Regla 050-110, y exteriores en otros usos, Regla 050-210); los alimentadores, las cargas especiales y el conductor de tierra se miden en el plano; el edificio multifamiliar toma de cada tipo de departamento su alimentador desde el banco de medidores, sus circuitos y su área. Tipos de luminaria con biblioteca, medidor trifásico y banco de medidores, escribir en el plano los conductores y diámetros del cálculo, y «Actualizar arquitectura» para la versión nueva del arquitecto sin perder el diseño. La memoria y el expediente explican el origen de los datos. Los proyectos sin plano se calculan igual que antes."
+  ],
+  [
     "v2.9.9",
     "Por dentro, la plataforma está ordenada para seguir creciendo: el motor de cálculo, la memoria en Excel, los planos y los estilos están divididos por tema en archivos más pequeños, y cada parte tiene pruebas automáticas que comprueban que el cálculo, cada plano, cada hoja del Excel y cada pantalla quedan iguales. El cálculo, los planos y la memoria no cambian."
   ],

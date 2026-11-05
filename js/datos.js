@@ -326,6 +326,9 @@ const HLP = {
   bmFilas: "Filas de cajas de medidores. Cada fila tiene un largo D = número de conexiones × ancho de caja.",
   bmDist: "Distancia mínima de la cajuela a las instalaciones de gas, agua y desagüe, según la concesionaria.",
   hTecho: "Altura del piso terminado (NPT) al fondo de la losa, según la arquitectura. Ahí va el centro de luz.",
+  hEnt: "Altura de piso terminado a piso terminado (techo más la losa). Con el diseño, cada montante suma esta altura por cada piso que atraviesa (criterio).",
+  calPlano:
+    "Con el diseño, los tableros dibujados en el plano dan sus circuitos, la carga conectada y la longitud hasta la salida más alejada (Regla 050-102); las áreas, las cargas especiales y los alimentadores también salen del plano. Los tableros que no están dibujados se calculan con los datos escritos.",
   hBraq: "Criterio del proyectista (valor usual 2.00 m). También se usa para la luminaria de emergencia.",
   hTab: "Hasta el borde superior del tablero. Criterio del proyectista (valor usual 1.80 m): que se opere de pie sin obstáculos.",
   hTerma: "Salida para terma o ducha eléctrica. Criterio del proyectista (valor usual 1.50 m), según el equipo.",

@@ -14,7 +14,7 @@ servidor propio ni instalación. Se publica en GitHub Pages; el acceso con cuent
 | Apariencia (colores, tamaños, diseño) | `css/` (10 archivos) |
 | Lógica, cálculo y planos | `js/` (56 archivos) |
 | Imágenes de la plataforma | `img/`, `logo.png`, `foto.png`, `og.png` |
-| Manual de usuario y referencia técnica | `manual/manual.html` → `manual/JMG-ELECTRIC-Manual-v2.1.pdf` |
+| Manual de usuario y referencia técnica | `manual/manual.html` → `manual/JMG-ELECTRIC-Manual-v3.0.pdf` |
 | Pruebas automáticas: casos, referencia del cálculo y huellas de los planos | `pruebas/` |
 | Herramientas de desarrollo | `herramientas/`, `package.json` |
 
@@ -33,6 +33,7 @@ está al final de `index.html` y es este:
 | 5a | `calculo-conductores.js` | Interruptor, sección, tubo, conductor de protección, alimentadores y circuitos |
 | 5b | `calculo-demanda.js` | Máxima demanda (Reglas 050-200 a 050-210) y salidas |
 | 5c | `calculo-tierra-fases.js` | Puesta a tierra, cortocircuito y balance de fases |
+| 5c′ | `calculo-plano.js` | `planoCalc()`: lee el diseño del plano (circuitos, salidas, recorridos hasta la salida más alejada, áreas, alimentadores) para «Calcular con el diseño»; `planoFuente()`: origen de los datos para la memoria |
 | 5d | `calculo-vivienda.js` | `calcUni()`: vivienda y otros usos |
 | 5e | `calculo-edificio.js` | `calcMulti()`: edificio multifamiliar |
 | 5f | `verificaciones.js` | Alertas y recomendaciones del resultado |
