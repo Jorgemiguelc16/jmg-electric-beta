@@ -1,6 +1,15 @@
 /* TEXTOS INFORMATIVOS
    Alcance, normas aplicadas, criterios, glosario, preguntas frecuentes, novedades por versión y
    documentos del expediente. Solo texto; lo muestran sitio.js, el manual y el expediente. */
+const ALCANCE_DIS = [
+  "Plano de arquitectura en DXF: escala, plantas y capas de muros; la arquitectura no se modifica",
+  "Símbolos de la Norma DGE (R.M. N.° 091-2002-EM/VME), tableros con sus circuitos y tipos de luminaria",
+  "Tuberías por techo, pared o piso, montantes y alimentadores con su recorrido real",
+  "Áreas de los ambientes desde el plano (Regla 050-110 en vivienda, 050-210 en otros usos)",
+  "Caída de tensión con la longitud real hasta la salida más alejada y agrupamiento por tubería (Tabla 5C)",
+  "Revisión del diseño, versiones y actualización de la arquitectura sin perder el trabajo",
+  "Láminas de planta eléctrica en PDF y DXF, con leyenda y cuadro de circuitos"
+];
 const ALCANCE = [
   "Máxima demanda · Reglas 050-200 y 050-202",
   "Otros usos · Regla 050-210 y Tabla 14; escuelas, hospitales y hoteles (050-204 a 050-208)",
@@ -74,6 +83,12 @@ const NORMAS = [
     "Contenido del expediente y verificaciones del modo multifamiliar."
   ],
   [
+    "R.M. N.° 091-2002-EM/VME",
+    "Norma DGE «Símbolos gráficos en electricidad»",
+    "Símbolos normalizados para los planos de instalaciones eléctricas: tableros, salidas, interruptores, tomacorrientes, medidores, puesta a tierra y canalizaciones.",
+    "Símbolos del editor de diseño, de la leyenda y de las láminas de planta eléctrica y del unifilar."
+  ],
+  [
     "Norma DGE (2004)",
     "Conexiones eléctricas en BT en zonas de concesión",
     "Sistemas 220 V y 380/220 V, tipos de conexión, diferenciales de 30 mA y poder de corte de los interruptores.",
@@ -124,7 +139,20 @@ const GLOSARIO = [
     "Puesta a tierra: electrodo y conductores que conectan la instalación a tierra; resistencia máxima 25 Ω (Regla 060-712)."
   ],
   ["TG · TD · TSG", "Tablero general, tablero de departamento y tablero de servicios generales."],
-  ["Metrado", "Cuantificación de materiales por partidas, base para el presupuesto de la obra."]
+  ["Metrado", "Cuantificación de materiales por partidas, base para el presupuesto de la obra."],
+  [
+    "DXF",
+    "Formato de intercambio de dibujos de AutoCAD: el plano de arquitectura se abre en DXF y las láminas se exportan en DXF."
+  ],
+  [
+    "Símbolo DGE",
+    "Símbolo gráfico de la Norma DGE (R.M. N.° 091-2002-EM/VME) con que se representa cada salida, tablero o equipo en los planos."
+  ],
+  [
+    "Montante",
+    "Tramo vertical de tuberías que une las plantas de una edificación; su longitud sale de la altura de entrepiso."
+  ],
+  ["Lámina", "Hoja del plano lista para imprimir, con su escala, rótulo, leyenda y cuadro de circuitos."]
 ];
 const FAQ = [
   [
@@ -136,12 +164,16 @@ const FAQ = [
     "Porque el desbalance supera el 10 %, criterio de diseño recomendado. Si el mensaje indica que es el mínimo alcanzable, ningún reparto de las cargas lo mejora: divida el circuito más grande o use una carga trifásica."
   ],
   [
+    "¿Puedo diseñar sobre el plano del arquitecto?",
+    "Sí. En la pestaña Diseño, «Editor de diseño» abre el plano de arquitectura en DXF. Se dibujan los tableros, las salidas con los símbolos de la Norma DGE, las tuberías y las áreas; con «Calcular con el diseño», el cálculo toma del plano los circuitos, las longitudes reales y las áreas. La arquitectura no se edita: si el arquitecto entrega una versión nueva, «Actualizar arquitectura» la compara con la anterior y conserva el diseño."
+  ],
+  [
     "¿Qué valor de Icc uso si no lo conozco?",
     "Solicítelo a la concesionaria (Norma DGE, 110.F). Mientras tanto, 10 kA es un valor conservador para zonas urbanas."
   ],
   [
     "¿El metrado es exacto?",
-    "Las protecciones, tableros, cajas y aparatos salen del cálculo. Las longitudes de conductores y tubos son referenciales y deben verificarse con los planos de distribución."
+    "Las protecciones, tableros, cajas y aparatos salen del cálculo. Con «Calcular con el diseño», las longitudes de conductores y tubos de cada circuito salen de las tuberías dibujadas en el plano, con sus tramos verticales; sin diseño se estiman con la distancia a la salida más alejada y deben verificarse con los planos de distribución."
   ],
   [
     "¿Dónde se guardan mis proyectos?",
@@ -157,6 +189,10 @@ const FAQ = [
   ]
 ];
 const NOVEDADES = [
+  [
+    "v3.0.1",
+    "La plataforma se presenta como lo que hoy es: diseño y cálculo. Título «Diseño y Cálculo de Instalaciones Eléctricas Interiores»; Acerca de, Cómo funciona, la bienvenida, la guía y el manual explican el trabajo sobre el plano de arquitectura; el alcance se divide en diseño y cálculo; el expediente muestra también las láminas de planta eléctrica y los detalles; la Norma DGE de símbolos gráficos (R.M. N.° 091-2002-EM/VME) figura en Normas aplicadas; acceso rápido «Editor de diseño» en el inicio y nueva pregunta frecuente sobre el diseño."
+  ],
   [
     "v3.0",
     "Editor de diseño: el proyecto se diseña sobre el plano de arquitectura en DXF (símbolos de la Norma DGE, tableros con sus salidas, tuberías por techo, pared o piso, montantes, leyenda, cuadro de circuitos, láminas PDF y DXF del diseño) y se calcula con lo dibujado. Con «Calcular con el diseño», los circuitos son los del plano, con su carga conectada y la longitud hasta la salida más alejada por las tuberías y los tramos verticales (Regla 050-102); el agrupamiento sale de los circuitos de cada tubería (Tabla 5C); las áreas se marcan en el plano con un clic (dimensiones interiores en vivienda, Regla 050-110, y exteriores en otros usos, Regla 050-210); los alimentadores, las cargas especiales y el conductor de tierra se miden en el plano; el edificio multifamiliar toma de cada tipo de departamento su alimentador desde el banco de medidores, sus circuitos y su área. Tipos de luminaria con biblioteca, medidor trifásico y banco de medidores, escribir en el plano los conductores y diámetros del cálculo, y «Actualizar arquitectura» para la versión nueva del arquitecto sin perder el diseño. La memoria y el expediente explican el origen de los datos. Los proyectos sin plano se calculan igual que antes."

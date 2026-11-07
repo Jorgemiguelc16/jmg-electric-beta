@@ -281,6 +281,18 @@ nav.tabs {
   align-items: flex-start;
   font-size: 13px;
 }
+.scope li.sc-t {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.scope li.sc-t:first-child {
+  margin-top: 0;
+}
 .scope svg {
   flex: none;
   width: 18px;
@@ -955,8 +967,27 @@ dl.spec dd {
   padding: 16px 18px;
   border-right: 1px solid var(--line2);
 }
-.dv:last-child {
+.dv:last-child,
+.dv:nth-child(3n) {
   border-right: 0;
+}
+.dv:nth-child(n + 4) {
+  border-top: 1px solid var(--line2);
+}
+@media (max-width: 760px) {
+  .dv {
+    border-right: 0;
+  }
+  .dv + .dv {
+    border-top: 1px solid var(--line2);
+  }
+}
+.how-nota {
+  margin: 0;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--line2);
+  font-size: 12.5px;
+  color: var(--muted);
 }
 .dv svg {
   width: 28px;

@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>JMG - ELECTRIC</title>
-<meta name="description" content="Plataforma gratuita para calcular instalaciones eléctricas interiores de viviendas, edificios multifamiliares, oficinas, comercios, escuelas, hospitales y hoteles según el CNE-Utilización, RNE EM.010 y Norma DGE: máxima demanda, conductores, protecciones, unifilar, metrado y memoria en Excel.">
+<meta name="description" content="Plataforma para diseñar y calcular instalaciones eléctricas interiores de viviendas, edificios multifamiliares, oficinas, comercios, escuelas, hospitales y hoteles según el CNE-Utilización, RNE EM.010 y Norma DGE: diseño sobre el plano de arquitectura (DXF) con símbolos DGE, máxima demanda, conductores, protecciones, láminas de planta eléctrica, unifilar, metrado y memoria en Excel.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="JMG - ELECTRIC">
-<meta property="og:title" content="JMG - ELECTRIC · Cálculo y dimensionamiento de instalaciones eléctricas interiores">
-<meta property="og:description" content="Máxima demanda, conductores, protecciones, diagrama unifilar, metrado y memoria de cálculo en Excel según el CNE-Utilización, RNE EM.010 y Norma DGE.">
+<meta property="og:title" content="JMG - ELECTRIC · Diseño y cálculo de instalaciones eléctricas interiores">
+<meta property="og:description" content="Diseño sobre el plano de arquitectura con símbolos DGE y cálculo con las longitudes reales: máxima demanda, conductores, protecciones, láminas de planta eléctrica, diagrama unifilar, metrado y memoria de cálculo en Excel según el CNE-Utilización, RNE EM.010 y Norma DGE.">
 <meta property="og:url" content="https://jorgemiguelc16.github.io/jmg-electric/">
 <meta property="og:image" content="https://jorgemiguelc16.github.io/jmg-electric/og.png">
 <meta property="og:image:width" content="1200">
@@ -20,16 +20,16 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,500&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script>/* Tema antes de dibujar la página: claro o gris (se elige en la pestaña Ajustes) */(function(){var t="claro";try{t=localStorage.getItem("jmg-electric-tema")||"claro"}catch(e){}if(t==="oscuro")t="gris";if(t!=="gris")t="claro";var h=document.documentElement;h.setAttribute("data-theme",t==="gris"?"dark":"light");h.setAttribute("data-tema",t);h.setAttribute("data-paleta","grafito")})();</script>
-<link rel="stylesheet" href="css/sitio.css?v=3.0.0">
-<link rel="stylesheet" href="css/aplicacion.css?v=3.0.0">
-<link rel="stylesheet" href="css/expediente.css?v=3.0.0">
-<link rel="stylesheet" href="css/temas.css?v=3.0.0">
-<link rel="stylesheet" href="css/paletas.css?v=3.0.0">
-<link rel="stylesheet" href="css/barra-centro.css?v=3.0.0">
-<link rel="stylesheet" href="css/acceso.css?v=3.0.0">
-<link rel="stylesheet" href="css/ventanas.css?v=3.0.0">
-<link rel="stylesheet" href="css/fichas.css?v=3.0.0">
-<link rel="stylesheet" href="css/plano.css?v=3.0.0">
+<link rel="stylesheet" href="css/sitio.css?v=3.0.1">
+<link rel="stylesheet" href="css/aplicacion.css?v=3.0.1">
+<link rel="stylesheet" href="css/expediente.css?v=3.0.1">
+<link rel="stylesheet" href="css/temas.css?v=3.0.1">
+<link rel="stylesheet" href="css/paletas.css?v=3.0.1">
+<link rel="stylesheet" href="css/barra-centro.css?v=3.0.1">
+<link rel="stylesheet" href="css/acceso.css?v=3.0.1">
+<link rel="stylesheet" href="css/ventanas.css?v=3.0.1">
+<link rel="stylesheet" href="css/fichas.css?v=3.0.1">
+<link rel="stylesheet" href="css/plano.css?v=3.0.1">
 </head>
 <body class="sin-acceso">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="jmg-letras" fill="#ffc800"><path d="M159 623H307V733H445V285H594V872H159Z"/><path d="M650 285H824L903 438L826 575L798 521V872H650Z"/><path d="M1020 287L826 631H920L860 870L1054 551H955Z"/><path d="M1048 285H1223V872H1075V521H993Z"/><path d="M1280 285H1761V423H1429V733H1611V656H1508V519H1761V872H1280Z"/></g><g id="jmg-logo"><use href="#jmg-letras"/><text x="159" y="1050" font-family="'Chakra Petch','Arial Black',sans-serif" font-weight="700" font-size="172" fill="#ffc800" textLength="1602" lengthAdjust="spacing">PROJECTS &amp; ENERGY</text></g></defs></svg>
@@ -65,7 +65,7 @@
 <div class="page">
   <header class="jtop">
     <button type="button" class="jtop-marca" data-go="inicio" title="Ir al inicio"><svg viewBox="140 265 1640 625" role="img" aria-label="JMG"><use href="#jmg-letras"/></svg><span class="sep"></span><span class="nom"><b>JMG - ELECTRIC</b><small>INGENIERÍA ELÉCTRICA</small></span></button>
-    <p class="jtop-tit"><b>Cálculo y Dimensionamiento de Instalaciones Eléctricas Interiores</b><small>Viviendas, edificios, oficinas, comercios, escuelas, hospitales y hoteles</small></p>
+    <p class="jtop-tit"><b>Diseño y Cálculo de Instalaciones Eléctricas Interiores</b><small>Viviendas, edificios, oficinas, comercios, escuelas, hospitales y hoteles</small></p>
     <div class="jtop-der">
       <span class="firma">JMG PROJECTS &amp; ENERGY</span><span class="vl"></span>
       <button class="jib" type="button" data-go="novedades" title="Novedades de la versión" aria-label="Novedades"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span class="dot"></span></button>
@@ -98,7 +98,7 @@
     <!-- ================= INICIO ================= -->
     <section id="tab-inicio" class="tabpanel centro" role="tabpanel">
       <div class="c-hero">
-        <div class="t"><h1>Centro de ingeniería</h1><p>Instalaciones eléctricas interiores · CNE-Utilización, RNE EM.010 y Norma DGE</p></div>
+        <div class="t"><h1>Centro de ingeniería</h1><p>Diseño y cálculo de instalaciones eléctricas interiores · CNE-Utilización, RNE EM.010 y Norma DGE</p></div>
         <div class="c-acts"><button class="linkbtn rt-cont" type="button" data-start id="hdrCont" hidden>Continuar: <b></b> →</button><button class="btn c-nuevo" type="button" data-new="uni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Nuevo proyecto</button></div>
       </div>
       <div class="c-stats" id="cStats"></div>
@@ -116,6 +116,7 @@
         <div class="c-col">
           <section><div class="c-sh"><h2>Accesos rápidos</h2></div>
             <div class="c-qa">
+              <button type="button" data-c="diseno"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"/><path d="M3 10h8v11M11 14h10"/><circle cx="16" cy="8" r="1.6"/><path d="M7 15.5h1.5M16 17.5v1.5"/></svg><span><b>Editor de diseño</b><small>Diseñe sobre el plano de arquitectura</small></span><i>→</i></button>
               <button type="button" data-herr="h1_I"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 3 10 2-5h7"/></svg><span><b>Caída de tensión</b><small>Límites de la Regla 050-102</small></span><i>→</i></button>
               <button type="button" data-herr="h2_I"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg><span><b>Conductor e interruptor</b><small>Tabla 2 con factores 5A y 5C</small></span><i>→</i></button>
               <button type="button" data-herr="h4_n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10M5 13h14M8 16.5h8M10.5 20h3"/></svg><span><b>Puesta a tierra</b><small>Reglas 060-702 y 060-712</small></span><i>→</i></button>
@@ -134,12 +135,13 @@
 
     <!-- ================= ACERCA DE ================= -->
     <section id="tab-acerca" class="tabpanel" role="tabpanel" hidden>
-      <div class="panel-head"><h2>Acerca de JMG - ELECTRIC</h2><p>Propósito de la plataforma, su creador y cómo funciona.</p></div>
+      <div class="panel-head"><h2>Acerca de JMG - ELECTRIC</h2><p>Propósito de la plataforma, su creador y cómo se diseña y calcula un proyecto.</p></div>
       <div class="home home-top">
         <div class="stack"><div class="card intro">
             <blockquote class="quote">“El desarrollo progresivo del hombre depende vitalmente de la invención.”<cite>Nikola Tesla · <i>My Inventions</i>, Electrical Experimenter, mayo de 1919</cite></blockquote>
-            <p>Un conductor subdimensionado, una protección mal coordinada o una caída de tensión no verificada son defectos que no se advierten al energizar la instalación, pero que con el tiempo provocan sobrecalentamiento, deterioro del aislamiento, disparos intempestivos y, en el peor de los casos, incendios de origen eléctrico. JMG - ELECTRIC nace del análisis de cómo se elaboran los cálculos de instalaciones interiores: procedimientos manuales, repetitivos y dispersos en hojas de cálculo sin control, donde un solo error se arrastra a todo el proyecto. La plataforma sistematiza ese proceso con las reglas del Código Nacional de Electricidad, de modo que cada valor del expediente sea verificable y trazable a la norma que lo sustenta.</p>
-            <p class="sello">Actualizado a CNE-Utilización (RM 037-2006-MEM/DM) · RNE EM.010 (2019) · Norma DGE de conexiones en BT</p>
+            <p>Un conductor subdimensionado, una protección mal coordinada o una caída de tensión no verificada son defectos que no se advierten al energizar la instalación, pero que con el tiempo provocan sobrecalentamiento, deterioro del aislamiento, disparos intempestivos y, en el peor de los casos, incendios de origen eléctrico. JMG - ELECTRIC nace del análisis de cómo se elaboran los proyectos de instalaciones interiores: el diseño se dibuja en un programa, los cálculos se hacen en hojas de cálculo sin control y las longitudes se estiman a mano, de modo que un solo error se arrastra a todo el proyecto.</p>
+            <p>La plataforma une el <b>diseño</b> y el <b>cálculo</b> en un mismo lugar. Sobre el plano de arquitectura (DXF) se dibuja la instalación con los símbolos de la Norma DGE: tableros, salidas, tuberías, montantes y áreas. El cálculo toma del plano los circuitos, las longitudes reales hasta la salida más alejada y las áreas, y lo verifica todo con las reglas del Código Nacional de Electricidad, de modo que cada valor del expediente y de los planos sea verificable y trazable a la norma que lo sustenta.</p>
+            <p class="sello">Actualizado a CNE-Utilización (RM 037-2006-MEM/DM) · RNE EM.010 (2019) · Norma DGE de conexiones en BT · Norma DGE de símbolos gráficos (RM 091-2002-EM/VME)</p>
         </div></div>
         <div class="stack">
           <div class="card">
@@ -161,16 +163,21 @@
         </div>
       </div>
       <div class="card how"><h2>Cómo funciona</h2>
-        <div class="steps">
-          <div class="step"><span class="n">1</span><h3>Ingrese los datos</h3><p>Sistema de suministro, uso de la edificación, áreas, salidas y cargas especiales de la vivienda, del local o de cada tipo de departamento.</p></div>
-          <div class="step"><span class="n">2</span><h3>Revise los resultados</h3><p>Se calculan al instante y se verifican contra el código: CONFORME, OBSERVACIÓN o REVISAR.</p></div>
-          <div class="step"><span class="n">3</span><h3>Descargue el expediente</h3><p>Memoria de cálculo en Excel, resultados en PDF y diagrama unifilar en PNG, SVG o DXF.</p></div>
+        <div class="steps steps4">
+          <div class="step"><span class="n">1</span><h3>Cargue el plano</h3><p>Abra el plano de arquitectura en DXF: la plataforma reconoce su escala, sus plantas y sus capas de muros. La arquitectura queda como referencia y no se modifica.</p></div>
+          <div class="step"><span class="n">2</span><h3>Diseñe la instalación</h3><p>Coloque los símbolos de la Norma DGE, los tableros con sus circuitos, las tuberías por techo, pared o piso, los montantes y las áreas de cada ambiente.</p></div>
+          <div class="step"><span class="n">3</span><h3>Calcule y verifique</h3><p>El cálculo toma del diseño los circuitos, las longitudes reales y las áreas, y lo verifica al instante contra el código: CONFORME, OBSERVACIÓN o REVISAR.</p></div>
+          <div class="step"><span class="n">4</span><h3>Descargue el proyecto</h3><p>Láminas de planta eléctrica en PDF y DXF, memoria de cálculo en Excel, expediente técnico en PDF y diagrama unifilar.</p></div>
         </div>
+        <p class="how-nota">También puede calcular sin plano, ingresando las áreas, salidas, cargas y longitudes en las ventanas de datos. Si el arquitecto cambia el plano, «Actualizar arquitectura» compara las versiones y conserva su diseño.</p>
         <p class="how-sub">El expediente incluye</p>
         <div class="deliv">
               <div class="dv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="3" width="18" height="22"/><path d="M9 9h10M9 13h10M9 17h6"/></svg><h3>Memoria de cálculo</h3><p>Libro Excel con fórmulas vinculadas: parámetros, máxima demanda, alimentadores, circuitos, puesta a tierra y verificaciones.</p></div>
               <div class="dv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="22" height="18"/><path d="M3 11h22M3 17h22M11 5v18M18 5v18"/></svg><h3>Cuadro de cargas</h3><p>Circuitos con conductor, interruptor, diferencial, caída de tensión y balance de fases.</p></div>
               <div class="dv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2v6M5 12h18M8 12v6M14 12v6M20 12v6M14 8l-3 4"/><circle cx="14" cy="22" r="3"/></svg><h3>Diagrama unifilar</h3><p>Esquema de distribución y protección con cuadro de cargas y rótulo, en SVG, PNG, DXF (AutoCAD) y Excel.</p></div>
+              <div class="dv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="22" height="22"/><path d="M3 12h10v13M13 17h12"/><circle cx="19" cy="9" r="2"/><path d="M8 19h2M19 20v2"/></svg><h3>Planos de planta eléctrica</h3><p>Láminas del diseño sobre la arquitectura, con leyenda de símbolos DGE, cuadro de circuitos y rótulo, en PDF y DXF.</p></div>
+              <div class="dv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 24h20M4 17h20M4 10h20" stroke-dasharray="2 2"/><path d="M9 24V6M19 24v-9"/><rect x="7" y="4" width="4" height="3"/><rect x="17" y="12" width="4" height="3"/></svg><h3>Detalles y alturas</h3><p>Diagrama de alturas de montaje, detalle de tableros, leyenda y detalle del pozo de puesta a tierra.</p></div>
+              <div class="dv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3h11l5 5v17H7z"/><path d="M18 3v5h5M11 13h8M11 17h8M11 21h5"/></svg><h3>Expediente técnico y metrado</h3><p>Expediente en PDF con memoria descriptiva, especificaciones técnicas, metrado referencial y el origen de cada dato.</p></div>
             </div>
       </div>
       <div class="stack">
@@ -187,7 +194,7 @@
     <section id="tab-proy" class="tabpanel" role="tabpanel" hidden>
       <div class="panel-head"><h2>Proyectos</h2><p>Proyectos guardados en este navegador. Cada proyecto se guarda automáticamente cuando tiene nombre.</p></div>
       <div class="proj-g proj-top">
-        <div class="pbox"><h3>Nuevo proyecto</h3><p>Inicie un cálculo nuevo con valores de partida típicos.</p><div class="acts"><button class="btn" type="button" data-new="uni">Unifamiliar</button><button class="btn" type="button" data-new="multi">Multifamiliar</button><button class="btn" type="button" data-new="com">Comercial y otros usos</button></div></div>
+        <div class="pbox"><h3>Nuevo proyecto</h3><p>Inicie un proyecto nuevo con valores de partida típicos; luego puede diseñarlo sobre el plano de arquitectura.</p><div class="acts"><button class="btn" type="button" data-new="uni">Unifamiliar</button><button class="btn" type="button" data-new="multi">Multifamiliar</button><button class="btn" type="button" data-new="com">Comercial y otros usos</button></div></div>
         <div class="pbox"><h3>Abrir archivo</h3><p>Cargue un proyecto exportado anteriormente (archivo .json).</p><div class="acts"><button class="btn sec" type="button" data-open>Importar archivo</button></div></div>
         <div class="pbox"><h3>Ver un ejemplo</h3><p>Abra un proyecto de muestra ya calculado. No se guarda en la lista.</p><div class="acts"><button class="btn sec" type="button" data-ej="uni">Unifamiliar</button><button class="btn sec" type="button" data-ej="multi">Multifamiliar</button><button class="btn sec" type="button" data-ej="com">Oficina</button></div></div>
       </div>
@@ -240,17 +247,18 @@
 
     <!-- ================= GUÍA ================= -->
     <section id="tab-guia" class="tabpanel" role="tabpanel" hidden>
-      <div class="panel-head"><h2>Guía de uso</h2><p>Cómo realizar un cálculo, significado de los términos técnicos y respuestas a las consultas más frecuentes.</p></div>
-      <div class="card manual-card"><h2><span>Manual de usuario y referencia técnica</span><span class="ref">PDF · 41 páginas</span></h2>
-        <div class="body"><p>Guía completa de la aplicación con capturas de pantalla y, para ingenieros revisores, las normas, tablas y fórmulas que aplica el cálculo, los supuestos adoptados y casos de verificación.</p>
+      <div class="panel-head"><h2>Guía de uso</h2><p>Cómo diseñar y calcular un proyecto, significado de los términos técnicos y respuestas a las consultas más frecuentes.</p></div>
+      <div class="card manual-card"><h2><span>Manual de usuario y referencia técnica</span><span class="ref">PDF · 58 páginas</span></h2>
+        <div class="body"><p>Guía completa de la aplicación, con el editor de diseño y el cálculo, con capturas de pantalla y, para ingenieros revisores, las normas, tablas y fórmulas que aplica el cálculo, los supuestos adoptados y casos de verificación.</p>
           <div class="acts-row"><a class="btn" href="manual/JMG-ELECTRIC-Manual-v3.0.pdf" target="_blank" rel="noopener">Ver manual</a><a class="btn sec" href="manual/JMG-ELECTRIC-Manual-v3.0.pdf" download>Descargar PDF</a></div></div></div>
-      <div class="card"><h2>Cómo realizar un cálculo</h2>
+      <div class="card"><h2>Cómo realizar un proyecto</h2>
         <div class="steps steps4">
-          <div class="step"><span class="n">PASO 1</span><h3>Crear el proyecto</h3><p>En Proyectos, elija un proyecto nuevo: unifamiliar, multifamiliar o comercial y otros usos (oficinas, comercios, escuelas, hospitales, hoteles…), o pulse «Empezar cálculo» en Inicio, y escriba el nombre del proyecto: se guardará automáticamente.</p></div>
-          <div class="step"><span class="n">PASO 2</span><h3>Ingresar los datos</h3><p>Sistema de suministro, uso de la edificación, áreas, salidas (con luminarias de distintas potencias), cargas especiales y longitudes. En Parámetros revise el método de instalación, la temperatura y la Icc de la concesionaria.</p></div>
-          <div class="step"><span class="n">PASO 3</span><h3>Revisar los resultados</h3><p>Recorra las vistas: Resumen, Máxima demanda, Alimentadores, Cuadro de cargas, Balance, Unifilar, Metrado y Verificaciones. Los puntos rojos o ámbar indican observaciones.</p></div>
-          <div class="step"><span class="n">PASO 4</span><h3>Exportar</h3><p>«Memoria Excel» genera la memoria, los cálculos, el unifilar, el metrado y los anexos. «Expediente PDF» genera el expediente técnico completo en estilo formal o a color, y el diagrama se descarga en PNG, SVG o DXF.</p></div>
+          <div class="step"><span class="n">PASO 1</span><h3>Crear el proyecto</h3><p>En Inicio o en Proyectos, elija un proyecto nuevo: unifamiliar, multifamiliar o comercial y otros usos (oficinas, comercios, escuelas, hospitales, hoteles…) y escriba su nombre: se guardará automáticamente.</p></div>
+          <div class="step"><span class="n">PASO 2</span><h3>Diseñar sobre el plano</h3><p>En la pestaña Diseño, «Editor de diseño» abre el plano de arquitectura en DXF. Coloque los tableros, las salidas con los símbolos DGE, las tuberías y las áreas; con «Aplicar» el diseño pasa al proyecto y el cálculo toma de él los circuitos, las longitudes y las áreas.</p></div>
+          <div class="step"><span class="n">PASO 3</span><h3>Completar y revisar</h3><p>Complete en las ventanas de datos lo que el plano no da: sistema de suministro, cargas especiales y parámetros (método de instalación, temperatura, Icc de la concesionaria). Recorra las vistas de resultados: los puntos rojos o ámbar indican observaciones.</p></div>
+          <div class="step"><span class="n">PASO 4</span><h3>Exportar</h3><p>Las láminas de planta eléctrica se exportan en PDF y DXF desde el editor. «Memoria Excel» genera la memoria, los cálculos y el metrado; «Expediente PDF», el expediente técnico completo; el unifilar se descarga en PNG, SVG o DXF.</p></div>
         </div>
+        <p class="how-nota">Sin plano también se puede calcular: ingrese las áreas, las salidas, las cargas especiales y las longitudes en las ventanas de datos.</p>
       </div>
       <div class="two" style="margin-top:22px">
         <div class="card"><h2>Glosario</h2><div class="body"><dl class="gloss" id="glossList"></dl></div></div>
@@ -872,22 +880,22 @@
   <div class="wl-box" role="dialog" aria-modal="true" aria-labelledby="wlT">
     <button class="wl-x" type="button" data-wl="close" aria-label="Cerrar">×</button>
     <div class="wl-head"><span class="jmg-sello"><svg viewBox="140 265 1640 795" role="img" aria-label="JMG Projects &amp; Energy"><use href="#jmg-logo"/></svg></span><div><p class="wl-eyebrow">JMG Projects &amp; Energy</p><h2 id="wlT">Bienvenido a <span class="nw">JMG - ELECTRIC</span></h2></div></div>
-    <p class="wl-lead">Calcule la instalación eléctrica interior de viviendas, edificios multifamiliares, oficinas, comercios, escuelas, hospitales y hoteles conforme al CNE-Utilización, el RNE EM.010 y la Norma DGE.</p>
+    <p class="wl-lead">Diseñe y calcule la instalación eléctrica interior de viviendas, edificios multifamiliares, oficinas, comercios, escuelas, hospitales y hoteles conforme al CNE-Utilización, el RNE EM.010 y la Norma DGE.</p>
     <ul class="wl-list">
-      <li><b>1</b><span>Elija el tipo de edificación e ingrese sus datos: vivienda, local o cada tipo de departamento.</span></li>
-      <li><b>2</b><span>Revise los resultados, verificados al instante contra el código, y las recomendaciones de diseño.</span></li>
-      <li><b>3</b><span>Descargue la memoria en Excel, el PDF y el unifilar para AutoCAD.</span></li>
+      <li><b>1</b><span>Cree el proyecto y cargue el plano de arquitectura (DXF): vivienda, edificio o local.</span></li>
+      <li><b>2</b><span>Diseñe sobre el plano con los símbolos DGE: tableros, salidas, tuberías y áreas. El cálculo toma de él las longitudes reales y lo verifica al instante contra el código.</span></li>
+      <li><b>3</b><span>Descargue las láminas de planta eléctrica, la memoria en Excel, el expediente en PDF y el unifilar para AutoCAD.</span></li>
     </ul>
     <div class="wl-acts"><button class="btn" type="button" data-wl="ejemplo">Ver un ejemplo</button><button class="btn sec" type="button" data-wl="close">Empezar</button></div>
-    <p class="wl-note">Gratis · Versión beta · Sus proyectos se guardan solo en este navegador.</p>
+    <p class="wl-note"><span id="wlVer">Versión 3.0</span> · En validación con ingenieros · Sus proyectos se guardan solo en este navegador.</p>
   </div>
 </div>
 <div class="acceso" id="acceso" role="dialog" aria-modal="true" aria-labelledby="accT">
   <div class="acc-foto"><div class="acc-lema">
     <span class="acc-logo"><svg viewBox="140 265 1640 795" role="img" aria-label="JMG Projects &amp; Energy"><use href="#jmg-logo"/></svg></span>
-    <h2>Cálculo y Dimensionamiento de Instalaciones Eléctricas Interiores</h2>
+    <h2>Diseño y Cálculo de Instalaciones Eléctricas Interiores</h2>
     <p class="acc-usos">Viviendas unifamiliares, edificios multifamiliares, oficinas, comercios, escuelas, hospitales y hoteles</p>
-    <p class="acc-norma">Conforme al CNE-Utilización, el RNE EM.010 y la Norma DGE</p>
+    <p class="acc-norma">Diseño sobre el plano de arquitectura y cálculo conforme al CNE-Utilización, el RNE EM.010 y la Norma DGE</p>
   </div><small class="acc-frase">ENERGÍA QUE IMPULSA PROYECTOS</small></div>
   <div class="acc-panel"><div class="acc-box">
     <h1 id="accT">JMG - ELECTRIC<small>Una plataforma de JMG Projects &amp; Energy</small></h1>
@@ -938,65 +946,65 @@
     <p class="acc-pie">JMG Projects &amp; Energy · Los resultados son de referencia; la responsabilidad del diseño recae en el ingeniero colegiado que suscribe el expediente.</p>
   </div></div>
 </div>
-<script src="js/logo.js?v=3.0.0"></script>
-<script src="js/tablas-cne.js?v=3.0.0"></script>
-<script src="js/textos.js?v=3.0.0"></script>
-<script src="js/datos.js?v=3.0.0"></script>
-<script src="js/calculo.js?v=3.0.0"></script>
-<script src="js/calculo-conductores.js?v=3.0.0"></script>
-<script src="js/calculo-demanda.js?v=3.0.0"></script>
-<script src="js/calculo-tierra-fases.js?v=3.0.0"></script>
-<script src="js/calculo-plano.js?v=3.0.0"></script>
-<script src="js/calculo-vivienda.js?v=3.0.0"></script>
-<script src="js/calculo-edificio.js?v=3.0.0"></script>
-<script src="js/verificaciones.js?v=3.0.0"></script>
-<script src="js/resultados.js?v=3.0.0"></script>
-<script src="js/metrado.js?v=3.0.0"></script>
-<script src="js/dibujo.js?v=3.0.0"></script>
-<script src="js/unifilar.js?v=3.0.0"></script>
-<script src="js/rotulo.js?v=3.0.0"></script>
-<script src="js/exportar-planos.js?v=3.0.0"></script>
-<script src="js/simbolos.js?v=3.0.0"></script>
-<script src="js/alturas.js?v=3.0.0"></script>
-<script src="js/detalles.js?v=3.0.0"></script>
-<script src="js/tableros.js?v=3.0.0"></script>
-<script src="js/medidores.js?v=3.0.0"></script>
-<script src="js/tablerogeneral.js?v=3.0.0"></script>
-<script src="js/expediente.js?v=3.0.0"></script>
-<script src="js/interfaz.js?v=3.0.0"></script>
-<script src="js/excel.js?v=3.0.0"></script>
-<script src="js/excel-anexos.js?v=3.0.0"></script>
-<script src="js/excel-memoria.js?v=3.0.0"></script>
-<script src="js/excel-calculos.js?v=3.0.0"></script>
-<script src="js/excel-resumen.js?v=3.0.0"></script>
-<script src="js/excel-planos.js?v=3.0.0"></script>
-<script src="js/excel-metrado.js?v=3.0.0"></script>
-<script src="js/descargas.js?v=3.0.0"></script>
-<script src="js/sitio.js?v=3.0.0"></script>
-<script src="js/proyectos.js?v=3.0.0"></script>
-<script src="js/herramientas.js?v=3.0.0"></script>
-<script src="js/archivo.js?v=3.0.0"></script>
-<script src="js/app.js?v=3.0.0"></script>
-<script src="js/ventana.js?v=3.0.0"></script>
-<script src="js/conductores.js?v=3.0.0"></script>
-<script src="js/ficha.js?v=3.0.0"></script>
-<script src="js/ficha-tablero.js?v=3.0.0"></script>
-<script src="js/tabla-cargas.js?v=3.0.0"></script>
-<script src="js/parametros.js?v=3.0.0"></script>
-<script src="js/departamentos.js?v=3.0.0"></script>
-<script src="js/datos-proyecto.js?v=3.0.0"></script>
-<script src="js/panel.js?v=3.0.0"></script>
-<script src="js/menus-cinta.js?v=3.0.0"></script>
-<script src="js/dxf.js?v=3.0.0"></script>
-<script src="js/plano.js?v=3.0.0"></script>
-<script src="js/diseno.js?v=3.0.0"></script><script src="js/laminas.js?v=3.0.0"></script><script src="js/diseno-avanzado.js?v=3.0.0"></script>
-<script src="js/capas.js?v=3.0.0"></script>
-<script src="js/centro.js?v=3.0.0"></script>
-<script src="js/inicio.js?v=3.0.0"></script>
-<script src="js/tema.js?v=3.0.0"></script>
+<script src="js/logo.js?v=3.0.1"></script>
+<script src="js/tablas-cne.js?v=3.0.1"></script>
+<script src="js/textos.js?v=3.0.1"></script>
+<script src="js/datos.js?v=3.0.1"></script>
+<script src="js/calculo.js?v=3.0.1"></script>
+<script src="js/calculo-conductores.js?v=3.0.1"></script>
+<script src="js/calculo-demanda.js?v=3.0.1"></script>
+<script src="js/calculo-tierra-fases.js?v=3.0.1"></script>
+<script src="js/calculo-plano.js?v=3.0.1"></script>
+<script src="js/calculo-vivienda.js?v=3.0.1"></script>
+<script src="js/calculo-edificio.js?v=3.0.1"></script>
+<script src="js/verificaciones.js?v=3.0.1"></script>
+<script src="js/resultados.js?v=3.0.1"></script>
+<script src="js/metrado.js?v=3.0.1"></script>
+<script src="js/dibujo.js?v=3.0.1"></script>
+<script src="js/unifilar.js?v=3.0.1"></script>
+<script src="js/rotulo.js?v=3.0.1"></script>
+<script src="js/exportar-planos.js?v=3.0.1"></script>
+<script src="js/simbolos.js?v=3.0.1"></script>
+<script src="js/alturas.js?v=3.0.1"></script>
+<script src="js/detalles.js?v=3.0.1"></script>
+<script src="js/tableros.js?v=3.0.1"></script>
+<script src="js/medidores.js?v=3.0.1"></script>
+<script src="js/tablerogeneral.js?v=3.0.1"></script>
+<script src="js/expediente.js?v=3.0.1"></script>
+<script src="js/interfaz.js?v=3.0.1"></script>
+<script src="js/excel.js?v=3.0.1"></script>
+<script src="js/excel-anexos.js?v=3.0.1"></script>
+<script src="js/excel-memoria.js?v=3.0.1"></script>
+<script src="js/excel-calculos.js?v=3.0.1"></script>
+<script src="js/excel-resumen.js?v=3.0.1"></script>
+<script src="js/excel-planos.js?v=3.0.1"></script>
+<script src="js/excel-metrado.js?v=3.0.1"></script>
+<script src="js/descargas.js?v=3.0.1"></script>
+<script src="js/sitio.js?v=3.0.1"></script>
+<script src="js/proyectos.js?v=3.0.1"></script>
+<script src="js/herramientas.js?v=3.0.1"></script>
+<script src="js/archivo.js?v=3.0.1"></script>
+<script src="js/app.js?v=3.0.1"></script>
+<script src="js/ventana.js?v=3.0.1"></script>
+<script src="js/conductores.js?v=3.0.1"></script>
+<script src="js/ficha.js?v=3.0.1"></script>
+<script src="js/ficha-tablero.js?v=3.0.1"></script>
+<script src="js/tabla-cargas.js?v=3.0.1"></script>
+<script src="js/parametros.js?v=3.0.1"></script>
+<script src="js/departamentos.js?v=3.0.1"></script>
+<script src="js/datos-proyecto.js?v=3.0.1"></script>
+<script src="js/panel.js?v=3.0.1"></script>
+<script src="js/menus-cinta.js?v=3.0.1"></script>
+<script src="js/dxf.js?v=3.0.1"></script>
+<script src="js/plano.js?v=3.0.1"></script>
+<script src="js/diseno.js?v=3.0.1"></script><script src="js/laminas.js?v=3.0.1"></script><script src="js/diseno-avanzado.js?v=3.0.1"></script>
+<script src="js/capas.js?v=3.0.1"></script>
+<script src="js/centro.js?v=3.0.1"></script>
+<script src="js/inicio.js?v=3.0.1"></script>
+<script src="js/tema.js?v=3.0.1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="js/acceso.js?v=3.0.0"></script>
+<script src="js/acceso.js?v=3.0.1"></script>
 </body>
 </html>

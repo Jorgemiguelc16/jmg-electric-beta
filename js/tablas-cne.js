@@ -163,7 +163,7 @@ const RHO_CU = 0.0175,
   IMIN_UNI = 40,
   IMIN_DPTO = 25;
 const SQ3 = Math.sqrt(3),
-  VERSION = "v3.0";
+  VERSION = "v3.0.1";
 // Sitio de pruebas (jorgemiguelc16.github.io/jmg-electric-beta/): el mismo código que el oficial, pero guarda sus
 // proyectos aparte (los dos sitios comparten el almacenamiento del navegador porque están en el mismo dominio)
 const BETA = typeof location !== "undefined" && location.pathname.includes("/jmg-electric-beta/");

@@ -20,7 +20,7 @@
 <script src="casos.js"></script>
 <style>
   @page{size:A4;margin:18mm 16mm 16mm;
-    @top-left{content:"JMG - ELECTRIC v3.0 · Manual de usuario y referencia técnica";font:7.5pt Arial,sans-serif;color:#333}
+    @top-left{content:"JMG - ELECTRIC v3.0.1 · Manual de usuario y referencia técnica";font:7.5pt Arial,sans-serif;color:#333}
     @top-right{content:"JMG Projects & Energy";font:7.5pt Arial,sans-serif;color:#333}
     @bottom-right{content:"Página " counter(page) " de " counter(pages);font:7.5pt Arial,sans-serif;color:#333}}
   @page:first{@top-left{content:none}@top-right{content:none}@bottom-right{content:none}}
@@ -104,14 +104,15 @@ const fecha=new Date().toLocaleDateString("es-PE",{day:"2-digit",month:"long",ye
 let B="";
 
 /* ================= PARTE I · MANUAL DE USUARIO ================= */
-B+=parte("I","Manual de usuario","Cómo crear un proyecto, ingresar los datos de la vivienda o del edificio, revisar los resultados y obtener la memoria de cálculo en Excel, el expediente técnico en PDF y el diagrama unifilar para AutoCAD.");
+B+=parte("I","Manual de usuario","Cómo crear un proyecto, diseñarlo sobre el plano de arquitectura, completar los datos de la vivienda o del edificio, revisar los resultados y obtener las láminas de planta eléctrica, la memoria de cálculo en Excel, el expediente técnico en PDF y el diagrama unifilar para AutoCAD.");
 
 B+=cap("Introducción");
 B+=sub("Qué es JMG - ELECTRIC");
-B+=`<p>JMG - ELECTRIC es una aplicación web para el cálculo de instalaciones eléctricas interiores de <b>viviendas unifamiliares</b> (de uno o varios pisos), <b>edificios multifamiliares</b> y <b>otros usos</b>: oficinas, locales comerciales y demás actividades de la Tabla 14, escuelas, hospitales y hoteles, conforme al Código Nacional de Electricidad – Utilización (CNE-U), al Reglamento Nacional de Edificaciones, Norma EM.010, y a la Norma DGE de conexiones en baja tensión. Funciona en el navegador, sin instalación, en <b>jorgemiguelc16.github.io/jmg-electric</b>.</p>
-<p>A partir de los datos del proyecto calcula la máxima demanda, los alimentadores y circuitos derivados, las protecciones, la caída de tensión, el cortocircuito, el balance de fases y la puesta a tierra; dibuja el diagrama unifilar y genera el metrado, la memoria de cálculo en Excel y el expediente técnico en PDF.</p>`;
-B+=sub("Alcance del cálculo");
-B+=`<ul>${ALCANCE.map(t=>`<li>${t}</li>`).join("")}</ul>`;
+B+=`<p>JMG - ELECTRIC es una aplicación web para el <b>diseño y el cálculo</b> de instalaciones eléctricas interiores de <b>viviendas unifamiliares</b> (de uno o varios pisos), <b>edificios multifamiliares</b> y <b>otros usos</b>: oficinas, locales comerciales y demás actividades de la Tabla 14, escuelas, hospitales y hoteles, conforme al Código Nacional de Electricidad – Utilización (CNE-U), al Reglamento Nacional de Edificaciones, Norma EM.010, y a la Norma DGE de conexiones en baja tensión. Funciona en el navegador, sin instalación, en <b>jorgemiguelc16.github.io/jmg-electric</b>.</p>
+<p>El proyecto se diseña sobre el plano de arquitectura en DXF: se colocan los tableros, las salidas con los símbolos de la Norma DGE (R.M. N.° 091-2002-EM/VME), las tuberías, los montantes y las áreas, y el cálculo toma del plano los circuitos, las longitudes reales y las áreas (capítulo 7). También puede calcularse sin plano, con los datos escritos en las ventanas.</p>
+<p>A partir de los datos del proyecto calcula la máxima demanda, los alimentadores y circuitos derivados, las protecciones, la caída de tensión, el cortocircuito, el balance de fases y la puesta a tierra; dibuja el diagrama unifilar y las láminas de planta eléctrica y genera el metrado, la memoria de cálculo en Excel y el expediente técnico en PDF.</p>`;
+B+=sub("Alcance del diseño y del cálculo");
+B+=`<p><b>Diseño sobre el plano</b></p><ul>${ALCANCE_DIS.map(t=>`<li>${t}</li>`).join("")}</ul><p><b>Cálculo según el CNE-Utilización</b></p><ul>${ALCANCE.map(t=>`<li>${t}</li>`).join("")}</ul>`;
 B+=sub("Responsabilidad");
 B+=`<div class="caja"><p>Los resultados son una herramienta de apoyo al diseño. Su validación, la adecuación a las condiciones reales de obra y la firma del expediente corresponden al <b>ingeniero colegiado y habilitado</b> que lo suscribe (RNE EM.010, Art. 8). Los proyectos se guardan solo en el navegador del usuario.</p></div>`;
 B+=fin;
@@ -573,7 +574,7 @@ B+=fin;
 
 /* ---------- portada e índice ---------- */
 const portada=`<section class="portada"><div class="top"><img src="${typeof LOGO_JPG==="string"?LOGO_JPG:"../logo.png"}" alt=""><div><b>JMG Projects &amp; Energy</b><span>JMG - ELECTRIC · versión ${VERSION}</span></div></div>
-<div class="mid"><p class="eye">Documentación</p><h1>Manual de usuario y referencia técnica</h1><p class="sub">Cálculo de instalaciones eléctricas interiores en viviendas, edificios multifamiliares, oficinas, comercios, escuelas, hospitales y hoteles</p></div>
+<div class="mid"><p class="eye">Documentación</p><h1>Manual de usuario y referencia técnica</h1><p class="sub">Diseño y cálculo de instalaciones eléctricas interiores en viviendas, edificios multifamiliares, oficinas, comercios, escuelas, hospitales y hoteles</p></div>
 <dl><dt>Aplicación</dt><dd>JMG - ELECTRIC ${VERSION} · jorgemiguelc16.github.io/jmg-electric</dd><dt>Normativa</dt><dd>CNE-Utilización · RNE EM.010 · Norma DGE</dd><dt>Autor</dt><dd>Jorge Miguel Condori Huayllani</dd><dt>Fecha</dt><dd>${fecha}</dd></dl>
 <div class="foot"><span>Parte I · Manual de usuario</span><span>Parte II · Referencia técnica para revisores</span></div></section>`;
 const indice=`<section class="cap toc"><h1>Índice</h1><ol>${TOC.map(([n,t,c,id])=>`<li class="${c}"><a href="#${id}"><span>${n}</span>${t}</a></li>`).join("")}</ol></section>`;

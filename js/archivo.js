@@ -55,8 +55,9 @@ document.querySelectorAll("[data-start]").forEach(b =>
 );
 document.querySelectorAll("[data-ej]").forEach(b => b.addEventListener("click", () => cargarEjemplo(b.dataset.ej)));
 if ($("ver")) $("ver").textContent = VERSION;
-if ($("verBadge")) $("verBadge").textContent = " · " + VERSION + " Beta";
-if ($("wsVer")) $("wsVer").textContent = BETA ? "SITIO DE PRUEBAS" : VERSION + " Beta";
+if ($("verBadge")) $("verBadge").textContent = " · " + VERSION;
+if ($("wsVer")) $("wsVer").textContent = BETA ? "SITIO DE PRUEBAS" : VERSION;
+if ($("wlVer")) $("wlVer").textContent = "Versión " + VERSION.replace(/^v/, "");
 // Sitio de pruebas: marcado en la barra, en el título de la pestaña y fuera de los buscadores
 if (BETA) {
   document.body.classList.add("sitio-beta");

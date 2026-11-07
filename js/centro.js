@@ -93,7 +93,14 @@ $("tab-inicio").addEventListener("click", e => {
     }
   } else if (a === "todos") setTab("proy");
   else if (a === "nuevo") asistente(true, "uni");
-  else if (a === "ej") cargarEjemplo(b.dataset.v);
+  else if (a === "diseno") {
+    // Proyecto abierto: espacio de trabajo en la pestaña Diseño; si no hay, uno nuevo
+    const n = $("p_nombre").value.trim();
+    if (n && !/^EJEMPLO\b/.test(n)) {
+      setTab("calculo");
+      document.querySelector('#ws [data-tab-r="diseno"]')?.click();
+    } else asistente(true, "uni");
+  } else if (a === "ej") cargarEjemplo(b.dataset.v);
 });
 {
   const nv = NOVEDADES[0];

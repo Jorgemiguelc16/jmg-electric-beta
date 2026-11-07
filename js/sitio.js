@@ -33,10 +33,15 @@
 })();
 
 /* ================= Contenido estático ================= */
-$("scope").innerHTML = ALCANCE.map(
-  t =>
-    `<li><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="1.5" width="15" height="15"/><path d="M5 9.5l2.5 2.5L13 6.5"/></svg>${t}</li>`
-).join("");
+{
+  const li = t =>
+    `<li><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="1.5" width="15" height="15"/><path d="M5 9.5l2.5 2.5L13 6.5"/></svg>${t}</li>`;
+  $("scope").innerHTML =
+    `<li class="sc-t">Diseño sobre el plano</li>` +
+    ALCANCE_DIS.map(li).join("") +
+    `<li class="sc-t">Cálculo según el CNE-Utilización</li>` +
+    ALCANCE.map(li).join("");
+}
 $("normsList").innerHTML = NORMAS.map(
   ([cod, tit, desc, uso]) =>
     `<article class="norm"><span class="code">${cod}</span><h3>${tit}</h3><p>${desc}</p><p class="uso"><strong>Aplicación:</strong> ${uso}</p></article>`
