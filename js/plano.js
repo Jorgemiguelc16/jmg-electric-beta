@@ -1858,7 +1858,7 @@ addEventListener("keydown", e => {
     else dsTerminar();
   } else if (e.key === "Delete" || e.key === "Supr") {
     e.preventDefault();
-    edBorrar(false);
+    if (!edQuitarVerticeBajoCursor()) edBorrar(false);
   } else if (k === "b" && !ctrl && !e.altKey && PL_MOD) {
     e.preventDefault();
     bibAbrir();
@@ -2513,6 +2513,22 @@ function edMenuAbrir(e) {
   const sel = D ? dsSel().filter(dsEditable) : [],
     na = PL_ASEL.size,
     it = [];
+  /* Sobre una línea, un área o una tubería elegida: su vértice (el cuadradito) o su tramo (la línea o el rombo del
+     medio), para quitar o agregar vértices, partir, quitar el tramo o volverlo recto o en arco */
+  let pc = null;
+  if (!PLH.h && D) {
+    const ag = dsAgarreEn(X, Y),
+      el = ag ? D.els.find(x => x.id === ag.id) : sel.length === 1 ? sel[0] : null;
+    if (dsEsPoli(el) && dsEditable(el)) {
+      if (ag && ag.t === "v") pc = { el, v: ag.i };
+      else if (ag && ag.t === "m") pc = { el, s: ag.i };
+      else {
+        const t = dsTramoEn(el, p, (8 * plDpr()) / PLV.s);
+        if (t) pc = { el, s: t.i };
+      }
+    }
+  }
+  ED_MENU.poli = pc;
   const b = (a, t, k, on = true) =>
       it.push(
         `<button type="button" data-edm="${a}" role="menuitem"${on ? "" : " disabled"}><span>${t}</span>${k ? `<kbd>${k}</kbd>` : ""}</button>`
@@ -2525,6 +2541,29 @@ function edMenuAbrir(e) {
     if (PLH.h.startsWith("col:")) b("girar", `Girar ${DSU.giro || 90}° a la izquierda`, "R");
   } else if (sel.length) {
     tit(sel.length > 1 ? `${sel.length} elementos del diseño` : dsNomEl(sel[0]));
+    const n0 = it.length;
+    if (pc) {
+      const el = pc.el,
+        n = el.pts.length / 2,
+        abre = el.c ? (el.ar ? "" : "Abrir aquí") : "Partir aquí";
+      if (pc.v != null) {
+        b("vquitar", "Quitar este vértice", "Supr", n > (el.c ? 3 : 2));
+        if (abre) b("vpartir", abre, "", el.c || (pc.v > 0 && pc.v < n - 1));
+      } else {
+        const k = (el.b || [])[pc.s] || 0;
+        b("tvert", "Agregar un vértice aquí");
+        if (abre) b("tpartir", abre);
+        if (k) {
+          b("trecto", "Volver recto este tramo");
+          b("tinv", "Invertir la curva de este tramo");
+        } else b("tarco", "Volver arco este tramo");
+        b("tquitar", "Quitar este tramo", "", !el.ar);
+      }
+    }
+    if (sel.length === 2 && !dsUniblesMotivo(sel[0], sel[1]))
+      b("unir", `Unir en una sola ${sel[0].t === "tub" ? "tubería" : "línea"}`);
+    if (sel.some(el => dsEsPoli(el) && el.b && el.b.some(Boolean))) b("todorecto", "Volver rectos todos sus tramos");
+    if (it.length > n0) sep();
     // Sacar una tubería: del tablero, por una de sus salidas; de un artefacto, desde él
     if (sel.length === 1 && sel[0].k === "tab" && sel[0].nc) {
       ED_MENU.ctx = { tb: sel[0] };
@@ -2634,6 +2673,50 @@ function edMenuLista(p, html, fn, fnCambio) {
     r = plBase.getBoundingClientRect();
   edMenuPos(r.left + (X * r.width) / plBase.width + 8, r.top + (Y * r.height) / plBase.height + 8);
   ED_MENU.fn = fn;
+}
+/* Edición de una línea, un área o una tubería en su vértice (pc.v) o en su tramo (pc.s), con el punto q del clic */
+function edPoli(a, pc, q) {
+  if (!pc || !pc.el || !dsD().els.includes(pc.el)) return;
+  const el = pc.el;
+  let r = null,
+    msg = "";
+  if (a === "vquitar") {
+    if (!dsQuitarVertice(el, pc.v)) return toast(`Debe quedar al menos ${el.c ? 3 : 2} vértices`);
+    msg = "Vértice quitado";
+  } else if (a === "vpartir") r = dsPartir(el, pc.v);
+  else if (a === "tpartir") r = dsPartirEn(el, pc.s, q);
+  else if (a === "tquitar") r = dsQuitarTramo(el, pc.s);
+  else if (a === "tvert") {
+    if (dsAgregarVertice(el, pc.s, q) < 0) return toast("Haga clic derecho más lejos de los extremos del tramo");
+    msg = "Vértice agregado: arrástrelo para moverlo";
+  } else {
+    dsTramoForma(el, pc.s, a === "trecto" ? "recto" : a === "tarco" ? "arco" : "inv");
+    msg = a === "tarco" ? "Tramo en arco: arrastre el rombo del medio para dar la curva" : "";
+  }
+  if (typeof r === "string") return toast(r);
+  if (r) {
+    DS_SEL.clear();
+    r.forEach(x => DS_SEL.add(x.id));
+    msg =
+      r.length === 2
+        ? `Partida en dos ${el.t === "tub" ? "tuberías" : "líneas"} (quedan elegidas)`
+        : a === "tquitar"
+          ? "Tramo quitado"
+          : "Abierta en ese punto";
+  }
+  edCambio();
+  edProps();
+  if (msg) toast(msg);
+}
+// Supr con el cursor sobre un vértice de una línea elegida: quita ese vértice (y no la línea)
+function edQuitarVerticeBajoCursor() {
+  if (PLH.h || !PLH.cur || !dsD()) return false;
+  const [X, Y] = plAPant(PLH.cur[0], PLH.cur[1]),
+    ag = dsAgarreEn(X, Y),
+    el = ag && ag.t === "v" ? dsD().els.find(x => x.id === ag.id) : null;
+  if (!dsEsPoli(el)) return false;
+  edPoli("vquitar", { el, v: ag.i });
+  return true;
 }
 // Ángulo exacto de un símbolo o texto: se escribe en la línea de comandos (0° a 360°, antihorario)
 function edAnguloExacto(id) {
@@ -2781,6 +2864,15 @@ function edMenuAccion(a) {
     return dsPegar();
   }
   if (a === "borrar") return edBorrar(false);
+  if (/^(vquitar|vpartir|tvert|tpartir|trecto|tarco|tinv|tquitar)$/.test(a)) return edPoli(a, ED_MENU.poli, ED_MENU.p);
+  if (a === "unir") {
+    const r = dsUnir(sel[0], sel[1]);
+    if (typeof r === "string") return toast(r);
+    edCambio();
+    edProps();
+    return toast(r.gap ? `Unidas con un tramo recto de ${plFm(r.gap)} m` : "Unidas en una sola");
+  }
+  if (a === "todorecto") return dsCurvar("recto");
   if (a === "borrarArq") {
     DS_SEL.clear();
     return edBorrar(false);

@@ -3240,6 +3240,227 @@ function dsCurvar(modo) {
   edCambio();
 }
 
+/* ---------- Edición de líneas, áreas y tuberías: vértices, partir, unir y tramos rectos o en arco ----------
+   Como en las polilíneas de AutoCAD, cada vértice guarda la curvatura (k) del tramo que sale de él. Al partir un
+   arco, cada parte conserva la misma circunferencia. Una tubería partida conserva su circuito y sus datos; su
+   inicio sigue conectado al artefacto de antes y el final de la otra parte, al suyo. */
+const dsEsPoli = el => !!el && (el.t === "lin" || el.t === "tub") && Array.isArray(el.pts) && el.pts.length >= 4;
+const dsVerts = el => {
+  const b = el.b || [];
+  return Array.from({ length: el.pts.length / 2 }, (v, i) => ({
+    x: el.pts[2 * i],
+    y: el.pts[2 * i + 1],
+    k: b[i] || 0
+  }));
+};
+function dsDeVerts(el, V) {
+  el.pts = V.flatMap(v => [v.x, v.y]);
+  const b = V.slice(0, el.c ? V.length : V.length - 1).map(v => v.k || 0);
+  if (b.some(Boolean)) el.b = b;
+  else delete el.b;
+  // Un área editada a mano ya no se vuelve a detectar desde su punto al actualizar la arquitectura
+  if (el.ar) delete el.ar.p;
+  dsIdxSucio();
+}
+// Mismo recorrido en sentido contrario (las curvas cambian de signo)
+function dsInvertirVerts(V) {
+  const n = V.length;
+  return V.map((v, j) => ({ x: V[n - 1 - j].x, y: V[n - 1 - j].y, k: j < n - 1 ? -V[n - 2 - j].k : 0 }));
+}
+/* Punto de un tramo más cercano a q: { p, s } (s: fracción del tramo, de 0 a 1) y las curvaturas de las dos partes
+   si se parte ahí (k1 del inicio al punto, k2 del punto al final) */
+function dsEnTramo(t, q) {
+  const [ax, ay] = t.a,
+    [bx, by] = t.b;
+  if (!t.k || !t.c) {
+    const dx = bx - ax,
+      dy = by - ay,
+      L2 = dx * dx + dy * dy || 1,
+      s = Math.max(0, Math.min(1, ((q[0] - ax) * dx + (q[1] - ay) * dy) / L2));
+    return { p: [ax + s * dx, ay + s * dy], s, k1: 0, k2: 0 };
+  }
+  const th = 4 * Math.atan(Math.abs(t.k)),
+    r = t.c / (2 * Math.sin(th / 2)),
+    hx = (ax + bx) / 2 - t.m[0],
+    hy = (ay + by) / 2 - t.m[1],
+    hl = Math.hypot(hx, hy) || 1,
+    cx = t.m[0] + (hx / hl) * r,
+    cy = t.m[1] + (hy / hl) * r,
+    ang = (x, y) => Math.atan2(y - cy, x - cx),
+    // Sentido de giro del arco: del inicio hacia su punto medio
+    sg = Math.sign((ax - cx) * (t.m[1] - cy) - (ay - cy) * (t.m[0] - cx)) || 1,
+    a0 = ang(ax, ay),
+    D = 2 * Math.PI;
+  let a1 = ((((ang(q[0], q[1]) - a0) * sg) % D) + D) % D;
+  if (a1 > th) a1 = a1 - th < D - a1 ? th : 0;
+  const pa = a0 + sg * a1,
+    sk = Math.sign(t.k);
+  return {
+    p: [cx + r * Math.cos(pa), cy + r * Math.sin(pa)],
+    s: a1 / th,
+    k1: sk * Math.tan(a1 / 4),
+    k2: sk * Math.tan((th - a1) / 4)
+  };
+}
+// Tramo de la línea más cercano a q (a menos de tol) o null
+function dsTramoEn(el, q, tol) {
+  let m = null;
+  dsTramos(el).forEach(t => {
+    const e = dsEnTramo(t, q),
+      d = Math.hypot(e.p[0] - q[0], e.p[1] - q[1]);
+    if (d <= tol && (!m || d < m.d)) m = { i: t.i, d };
+  });
+  return m;
+}
+// Agrega un vértice en el tramo i, en el punto más cercano a q; devuelve su número o -1 (si cae en un extremo)
+function dsAgregarVertice(el, i, q) {
+  const t = dsTramos(el)[i];
+  if (!t) return -1;
+  const e = dsEnTramo(t, q);
+  if (e.s < 1e-3 || e.s > 1 - 1e-3) return -1;
+  const V = dsVerts(el);
+  V[i].k = e.k1;
+  V.splice(i + 1, 0, { x: e.p[0], y: e.p[1], k: e.k2 });
+  dsDeVerts(el, V);
+  return i + 1;
+}
+// Quita el vértice i: sus dos tramos quedan en uno recto. Una línea abierta conserva al menos 2 vértices; una
+// cerrada (o un área), 3
+function dsQuitarVertice(el, i) {
+  const n = el.pts.length / 2;
+  if (n <= (el.c ? 3 : 2)) return false;
+  const V = dsVerts(el),
+    ant = i > 0 ? i - 1 : el.c ? n - 1 : -1;
+  if (ant >= 0) V[ant].k = 0;
+  V.splice(i, 1);
+  // Una tubería que pierde su extremo deja de estar conectada por ese lado
+  if (!el.c && i === 0) delete el.c0;
+  if (!el.c && i === n - 1) delete el.c1;
+  dsDeVerts(el, V);
+  return true;
+}
+// Copia de un elemento con otro identificador, a continuación del original
+function dsGemelo(el) {
+  const c = JSON.parse(JSON.stringify(el));
+  c.id = dsId();
+  const L = dsD().els;
+  L.splice(L.indexOf(el) + 1, 0, c);
+  return c;
+}
+/* Parte la línea en el vértice i: una abierta queda en dos; una cerrada se abre ahí (un área no se parte). Devuelve
+   las partes o un texto con el motivo */
+function dsPartir(el, i) {
+  const V = dsVerts(el),
+    n = V.length;
+  if (el.c) {
+    if (el.ar) return "Un área para el cálculo no se parte: quite o agregue vértices, o vuelva a marcarla";
+    el.c = false;
+    dsDeVerts(el, [...V.slice(i), ...V.slice(0, i), { ...V[i], k: 0 }]);
+    return [el];
+  }
+  if (i <= 0 || i >= n - 1) return "En un extremo no hay nada que partir: elija un vértice intermedio o un tramo";
+  const otra = dsGemelo(el);
+  dsDeVerts(el, V.slice(0, i + 1));
+  dsDeVerts(otra, V.slice(i));
+  delete el.c1;
+  delete otra.c0;
+  return [el, otra];
+}
+// Parte en un punto del tramo i (si cae en un extremo del tramo, en ese vértice)
+function dsPartirEn(el, i, q) {
+  let v = dsAgregarVertice(el, i, q);
+  if (v < 0) {
+    const t = dsTramos(el)[i];
+    v = dsEnTramo(t, q).s < 0.5 ? i : (i + 1) % (el.pts.length / 2);
+  }
+  return dsPartir(el, v);
+}
+// Quita el tramo i: una línea abierta queda en dos (o más corta, si era el primero o el último); una cerrada se abre
+function dsQuitarTramo(el, i) {
+  const V = dsVerts(el);
+  if (el.c) {
+    if (el.ar) return "Un área para el cálculo debe quedar cerrada: quite un vértice en lugar del tramo";
+    el.c = false;
+    dsDeVerts(el, [...V.slice(i + 1), ...V.slice(0, i + 1)]);
+    return [el];
+  }
+  const A = V.slice(0, i + 1),
+    B = V.slice(i + 1);
+  if (A.length < 2 && B.length < 2) return "La línea tiene un solo tramo: bórrela con Supr";
+  if (A.length < 2) {
+    delete el.c0;
+    dsDeVerts(el, B);
+    return [el];
+  }
+  if (B.length < 2) {
+    delete el.c1;
+    dsDeVerts(el, A);
+    return [el];
+  }
+  const otra = dsGemelo(el);
+  dsDeVerts(el, A);
+  dsDeVerts(otra, B);
+  delete el.c1;
+  delete otra.c0;
+  return [el, otra];
+}
+// Tramo i recto, en arco o con la curva invertida
+function dsTramoForma(el, i, modo) {
+  const V = dsVerts(el);
+  if (!V[i]) return;
+  V[i].k = modo === "recto" ? 0 : modo === "arco" ? V[i].k || DS_BUL : -V[i].k;
+  dsDeVerts(el, V);
+}
+/* ¿Se pueden unir? Dos líneas abiertas o dos tuberías abiertas (del mismo recorrido y circuito); no las áreas */
+function dsUniblesMotivo(a, b) {
+  if (!dsEsPoli(a) || !dsEsPoli(b) || a.t !== b.t) return "Elija dos líneas o dos tuberías";
+  if (a.c || b.c || a.ar || b.ar) return "Las líneas cerradas y las áreas no se unen";
+  if (a.t === "tub") {
+    if ((a.modo || "techo") !== (b.modo || "techo"))
+      return "Las tuberías van por distinto recorrido (techo, pared o piso)";
+    if (!!a.ali !== !!b.ali || (a.cir || "") !== (b.cir || ""))
+      return "Las tuberías son de distinto circuito: no se unen";
+  }
+  return "";
+}
+/* Une b a la línea a por sus extremos más cercanos; si no se tocan (a más de 1 cm), las une con un tramo recto.
+   Queda a, con sus datos; b se borra */
+function dsUnir(a, b) {
+  const m = dsUniblesMotivo(a, b);
+  if (m) return m;
+  let A = dsVerts(a),
+    B = dsVerts(b);
+  const d = (u, v) => Math.hypot(u.x - v.x, u.y - v.y),
+    ea = [A[0], A[A.length - 1]],
+    eb = [B[0], B[B.length - 1]],
+    op = [
+      [1, 0],
+      [1, 1],
+      [0, 0],
+      [0, 1]
+    ].map(([i, j]) => ({ i, j, d: d(ea[i], eb[j]) }));
+  op.sort((x, y) => x.d - y.d);
+  const { i, j, d: gap } = op[0],
+    // Extremos que quedan libres: el que no se une de cada una (con su conexión a un artefacto)
+    c0 = i === 1 ? a.c0 : a.c1,
+    c1 = j === 0 ? b.c1 : b.c0;
+  if (i === 0) A = dsInvertirVerts(A);
+  if (j === 1) B = dsInvertirVerts(B);
+  const tol = 0.01 / (EPL.f || 1);
+  let V;
+  if (gap <= tol) V = [...A.slice(0, -1), { ...A[A.length - 1], k: B[0].k }, ...B.slice(1)];
+  else V = [...A.slice(0, -1), { ...A[A.length - 1], k: 0 }, ...B];
+  dsDeVerts(a, V);
+  delete a.c0;
+  delete a.c1;
+  if (c0) a.c0 = c0;
+  if (c1) a.c1 = c1;
+  const L = dsD().els;
+  L.splice(L.indexOf(b), 1);
+  DS_SEL.delete(b.id);
+  return { el: a, gap: gap > tol ? gap * (EPL.f || 1) : 0 };
+}
+
 /* ---------- Propiedades de lo seleccionado ---------- */
 // Altura de montaje por defecto: la de Parámetros › Alturas del proyecto (criterio del proyectista)
 const dsAlturaDef = k => {
@@ -3518,7 +3739,7 @@ function dsProps(c) {
           (el.sec ? fila("Del cálculo", esc(el.sec)) : "") +
           dsCampoCond(campo, [el])
         : "") +
-      `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices.</p>` +
+      `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices. Clic derecho en un vértice o en un tramo: quitar o agregar vértices, partir, volver recto o en arco; con dos elegidas, unirlas. Supr sobre un vértice lo quita.</p>` +
       curvas;
   }
   const color = `<label class="ed-pf ed-pc"><span>Color</span><span class="ds-colr"><input type="color" data-dsp="col" value="${dsColorEl(el, cap)}" title="Color propio de este elemento"><button type="button" class="btn sec sm" data-dsa="colcapa"${el.col ? "" : " disabled"} title="Quita el color propio: vuelve al color de su tipo (si está activado en Vista) o al de su capa">Quitar color propio</button></span></label>`,

@@ -922,6 +922,159 @@ prueba("Editor de diseño: menú del clic derecho, paso de giro, color por tipo 
   await clic('[data-ed="aceptar"]');
 });
 
+prueba("Editor de diseño: quitar y agregar vértices, partir, unir y tramos rectos o en arco", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Clic derecho en un punto del dibujo (coordenadas relativas al plano de prueba)
+  const derecho = async (x, y) => {
+    const [X, Y] = await J(
+      `(() => { const [X, Y] = plAPant(${OX} + ${x}, ${OY} + ${y}), r = plBase.getBoundingClientRect(); return [r.left + (X * r.width) / plBase.width, r.top + (Y * r.height) / plBase.height]; })()`
+    );
+    // La pantalla de ingreso puede aparecer tarde cuando esta prueba corre sola: no debe tapar el plano
+    await ev("document.body.classList.remove('sin-acceso'); $('acceso').hidden = true; 1");
+    await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: X, y: Y, buttons: 0 });
+    for (const type of ["mousePressed", "mouseReleased"])
+      await cdp("Input.dispatchMouseEvent", {
+        type,
+        x: X,
+        y: Y,
+        button: "right",
+        buttons: type === "mousePressed" ? 2 : 0,
+        clickCount: 1
+      });
+    for (let i = 0; i < 20 && (await ev("$('edMenu').hidden")); i++) await esperar(50);
+  };
+  const menu = () =>
+    J("[...document.querySelectorAll('#edMenu [data-edm]')].filter(b => !b.disabled).map(b => b.dataset.edm)");
+  // Línea de tres tramos: recto, en arco (semicírculo de radio 1) y recto
+  const nueva = (pts, extra = "") =>
+    ev(`(() => { const el = dsAgregar({ t: "lin", pts: [${pts.map((v, i) => (i % 2 ? `${OY} + ${v}` : `${OX} + ${v}`)).join(",")}], c: false, capa: "E-DIBUJO"${extra} });
+      DS_SEL.clear(); DS_SEL.add(el.id); edCambio(); edProps(); return el.id; })()`);
+  const L = id =>
+    J(
+      `(() => { const el = dsD().els.find(e => e.id === "${id}"); return el ? { n: el.pts.length / 2, b: el.b || [], L: +dsLargo(el).toFixed(4), c: el.c, c0: el.c0, c1: el.c1, cir: el.cir } : null; })()`
+    );
+  let id = await nueva([1, 1, 3, 1, 5, 1, 7, 1], ", b: [0, 1, 0]");
+  await derecho(3, 1);
+  let m = await menu();
+  ok(
+    m.includes("vquitar") && m.includes("vpartir"),
+    `clic derecho en un vértice: quitar y partir (${m.slice(0, 3).join(", ")})`
+  );
+  await clic('#edMenu [data-edm="vquitar"]');
+  let e = await L(id);
+  ok(
+    e.n === 3 && Math.abs(e.L - 6) < 1e-6,
+    `vértice quitado: sus dos tramos quedan en uno recto (${e.n} vértices, ${e.L} m)`
+  );
+  // Supr con el cursor sobre un vértice quita el vértice, no la línea
+  await derecho(5, 1);
+  await teclaE("Escape", "Escape", 27);
+  await ev(`(() => { DS_SEL.clear(); DS_SEL.add("${id}"); plSobreDibujar(); return 1; })()`);
+  await teclaE("Delete", "Delete", 46);
+  e = await L(id);
+  ok(e && e.n === 2, `Supr sobre un vértice lo quita y la línea sigue (${e && e.n} vértices)`);
+  // Clic derecho en un tramo: agregar vértice, volver arco
+  await derecho(3, 1);
+  m = await menu();
+  ok(
+    m.includes("tvert") && m.includes("tarco") && m.includes("tpartir"),
+    "clic derecho en un tramo: agregar vértice, arco y partir"
+  );
+  await clic('#edMenu [data-edm="tarco"]');
+  e = await L(id);
+  ok(e.b[0] && e.L > 6, `tramo vuelto arco (curvatura ${e.b[0] && e.b[0].toFixed(3)})`);
+  await ev(`(() => { DS_SEL.clear(); DS_SEL.add("${id}"); return 1; })()`);
+  await derecho(
+    4,
+    await J(`(() => { const t = dsTramos(dsD().els.find(e => e.id === "${id}"))[0]; return t.m[1] - ${OY}; })()`)
+  );
+  await clic('#edMenu [data-edm="trecto"]');
+  e = await L(id);
+  ok(!e.b.some(Boolean) && Math.abs(e.L - 6) < 1e-6, "y vuelto recto otra vez");
+  // Partir un semicírculo en su punto medio: dos cuartos de circunferencia del mismo radio
+  id = await nueva([0, 6, 2, 6], ", b: [1]");
+  const r = await J(
+    `(() => { const el = dsD().els.find(e => e.id === "${id}"), p = dsPartirEn(el, 0, [${OX} + 1, ${OY} + 4.5]); edCambio(); return p.map(x => ({ id: x.id, L: dsLargo(x), b: x.b, pts: x.pts.map((v, i) => +(v - (i % 2 ? ${OY} : ${OX})).toFixed(6)) })); })()`
+  );
+  ok(
+    r.length === 2 && Math.abs(r[0].L + r[1].L - Math.PI) < 1e-6,
+    `partido en dos: ${r.map(x => x.L.toFixed(4)).join(" + ")} = π`
+  );
+  ok(
+    r.every(x => Math.abs(Math.abs(x.b[0]) - Math.tan(Math.PI / 8)) < 1e-6) && r[0].pts[2] === 1 && r[0].pts[3] === 5,
+    "cada parte es un cuarto de circunferencia y se parten en el punto del arco (1, 5)"
+  );
+  // Unirlas de nuevo
+  await ev(`(() => { DS_SEL.clear(); DS_SEL.add("${r[0].id}"); DS_SEL.add("${r[1].id}"); return 1; })()`);
+  await derecho(0, 6);
+  m = await menu();
+  ok(m.includes("unir"), "con dos líneas elegidas, el menú ofrece unirlas");
+  await clic('#edMenu [data-edm="unir"]');
+  {
+    const e0 = await L(r[0].id),
+      e1 = await L(r[1].id);
+    e = e0 || e1;
+    ok(!(e0 && e1) && e.n === 3 && Math.abs(e.L - Math.PI) < 1e-3, `unidas en una sola (${e.n} vértices, ${e.L} m)`);
+  }
+  // Unir dos líneas separadas: un tramo recto las conecta (la segunda está al revés)
+  const a1 = await nueva([0, 7, 1, 7]),
+    a2 = await nueva([3, 7, 1.5, 7]);
+  const u = await J(
+    `(() => { const D = dsD(), x = dsUnir(D.els.find(e => e.id === "${a1}"), D.els.find(e => e.id === "${a2}")); return { gap: x.gap }; })()`
+  );
+  e = await L(a1);
+  ok(
+    Math.abs(u.gap - 0.5) < 1e-6 && e.n === 4 && Math.abs(e.L - 3) < 1e-6,
+    `unidas con un tramo recto de ${u.gap} m (largo ${e.L} m)`
+  );
+  // Tubería: al partirla, cada parte conserva su circuito y su conexión a su artefacto
+  const t = await J(`(() => {
+    const s1 = dsAgregar({ t: "sim", k: "toma", x: ${OX} + 1, y: ${OY} + 2, r: 0, capa: "E-TOMACORRIENTES" }),
+      s2 = dsAgregar({ t: "sim", k: "toma", x: ${OX} + 5, y: ${OY} + 2, r: 0, capa: "E-TOMACORRIENTES" }),
+      tb = dsAgregar({ t: "tub", pts: [${OX} + 1, ${OY} + 2, ${OX} + 3, ${OY} + 2, ${OX} + 5, ${OY} + 2], c: false, modo: "techo", cir: "C-2", c0: s1.id, c1: s2.id, capa: "E-TUBERIAS-TECHO" });
+    edCambio();
+    const p = dsPartir(tb, 1);
+    edCambio();
+    return p.map(x => ({ id: x.id, c0: x.c0 || "", c1: x.c1 || "", cir: x.cir, s1: s1.id, s2: s2.id }));
+  })()`);
+  ok(
+    t.length === 2 && t[0].c0 === t[0].s1 && !t[0].c1 && t[1].c1 === t[1].s2 && !t[1].c0,
+    "tubería partida: cada parte sigue conectada a su tomacorriente"
+  );
+  ok(
+    t.every(x => x.cir === "C-2"),
+    "las dos partes conservan el circuito C-2"
+  );
+  const tu = await J(
+    `(() => { const D = dsD(), x = dsUnir(D.els.find(e => e.id === "${t[1].id}"), D.els.find(e => e.id === "${t[0].id}")); edCambio(); const el = x.el; return { c0: el.c0, c1: el.c1, n: el.pts.length / 2 }; })()`
+  );
+  ok(
+    tu.n === 3 && [tu.c0, tu.c1].sort().join() === [t[0].s1, t[1].s2].sort().join(),
+    "unida otra vez, conectada a los dos tomacorrientes"
+  );
+  // No se unen tuberías de distinto circuito; un área no se parte ni pierde un tramo
+  ok(
+    /distinto circuito/.test(
+      await J(`dsUniblesMotivo({ t: "tub", pts: [0,0,1,0], cir: "C-1" }, { t: "tub", pts: [1,0,2,0], cir: "C-2" })`)
+    ),
+    "tuberías de distinto circuito: no se unen"
+  );
+  const ar =
+    await J(`(() => { const el = dsAgregar({ t: "lin", pts: [${OX} + 1, ${OY} + 1, ${OX} + 4, ${OY} + 1, ${OX} + 4, ${OY} + 3, ${OX} + 1, ${OY} + 3], c: true, capa: "E-AREAS", ar: { tp: "tech", n: "x", p: [${OX} + 2, ${OY} + 2] } });
+    const a = dsPartir(el, 1), b = dsQuitarTramo(el, 0), v = dsAgregarVertice(el, 0, [${OX} + 2, ${OY} + 1]);
+    return { a: typeof a, b: typeof b, v, n: el.pts.length / 2, p: !!el.ar.p, m2: +dsM2(el).toFixed(4) }; })()`);
+  ok(ar.a === "string" && ar.b === "string", "un área para el cálculo no se parte ni pierde un tramo");
+  ok(
+    ar.v === 1 && ar.n === 5 && Math.abs(ar.m2 - 6) < 1e-6 && !ar.p,
+    "a un área se le agrega un vértice (misma área, ya no se vuelve a detectar sola)"
+  );
+  await clic('[data-ed="cancelar"]');
+  await ev(
+    "document.querySelector('.welcome:not([hidden]) .vw-btn.def, .welcome:not([hidden]) .btn:not(.sec)')?.click(); 1"
+  );
+});
+
 prueba("Editor de diseño: tuberías conectadas a los artefactos (imán, borde, circuito y mover)", async ok => {
   await ejemplo("uni");
   await abrirPlano();
