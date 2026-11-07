@@ -2105,3 +2105,65 @@ input.del-plano,
   -moz-appearance: textfield;
   appearance: textfield;
 }
+/* Ambientes: una fila por ambiente con su tipo, iluminancia (EM.010) y reglas del CNE */
+.am-lista {
+  overflow-x: hidden;
+}
+.am-fila {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.4fr) 200px 70px 74px 130px 92px minmax(150px, 1fr) 42px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--dl-line, #e2e5ea);
+  font: 12px var(--f-body);
+}
+.am-fila input,
+.am-fila select {
+  min-width: 0;
+  padding: 3px 6px;
+  font: 12px var(--f-body);
+}
+.am-fila .vw-btn {
+  min-width: 0;
+  padding: 0 6px;
+}
+.am-cab {
+  color: var(--dl-mute, #5b6470);
+  font-size: 11px;
+  font-weight: 600;
+}
+.am-n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.am-n em,
+.am-cne em {
+  display: block;
+  color: var(--dl-mute, #5b6470);
+  font-size: 10px;
+  font-style: normal;
+}
+.am-cne {
+  color: var(--dl-ink, #1b1b1b);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.am-sin select[data-am-k="amb"] {
+  border-color: #d49a2a;
+  background: color-mix(in srgb, #d49a2a 10%, #fff);
+}
+.am-res {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 3px solid #2e7d32;
+  background: color-mix(in srgb, #2e7d32 6%, transparent);
+  font: 12px var(--f-body);
+}
+.am-res p {
+  margin: 4px 0 0;
+}
+#amPlanta {
+  padding: 3px 6px;
+  font: 12px var(--f-body);
+}

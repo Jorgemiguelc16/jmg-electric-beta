@@ -1708,9 +1708,11 @@ function dsDibArea(g, el, col, s) {
   if (hp < 5) return;
   const b = dsBBox(el),
     [X, Y] = plAPant((b[0] + b[2]) / 2, (b[1] + b[3]) / 2),
-    L = [el.ar.n || "", `${fmt(dsM2(el), 2)} m²`, el.ar.tp !== "tech" ? PL_TAREA[el.ar.tp].toLowerCase() : ""].filter(
-      Boolean
-    );
+    L = [
+      el.ar.n || (el.ar.amb ? PL_AMB[el.ar.amb].n : ""),
+      `${fmt(dsM2(el), 2)} m²`,
+      el.ar.tp !== "tech" ? PL_TAREA[el.ar.tp].toLowerCase() : ""
+    ].filter(Boolean);
   g.save();
   g.textAlign = "center";
   g.textBaseline = "middle";
@@ -3451,6 +3453,17 @@ function dsProps(c) {
         "Ambiente",
         `<input type="text" data-dsp="arn" value="${esc(el.ar.n || "")}" maxlength="60" placeholder="Sala, cocina, pasillo…">`
       ) +
+      (el.ar.tp !== "ext"
+        ? campo(
+            "Tipo de ambiente",
+            `<select data-dsp="aramb"><option value="">— Sin tipo —</option>${Object.entries(PL_AMB)
+              .map(([k, t]) => `<option value="${k}"${k === el.ar.amb ? " selected" : ""}>${esc(t.n)}</option>`)
+              .join("")}</select>`
+          ) +
+          (el.ar.amb && PL_AMB[el.ar.amb].lux
+            ? fila("Iluminancia mín.", `${PL_AMB[el.ar.amb].lux} lx · EM.010 ${PL_AMB[el.ar.amb].em}`)
+            : "")
+        : "") +
       campo(
         "Tipo",
         `<select data-dsp="artp">${Object.entries(PL_TAREA)
@@ -3646,8 +3659,14 @@ function dsPropCambio(e) {
     else if (k === "col") el.col = /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : el.col;
     else if (k === "h") el.h = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
     else if (k === "p") el.p = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
-    else if (k === "arn" && el.ar) el.ar.n = v.replace(/[<>]/g, "").slice(0, 60);
-    else if (k === "artp" && el.ar) el.ar.tp = PL_TAREA[v] ? v : "tech";
+    else if (k === "arn" && el.ar) {
+      el.ar.n = v.replace(/[<>]/g, "").slice(0, 60);
+      // Sin tipo de ambiente: se toma del nombre
+      if (!el.ar.amb && el.ar.tp !== "ext" && plAmbDe(el.ar.n)) el.ar.amb = plAmbDe(el.ar.n);
+    } else if (k === "aramb" && el.ar) {
+      if (Object.hasOwn(PL_AMB, v)) el.ar.amb = v;
+      else delete el.ar.amb;
+    } else if (k === "artp" && el.ar) el.ar.tp = PL_TAREA[v] ? v : "tech";
     else if (k === "ardep" && el.ar) {
       if (v === "") delete el.ar.dep;
       else el.ar.dep = +v;

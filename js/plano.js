@@ -2183,6 +2183,7 @@ const ED_CMD = {
   ARE: ["areaR", "Área rectangular"],
   DC: ["calc", "Datos para el cálculo"],
   LUM: ["lums", "Tipos de luminaria"],
+  AMB: ["amb", "Ambientes"],
   CU: ["cua", "Cuadro de circuitos"],
   PRE: ["presentar", "Presentación"]
 };
@@ -3083,6 +3084,7 @@ $("editor").addEventListener("click", e => {
   if (a === "calc") return dcAbrir();
   if (a === "lums") return lumAbrir();
   if (a === "muros") return murAbrir();
+  if (a === "amb") return ambAbrir();
   if (a === "buscar") return buAbrir();
   if (a === "presentar") return edPresentar(true);
   if (a === "atajos") return atjAbrir();

@@ -182,6 +182,20 @@ module.exports = function probarPlano(ctx) {
     calc({ ...d8, calPlano: "1" }).circ.find(q => q.id === "C-2").plano.ct,
     "tc"
   );
+  // El tipo de ambiente manda sobre el nombre: «Ambiente 1» de tipo cocina sí; «Cocina» de tipo depósito no
+  const ar8 = d8.PLANO.dis.els.find(e => e.id === "d42").ar;
+  Object.assign(ar8, { n: "Ambiente 1", amb: "coc" });
+  ver(
+    "ambiente de tipo cocina (sin la palabra en el nombre): circuito de cocina",
+    calc({ ...d8, calPlano: "1" }).circ.find(q => q.id === "C-2").plano.ct,
+    "tc"
+  );
+  Object.assign(ar8, { n: "Cocina", amb: "dep" });
+  ver(
+    "ambiente llamado cocina pero de tipo depósito: tomacorrientes generales",
+    calc({ ...d8, calPlano: "1" }).circ.find(q => q.id === "C-2").plano.ct,
+    "tg"
+  );
   // Alimentador por una tubería que llega al medidor, sin marcarla como alimentador
   const d6 = JSON.parse(JSON.stringify(PROY));
   delete d6.PLANO.dis.els.find(e => e.id === "d16").ali;

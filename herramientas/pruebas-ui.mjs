@@ -1931,6 +1931,82 @@ prueba("Actualizar arquitectura: comparar versiones, mover el diseño y volver a
   );
 });
 
+prueba("Ambientes: nombres del plano, tipo de ambiente, detección y ventana", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Reconocimiento del nombre: debe empezar con el ambiente (no notas ni leyendas)
+  const k = await J(
+    `["SALA", "SS.HH.", "BAÑOS MUJERES", "PATIO DE SERVICIO", "COMEDOR - COCINA", "Dorm. 1", "ASENTAMIENTO URBANO", "TOMACORRIENTE - COCINA", "en baños", "Jardinera"].map(plAmbDe)`
+  );
+  ok(k.join() === "sala,bano,bano,lav,coc,dorm,,,,", `tipo por el nombre escrito: ${k.map(x => x || "—").join(", ")}`);
+  const R = await J("dpRotulos().map(r => [r.amb, r.n]).sort()");
+  ok(R.length === 3, `tres nombres de ambientes en el plano de prueba (${R.length})`);
+  ok(
+    R.some(([a, n]) => a === "bano" && n === "BAÑO - COCINA"),
+    "texto de dos líneas (COCINA / BAÑO): gana el baño, por prioridad"
+  );
+  // Detección desde la ventana (sin plantas encuadradas: lo visible en pantalla)
+  await clic('#editor [data-pl="amb"]');
+  ok(!(await ev("$('ambDlg').hidden")), "la cinta abre la ventana Ambientes");
+  await clic('#ambDlg [data-am="detectar"]');
+  for (let i = 0; i < 100 && (await ev("AM_OCUP || !AM_RES")); i++) await esperar(100);
+  const A = await J(
+    "dsD().els.filter(e => e.ar).map(e => ({ n: e.ar.n, amb: e.ar.amb, tp: e.ar.tp, m2: +dsM2(e).toFixed(2), p: !!e.ar.p }))"
+  );
+  ok(A.length === 2, `dos ambientes detectados (${A.length})`);
+  const sala = A.find(a => a.amb === "sala"),
+    der = A.find(a => a.amb === "bano");
+  ok(sala && sala.n === "SALA" && sala.tp === "tech", "la sala: su nombre, su tipo y techada");
+  ok(sala && Math.abs(sala.m2 - 48) < 0.6, `la sala mide unos 48 m² (${sala && sala.m2})`);
+  ok(der && /DORMITORIO NIÑOS/.test(der.n), `dos nombres en un mismo ambiente se juntan (${der && der.n})`);
+  ok(
+    A.every(a => a.p),
+    "cada ambiente guarda su punto (para volver a medirlo si cambia la arquitectura)"
+  );
+  ok(
+    (await ev("$('amLista').querySelectorAll('.am-fila:not(.am-cab)').length")) === 2,
+    "la ventana lista los dos ambientes"
+  );
+  ok(
+    /50 lx|100 lx/.test(await ev("$('amLista').textContent")) &&
+      /150-702\(3\)/.test(await ev("$('amLista').textContent")),
+    "muestra la iluminancia de la EM.010 y la regla del CNE"
+  );
+  // Cambiar el tipo en la ventana
+  await ev(`(() => { const s = [...$('amLista').querySelectorAll('select[data-am-k="amb"]')].find(x => x.value === "bano");
+    s.value = "dorm"; s.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`);
+  ok(
+    (await J("dsD().els.filter(e => e.ar && e.ar.amb === 'dorm').length")) === 1,
+    "el tipo cambiado en la ventana queda en el ambiente"
+  );
+  // Detectar otra vez no duplica
+  await clic('#ambDlg [data-am="detectar"]');
+  for (let i = 0; i < 100 && (await ev("AM_OCUP")); i++) await esperar(100);
+  ok((await J("dsD().els.filter(e => e.ar).length")) === 2, "detectar otra vez no duplica los ambientes");
+  await ev("ambCerrar(); 1");
+  // Propiedades del área y validación al guardar
+  await ev("dsVerIds([dsD().els.find(e => e.ar && e.ar.amb === 'sala').id]); 1");
+  ok(
+    await ev("!!document.querySelector('[data-dsp=\"aramb\"]')"),
+    "las propiedades del área tienen el tipo de ambiente"
+  );
+  ok(
+    (await J("disValido(JSON.parse(JSON.stringify(EPL.dis))).els.filter(e => e.ar && e.ar.amb).length")) === 2 &&
+      !(await J(
+        "!!(disValido({ els: [{ id: 'd1', t: 'lin', pts: [0,0,1,0,1,1], c: true, capa: 'E-AREAS', ar: { tp: 'tech', n: 'x', amb: 'constructor' } }] }).els[0].ar.amb)"
+      )),
+    "el tipo de ambiente se guarda y se valida"
+  );
+  ok(
+    (await J("dpRotuloEn(dsD().els.find(e => e.ar && e.ar.amb === 'sala').pts).n")) === "SALA",
+    "al marcar un área con un clic se propone el nombre escrito adentro"
+  );
+  await clic('[data-ed="cancelar"]');
+  await ev(
+    "document.querySelector('.welcome:not([hidden]) .vw-btn.def, .welcome:not([hidden]) .btn:not(.sec)')?.click(); 1"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

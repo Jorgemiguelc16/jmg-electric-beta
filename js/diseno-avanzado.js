@@ -129,13 +129,24 @@ function dpAreaNueva(el) {
   DS_SEL.clear();
   DS_SEL.add(el.id);
   edCambio();
-  plPedir(el.ar.tp === "ext" ? "Nombre (opcional)" : "Ambiente", el.ar.tp === "ext" ? "Contorno exterior" : "", v => {
-    plPedir(null);
-    if (v) el.ar.n = String(v).replace(/[<>]/g, "").slice(0, 60);
-    edCambio();
-    plOrden();
-    toast(`${el.ar.n || "Área"}: ${fmt(dsM2(el), 2)} m² · ${PL_TAREA[el.ar.tp].toLowerCase()}`);
-  });
+  // Ambiente: se propone el nombre escrito en el plano dentro del contorno
+  const rot = el.ar.tp === "ext" ? null : dpRotuloEn(el.pts);
+  plPedir(
+    el.ar.tp === "ext" ? "Nombre (opcional)" : "Ambiente",
+    el.ar.tp === "ext" ? "Contorno exterior" : rot ? rot.n : "",
+    v => {
+      plPedir(null);
+      if (v) el.ar.n = String(v).replace(/[<>]/g, "").slice(0, 60);
+      // Tipo de ambiente por el nombre (se confirma o cambia en Ambientes o en las propiedades)
+      if (el.ar.tp !== "ext" && !el.ar.amb) {
+        const k = plAmbDe(el.ar.n) || (rot && !v ? rot.amb : "");
+        if (k) el.ar.amb = k;
+      }
+      edCambio();
+      plOrden();
+      toast(`${el.ar.n || "Área"}: ${fmt(dsM2(el), 2)} m² · ${PL_TAREA[el.ar.tp].toLowerCase()}`);
+    }
+  );
 }
 // Capas que no son muros al buscar un contorno: cotas, ejes, muebles y textos
 const DP_NO_MURO = /cota|dimens|^ejes?$|^a-?anno|mobil|muebl|texto|^text/i;
@@ -147,6 +158,31 @@ function dpCapasMuro() {
   if (Array.isArray(EPL.mur) && EPL.mur.length) return new Set(EPL.mur);
   const c = new Set(PL_MOD.trazos.map(t => t.capa).filter(n => DP_MURO.test(n) && !DP_NO_MURO.test(n)));
   return c.size ? c : null;
+}
+/* Barrido de las puertas: el arco de la hoja (en una capa o un bloque de puertas) no se usa al buscar el contorno,
+   para que el área no pierda ese cuarto de círculo; en su lugar va la puerta cerrada: los dos radios, de la bisagra
+   (centro del arco) a cada extremo, y uno de ellos cierra el vano sobre la línea del muro */
+const DP_PUERTA = /puert|door|\bptas?\b/i;
+const dpEsBarrido = t => t.ent === "ARC" && (DP_PUERTA.test(t.capa) || DP_PUERTA.test(t.bl || ""));
+function dpRadiosPuerta(t) {
+  const p = t.p,
+    n = p.length / 2;
+  if (n < 3) return null;
+  const m = 2 * Math.floor(n / 2),
+    [ax, ay, bx, by, cx, cy] = [p[0], p[1], p[m], p[m + 1], p[p.length - 2], p[p.length - 1]],
+    d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-12) return null;
+  const a2 = ax * ax + ay * ay,
+    b2 = bx * bx + by * by,
+    c2 = cx * cx + cy * cy;
+  return [
+    (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d,
+    (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d,
+    ax,
+    ay,
+    cx,
+    cy
+  ];
 }
 // Rectángulo que ocupa cada línea de la arquitectura (se calcula una vez y queda en la línea)
 function dpCaja(t) {
@@ -168,8 +204,9 @@ function dpCaja(t) {
 let DP_HUECO = 1.0;
 /* Contorno de un ambiente (o del edificio, ext) alrededor del punto p, sobre las líneas visibles de la
    arquitectura: se dibujan en una cuadrícula fina, se cierran los huecos de hasta DP_HUECO m, se rellena desde el
-   punto y se saca el borde. Devuelve { pts } (polígono en el dibujo) o { err }. */
-function dpAreaDetectar(p, ext, zona) {
+   punto y se saca el borde. Devuelve { pts } (polígono en el dibujo) o { err }. cache: objeto que se reusa al
+   detectar varios ambientes de la misma zona (guarda la cuadrícula de los muros y sus dilataciones). */
+function dpAreaDetectar(p, ext, zona, cache) {
   const f = EPL.f,
     ip = dpPlantaDe(p[0], p[1]),
     mg = 1 / f;
@@ -184,51 +221,66 @@ function dpAreaDetectar(p, ext, zona) {
   const cel = Math.max(0.01 / f, Math.sqrt(((x1 - x0) * (y1 - y0)) / 4e6), (x1 - x0) / 4000, (y1 - y0) / 4000),
     W = Math.ceil((x1 - x0) / cel),
     H = Math.ceil((y1 - y0) / cel),
-    N = W * H;
-  // Líneas visibles de la arquitectura (solo sus bordes: las tramas de piso no tapan el ambiente)
-  const cv = document.createElement("canvas");
-  cv.width = W;
-  cv.height = H;
-  const g = cv.getContext("2d", { willReadFrequently: true }),
-    oc = new Set(EPL.ocultas);
-  g.lineWidth = 1;
-  g.strokeStyle = "#000";
-  g.beginPath();
-  const mur = dpCapasMuro();
-  PL_MOD.trazos.forEach(t => {
-    // Solo las capas de muros (o, sin ellas, las continuas que no son cotas, ejes, muebles ni textos), y solo las
-    // líneas que tocan la zona
-    if (oc.has(t.capa) || PL_BORR.has(t.e) || t.lt || t.ent === "DIMENSION") return;
-    if (mur ? !mur.has(t.capa) : DP_NO_MURO.test(t.capa)) return;
-    const [a, b, c, d] = dpCaja(t);
-    if (c < x0 || a > x1 || d < y0 || b > y1) return;
-    const q = t.p;
-    g.moveTo((q[0] - x0) / cel, H - (q[1] - y0) / cel);
-    for (let j = 2; j < q.length; j += 2) g.lineTo((q[j] - x0) / cel, H - (q[j + 1] - y0) / cel);
-    if (t.c) g.closePath();
-  });
-  g.stroke();
-  const img = g.getImageData(0, 0, W, H).data,
+    N = W * H,
+    clave = [x0, y0, x1, y1, cel, DP_HUECO].join();
+  let muro;
+  if (cache && cache.k === clave) muro = cache.muro;
+  else {
+    // Líneas visibles de la arquitectura (solo sus bordes: las tramas de piso no tapan el ambiente)
+    const cv = document.createElement("canvas");
+    cv.width = W;
+    cv.height = H;
+    const g = cv.getContext("2d", { willReadFrequently: true }),
+      oc = new Set(EPL.ocultas);
+    g.lineWidth = 1;
+    g.strokeStyle = "#000";
+    g.beginPath();
+    const mur = dpCapasMuro();
+    PL_MOD.trazos.forEach(t => {
+      // Solo las capas de muros (o, sin ellas, las continuas que no son cotas, ejes, muebles ni textos), y solo las
+      // líneas que tocan la zona
+      if (oc.has(t.capa) || PL_BORR.has(t.e) || t.lt || t.ent === "DIMENSION") return;
+      if (mur ? !mur.has(t.capa) : DP_NO_MURO.test(t.capa)) return;
+      const [a, b, c, d] = dpCaja(t);
+      if (c < x0 || a > x1 || d < y0 || b > y1) return;
+      if (dpEsBarrido(t)) {
+        const r = dpRadiosPuerta(t);
+        if (!r) return;
+        g.moveTo((r[2] - x0) / cel, H - (r[3] - y0) / cel);
+        g.lineTo((r[0] - x0) / cel, H - (r[1] - y0) / cel);
+        g.lineTo((r[4] - x0) / cel, H - (r[5] - y0) / cel);
+        return;
+      }
+      const q = t.p;
+      g.moveTo((q[0] - x0) / cel, H - (q[1] - y0) / cel);
+      for (let j = 2; j < q.length; j += 2) g.lineTo((q[j] - x0) / cel, H - (q[j + 1] - y0) / cel);
+      if (t.c) g.closePath();
+    });
+    g.stroke();
+    const img = g.getImageData(0, 0, W, H).data;
     muro = new Uint8Array(N);
-  for (let i = 0; i < N; i++) muro[i] = img[4 * i + 3] > 40 ? 1 : 0;
-  // Dilatación cuadrada de r celdas (por filas y por columnas)
-  const dilatar = (src, r) => {
+    for (let i = 0; i < N; i++) muro[i] = img[4 * i + 3] > 40 ? 1 : 0;
+    if (cache) Object.assign(cache, { k: clave, muro, dil: new Map() });
+  }
+  // Dilatación cuadrada de r celdas; w = [x0, y0, x1, y1]: solo en esa ventana de celdas (afuera queda en 0)
+  const dilatar = (src, r, w) => {
     const a = new Uint8Array(N),
-      b = new Uint8Array(N);
-    for (let y = 0; y < H; y++) {
+      b = new Uint8Array(N),
+      [wx0, wy0, wx1, wy1] = w || [0, 0, W - 1, H - 1];
+    for (let y = Math.max(0, wy0 - r); y <= Math.min(H - 1, wy1 + r); y++) {
       let c = 0;
       const o = y * W;
-      for (let x = 0; x < Math.min(r, W); x++) c += src[o + x];
-      for (let x = 0; x < W; x++) {
+      for (let x = Math.max(0, wx0 - r); x < Math.min(wx0 + r, W); x++) c += src[o + x];
+      for (let x = wx0; x <= wx1; x++) {
         if (x + r < W) c += src[o + x + r];
         if (x - r - 1 >= 0) c -= src[o + x - r - 1];
         a[o + x] = c > 0 ? 1 : 0;
       }
     }
-    for (let x = 0; x < W; x++) {
+    for (let x = wx0; x <= wx1; x++) {
       let c = 0;
-      for (let y = 0; y < Math.min(r, H); y++) c += a[y * W + x];
-      for (let y = 0; y < H; y++) {
+      for (let y = Math.max(0, wy0 - r); y < Math.min(wy0 + r, H); y++) c += a[y * W + x];
+      for (let y = wy0; y <= wy1; y++) {
         if (y + r < H) c += a[(y + r) * W + x];
         if (y - r - 1 >= 0) c -= a[(y - r - 1) * W + x];
         b[y * W + x] = c > 0 ? 1 : 0;
@@ -242,7 +294,11 @@ function dpAreaDetectar(p, ext, zona) {
       cola = new Int32Array(N);
     let a = 0,
       b = 0,
-      borde = false;
+      borde = false,
+      mx0 = W,
+      my0 = H,
+      mx1 = 0,
+      my1 = 0;
     semillas.forEach(i => {
       if (libre[i] && !out[i]) {
         out[i] = 1;
@@ -254,12 +310,16 @@ function dpAreaDetectar(p, ext, zona) {
         x = i % W,
         y = (i / W) | 0;
       if (x === 0 || y === 0 || x === W - 1 || y === H - 1) borde = true;
+      if (x < mx0) mx0 = x;
+      if (x > mx1) mx1 = x;
+      if (y < my0) my0 = y;
+      if (y > my1) my1 = y;
       if (x > 0 && libre[i - 1] && !out[i - 1]) (out[i - 1] = 1), (cola[b++] = i - 1);
       if (x < W - 1 && libre[i + 1] && !out[i + 1]) (out[i + 1] = 1), (cola[b++] = i + 1);
       if (y > 0 && libre[i - W] && !out[i - W]) (out[i - W] = 1), (cola[b++] = i - W);
       if (y < H - 1 && libre[i + W] && !out[i + W]) (out[i + W] = 1), (cola[b++] = i + W);
     }
-    return { out, borde };
+    return { out, borde, caja: [mx0, my0, mx1, my1] };
   };
   const cx = Math.floor((p[0] - x0) / cel),
     cy = Math.floor(H - (p[1] - y0) / cel),
@@ -267,11 +327,21 @@ function dpAreaDetectar(p, ext, zona) {
     r0 = Math.max(1, Math.ceil(DP_HUECO / 2 / f / cel));
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return { err: "El punto está fuera de la zona" };
   if (muro[ic]) return { err: "Haga clic dentro del ambiente, no sobre una línea" };
-  let R = null;
+  let R = null,
+    // Ventana de celdas del ambiente (el borde se busca solo ahí)
+    V0 = [0, 0, W - 1, H - 1];
   // Con huecos grandes, un pasillo angosto queda cerrado: se prueba con huecos menores
   for (const r of [r0, Math.ceil(r0 / 2), Math.ceil(r0 / 4), 1]) {
-    const tapado = dilatar(muro, r),
+    let tapado = cache && cache.dil.get(r);
+    if (!tapado) {
+      tapado = dilatar(muro, r);
+      if (cache) cache.dil.set(r, tapado);
+    }
+    let libre = cache && cache.lib && cache.lib.get(r);
+    if (!libre) {
       libre = tapado.map(v => 1 - v);
+      if (cache) (cache.lib = cache.lib || new Map()).set(r, libre);
+    }
     if (ext) {
       // Afuera: lo que se alcanza desde el borde de la zona; el edificio es lo demás
       const sem = [];
@@ -289,9 +359,12 @@ function dpAreaDetectar(p, ext, zona) {
     if (tapado[ic]) continue;
     const q = rellenar(libre, [ic]);
     if (q.borde) return { err: "abierto" };
-    const d = dilatar(q.out, r);
+    const [a0, b0, a1, b1] = q.caja;
+    V0 = [Math.max(0, a0 - r - 1), Math.max(0, b0 - r - 1), Math.min(W - 1, a1 + r + 1), Math.min(H - 1, b1 + r + 1)];
+    const d = dilatar(q.out, r, V0);
     R = new Uint8Array(N);
-    for (let i = 0; i < N; i++) R[i] = d[i] && !muro[i] ? 1 : 0;
+    for (let y = V0[1]; y <= V0[3]; y++)
+      for (let x = V0[0], i = y * W + x; x <= V0[2]; x++, i++) R[i] = d[i] && !muro[i] ? 1 : 0;
     break;
   }
   if (!R) return { err: "El ambiente es muy angosto para detectarlo: dibuje su contorno por puntos" };
@@ -302,8 +375,8 @@ function dpAreaDetectar(p, ext, zona) {
       if (!sig.has(a)) sig.set(a, []);
       sig.get(a).push(b);
     };
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) {
+  for (let y = V0[1]; y <= V0[3]; y++)
+    for (let x = V0[0]; x <= V0[2]; x++) {
       if (!R[y * W + x]) continue;
       if (y === 0 || !R[(y - 1) * W + x]) add(y * V + x + 1, y * V + x);
       if (y === H - 1 || !R[(y + 1) * W + x]) add((y + 1) * V + x, (y + 1) * V + x + 1);
@@ -443,6 +516,379 @@ function dpAreaClic(p, ext) {
   dpAreaNueva(el);
   console.debug(`Área detectada en ${Math.round(performance.now() - t0)} ms (celda ${fmt(r.cel * 100, 1)} cm)`);
 }
+
+/* ---------- Ambientes: el área de cada ambiente con su tipo (dormitorio, cocina, baño…) ----------
+   El tipo se reconoce por el nombre que el arquitecto escribió en el plano (PL_AMB, js/calculo-plano.js) y el
+   proyectista lo confirma o lo cambia en la ventana «Ambientes». Cada tipo muestra la iluminancia mínima de la
+   EM.010 y lo que exige el CNE-Utilización para ese ambiente. */
+const dpOrdAmb = k => {
+  const i = Object.keys(PL_AMB).indexOf(k);
+  return i < 0 ? 99 : i;
+};
+// Textos visibles del plano, cada uno con su centro aproximado (según su alineación) y su punto de inserción
+function dpTextosPlano() {
+  if (!PL_MOD) return [];
+  const oc = new Set(EPL.ocultas || []),
+    R = [];
+  PL_MOD.textos.forEach(t => {
+    if (oc.has(t.capa) || PL_BORR.has(t.e)) return;
+    const lin = String(t.s || "")
+      .split(/\n/)
+      .map(x => x.trim())
+      .filter(Boolean);
+    if (!lin.length) return;
+    const h = t.h || 0,
+      W = Math.max(...lin.map(x => x.length)) * h * 0.6 * (t.w || 1),
+      Hh = t.mt ? lin.length * h * 1.6 : h,
+      dx = t.ha === "left" ? W / 2 : t.ha === "right" ? -W / 2 : 0,
+      dy = t.va === "top" ? -Hh / 2 : t.va === "middle" ? 0 : Hh / 2,
+      c = Math.cos(t.rot || 0),
+      s = Math.sin(t.rot || 0);
+    R.push({ t, lin, h, c: [t.x + dx * c - dy * s, t.y + dx * s + dy * c], ins: [t.x, t.y] });
+  });
+  return R;
+}
+/* Nombres de ambientes escritos en el plano: textos cuya línea empieza con «SALA», «DORMITORIO», «SS.HH.»… Un
+   nombre escrito en dos textos («PATIO DE» y debajo «SERVICIO»; «HALL» y «RECEPCION») se junta: el texto de debajo,
+   de la misma altura y giro, a menos de 2.6 alturas y alineado, es su segunda línea (o.sig). */
+function dpRotulos(T) {
+  const R = [],
+    L = T || dpTextosPlano();
+  L.forEach(o => {
+    const sig = L.find(
+      u =>
+        u !== o &&
+        u.t.capa === o.t.capa &&
+        Math.abs(u.h - o.h) <= 0.15 * o.h &&
+        Math.abs((u.t.rot || 0) - (o.t.rot || 0)) < 0.02 &&
+        (() => {
+          const dx = u.c[0] - o.c[0],
+            dy = u.c[1] - o.c[1],
+            c = Math.cos(o.t.rot || 0),
+            s = Math.sin(o.t.rot || 0),
+            a = dx * c + dy * s,
+            b = -dx * s + dy * c;
+          return b < -0.5 * o.h && b > -2.6 * o.h && Math.abs(a) < 4 * o.h;
+        })()
+    );
+    if (sig && !plAmbDe(sig.lin[0])) {
+      o = { ...o, lin: [o.lin.join(" ") + " " + sig.lin.join(" ")], sig: sig.t };
+    }
+    const tipos = o.lin.map(x => [plAmbDe(x), x]).filter(([k]) => k);
+    if (!tipos.length) return;
+    tipos.sort((a, b) => dpOrdAmb(a[0]) - dpOrdAmb(b[0]));
+    R.push({
+      ...o,
+      amb: tipos[0][0],
+      n: tipos
+        .map(x => x[1])
+        .join(" - ")
+        .replace(/[<>]/g, "")
+        .slice(0, 60)
+    });
+  });
+  return R;
+}
+// Nombre escrito dentro de un contorno (el de mayor prioridad), para proponerlo al marcar un área con un clic
+function dpRotuloEn(pts) {
+  const r = dpRotulos().filter(q => plDentro(q.c[0], q.c[1], pts));
+  r.sort((a, b) => dpOrdAmb(a.amb) - dpOrdAmb(b.amb));
+  return r[0] || null;
+}
+// Tipo de cálculo de un ambiente nuevo: patios y terrazas son área libre no techada; los demás, techada
+const dpTpAmb = k => (k === "patio" || k === "terr" ? "libre" : "tech");
+/* Detecta los ambientes de una planta (ip) o de todas (ip < 0): un área por cada nombre escrito en el plano. El
+   nombre que cae dentro de un área ya marcada le da su tipo (si no lo tenía); dos nombres en un mismo ambiente se
+   juntan («Cocina - Comedor») y queda el tipo de mayor prioridad. Si el contorno abarca el nombre de otro ambiente
+   (aunque no sea de vivienda, como «PISTA DE BAILE»: un texto de tamaño parecido), se escapó por un vano ancho y se
+   vuelve a detectar cerrando vanos mayores; si no se separa, no se crea y queda en la lista para marcarlo a mano.
+   avance(i, n): para mostrar el progreso. Devuelve el resumen. */
+async function dpAmbDetectar(ip, avance) {
+  const D = dsD(),
+    capa = DS_SIS.are.capa,
+    nuevas = new Set(),
+    tocadas = new Map(),
+    sin = [],
+    caches = new Map(),
+    pl = EPL.plantas,
+    T = dpTextosPlano(),
+    rot = dpRotulos(T).sort((a, b) => dpOrdAmb(a.amb) - dpOrdAmb(b.amb)),
+    // Textos que pueden ser el nombre de otro ambiente: con letras, sin cotas ni niveles (NPT, +0.15)
+    otros = T.filter(o => /[a-zñ]{4}/i.test(o.lin.join(" ")) && !/^(?:n\.?\s?p\.?\s?t|[+±-]?\s?\d)/i.test(o.lin[0])),
+    // Texto → su nombre de ambiente (también la segunda línea de un nombre en dos textos)
+    esRot = new Map();
+  rot.forEach(q => {
+    esRot.set(q.t, q);
+    if (q.sig) esRot.set(q.sig, q);
+  });
+  let fuera = 0,
+    asig = 0;
+  // Sin plantas encuadradas: solo lo visible en pantalla (el DXF suele tener cortes y copias con los mismos nombres)
+  const [vx0, vy0] = plADib(0, plH()),
+    [vx1, vy1] = plADib(plW(), 0),
+    areas = () => D.els.filter(e => e.t === "lin" && e.ar && e.ar.tp !== "ext" && e.pts.length >= 6),
+    h0 = DP_HUECO;
+  for (let i = 0; i < rot.length; i++) {
+    const q = rot[i];
+    if (avance && i % 4 === 0) {
+      avance(i, rot.length);
+      await new Promise(r => setTimeout(r, 0));
+    }
+    const jp = dpPlantaDe(q.c[0], q.c[1]);
+    if (pl.length ? jp < 0 : q.c[0] < vx0 || q.c[0] > vx1 || q.c[1] < vy0 || q.c[1] > vy1) {
+      fuera++;
+      continue;
+    }
+    if (ip >= 0 && jp !== ip) continue;
+    const ya = areas().find(a => plDentro(q.c[0], q.c[1], a.pts));
+    if (ya) {
+      if (nuevas.has(ya.id)) {
+        // Otro nombre en el mismo ambiente: se suma al nombre; queda el tipo de mayor prioridad
+        if (!ya.ar.n.toLowerCase().includes(q.n.toLowerCase())) ya.ar.n = `${ya.ar.n} - ${q.n}`.slice(0, 60);
+        if (dpOrdAmb(q.amb) < dpOrdAmb(ya.ar.amb)) ya.ar.amb = q.amb;
+        continue;
+      }
+      const L = tocadas.get(ya.id) || [];
+      L.push(q);
+      tocadas.set(ya.id, L);
+      continue;
+    }
+    // Nombres ajenos dentro de un contorno: textos de tamaño parecido que no son este (ni su segunda línea, cerca)
+    const ajenos = pts =>
+      otros.filter(o => o.t !== q.t && o.t !== q.sig && o.h >= 0.7 * q.h && plDentro(o.c[0], o.c[1], pts));
+    let r = { err: "sin contorno" },
+      mej = null;
+    for (const h of [h0, 1.6, 2.2, 3.0].filter((v, k) => k === 0 || v > h0)) {
+      DP_HUECO = h;
+      const k = `${jp}|${h}`;
+      if (!caches.has(k)) caches.set(k, {});
+      let t = dpAreaDetectar(q.c, false, null, caches.get(k));
+      if (t.err) t = dpAreaDetectar(q.ins, false, null, caches.get(k));
+      if (t.err) {
+        if (!mej) r = t;
+        continue;
+      }
+      const aj = ajenos(t.pts);
+      if (!mej || aj.length < mej.aj.length) mej = { t, aj };
+      if (!aj.length) break;
+    }
+    DP_HUECO = h0;
+    if (mej && mej.aj.length) {
+      const yaAreas = areas(),
+        malo = mej.aj.find(o => {
+          const rq = esRot.get(o.t);
+          return !rq || yaAreas.some(a => plDentro(rq.c[0], rq.c[1], a.pts));
+        });
+      if (malo) {
+        sin.push({
+          ...q,
+          err: `se une con «${malo.lin.join(" ").slice(0, 40)}»: márquelo con «Área de ambiente» o por puntos`
+        });
+        continue;
+      }
+    }
+    if (mej) r = mej.t;
+    const m2 = r.pts ? plAreaPol(r.pts) * EPL.f * EPL.f : 0;
+    if (r.err || m2 < 0.5) {
+      sin.push({ ...q, err: r.err === "abierto" ? "el ambiente no está cerrado" : r.err || "contorno muy pequeño" });
+      continue;
+    }
+    dsCapa(capa);
+    const el = dsAgregar({
+      t: "lin",
+      pts: r.pts,
+      c: true,
+      capa,
+      ar: { tp: dpTpAmb(q.amb), n: q.n, amb: q.amb, p: [q.c[0], q.c[1]] }
+    });
+    nuevas.add(el.id);
+  }
+  // Áreas que ya estaban: con un solo nombre adentro toman su tipo (y su nombre, si no tenían); con varios, el área
+  // abarca varios ambientes y no se le pone tipo
+  const varias = [];
+  tocadas.forEach((L, id) => {
+    const a = D.els.find(e => e.id === id),
+      tipos = new Set(L.map(q => q.amb));
+    if (L.length > 1 && tipos.size > 1) return varias.push(a);
+    if (!a.ar.amb) {
+      a.ar.amb = L[0].amb;
+      asig++;
+    }
+    if (!a.ar.n) a.ar.n = L[0].n;
+  });
+  if (nuevas.size || asig) edCambio();
+  return { nuevas: nuevas.size, asig, sin, varias, fuera, total: rot.length };
+}
+
+// Reglas citadas en un texto, en corto: «150-702(13) · 150-700(13) · 170-326»
+const dpRefs = t => [...new Set(String(t).match(/\d{3}-\d{3}(?:\(\d+\))?/g) || [])].join(" · ");
+// Tipo de área para el cálculo, en corto (la lista completa está en PL_TAREA)
+const AM_TP = {
+  tech: "Techada",
+  sot: "Sótano",
+  libre: "Libre no techada",
+  aulas: "Aulas o alta int.",
+  no: "No se cuenta"
+};
+const AM_VW = ventanaMovil(document.querySelector("#ambDlg .vw"), "jmg-electric-ambientes", {
+  w: 1040,
+  h: 560,
+  minW: 620,
+  minH: 300
+});
+let AM_PL = -1,
+  AM_RES = null;
+function ambAbrir() {
+  if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
+  dsAsegurar();
+  $("ambDlg").hidden = false;
+  vwFondo();
+  AM_VW.abrir();
+  ambRender();
+}
+function ambCerrar() {
+  $("ambDlg").hidden = true;
+  vwFondo();
+}
+function ambRender() {
+  const D = dsD(),
+    pl = EPL.plantas,
+    L = D.els.filter(
+      e => e.t === "lin" && e.ar && e.ar.tp !== "ext" && (AM_PL < 0 || dpPlantaEl(e) === AM_PL) && e.pts.length >= 6
+    );
+  $("amPlanta").innerHTML =
+    `<option value="-1">${pl.length ? "Todas las plantas" : "Lo visible en pantalla"}</option>` +
+    pl.map((p, i) => `<option value="${i}"${i === AM_PL ? " selected" : ""}>${esc(p.n)}</option>`).join("");
+  $("amPlanta").hidden = !pl.length;
+  const op = v =>
+    `<option value=""${v ? "" : " selected"}>— Sin tipo —</option>` +
+    Object.entries(PL_AMB)
+      .map(([k, t]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(t.n)}</option>`)
+      .join("");
+  L.sort(
+    (a, b) =>
+      dpPlantaEl(a) - dpPlantaEl(b) ||
+      dpOrdAmb(a.ar.amb) - dpOrdAmb(b.ar.amb) ||
+      String(a.ar.n).localeCompare(String(b.ar.n))
+  );
+  const sinTipo = L.filter(e => !e.ar.amb).length;
+  let h = "";
+  if (AM_RES) {
+    const r = AM_RES,
+      partes = [];
+    partes.push(
+      `${r.nuevas} ambiente${r.nuevas === 1 ? "" : "s"} detectado${r.nuevas === 1 ? "" : "s"} de ${r.total} nombre${r.total === 1 ? "" : "s"} escrito${r.total === 1 ? "" : "s"} en el plano`
+    );
+    if (r.asig)
+      partes.push(
+        `${r.asig} área${r.asig === 1 ? "" : "s"} que ya estaba${r.asig === 1 ? "" : "n"} marcada${r.asig === 1 ? "" : "s"} tomó su tipo`
+      );
+    if (r.fuera)
+      partes.push(
+        `${r.fuera} fuera de ${EPL.plantas.length ? "las plantas encuadradas" : "la pantalla"} (no se usan: cortes, leyendas u otras láminas)`
+      );
+    h += `<div class="am-res"><b>${partes.join(" · ")}</b>`;
+    if (r.sin.length)
+      h += `<p>Sin contorno cerrado (márquelos con «Área de ambiente» o revise las capas de muros): ${r.sin
+        .map(
+          q =>
+            `<button type="button" class="linkbtn" data-am-pt="${q.c[0]},${q.c[1]}" title="${esc(q.err)}">${esc(q.n)}</button>`
+        )
+        .join(", ")}</p>`;
+    if (r.varias.length)
+      h += `<p>Estas áreas abarcan varios ambientes y no se les puso tipo: ${r.varias
+        .map(a => `<button type="button" class="linkbtn" data-am-ver="${a.id}">${esc(a.ar.n || "Área")}</button>`)
+        .join(", ")}. Si quiere el detalle por ambiente, bórrelas y detecte otra vez.</p>`;
+    h += `</div>`;
+  }
+  h += L.length
+    ? `<div class="am-fila am-cab"><span>Ambiente</span><span>Tipo de ambiente</span><span>Piso</span><span>Área</span><span>Para el cálculo</span><span title="Iluminancia mantenida mínima, Norma EM.010, Anexo">Iluminancia mín.</span><span>Qué exige el CNE-Utilización</span><span></span></div>` +
+      L.map(e => {
+        const t = PL_AMB[e.ar.amb],
+          jp = dpPlantaEl(e),
+          piso = pl.length ? (jp >= 0 ? dpNomPiso(plPisoPlanta(pl[jp], jp)) : "fuera") : "1er piso";
+        return `<div class="am-fila${e.ar.amb ? "" : " am-sin"}"><input type="text" data-am-k="n" data-id="${e.id}" value="${esc(e.ar.n || "")}" maxlength="60" placeholder="Nombre del ambiente" aria-label="Nombre del ambiente"><select data-am-k="amb" data-id="${e.id}" aria-label="Tipo de ambiente">${op(e.ar.amb)}</select><span>${esc(piso)}</span><span class="am-n">${fmt(dsM2(e), 2)} m²</span><select data-am-k="tp" data-id="${e.id}" aria-label="Tipo de área para el cálculo">${Object.entries(
+          AM_TP
+        )
+          .map(([k, n]) => `<option value="${k}"${k === e.ar.tp ? " selected" : ""}>${esc(n)}</option>`)
+          .join(
+            ""
+          )}</select><span class="am-n">${t && t.lux ? `${t.lux} lx <em>EM.010 ${t.em}</em>` : "—"}</span><span class="am-cne" title="${t && t.cne ? esc(t.cne) : ""}">${t ? (t.cne ? dpRefs(t.cne) : "—") : "<em>Elija el tipo</em>"}</span><button type="button" class="vw-btn" data-am-ver="${e.id}" title="Ver en el plano">Ver</button></div>`;
+      }).join("")
+    : `<p class="rev-ok">Aún no hay ambientes${AM_PL >= 0 ? " en esta planta" : ""}. «Detectar ambientes» busca los nombres escritos en el plano (SALA, DORMITORIO, COCINA, SS.HH.…) y marca el contorno de cada uno; también puede marcarlos uno por uno con «Área de ambiente».</p>`;
+  $("amLista").innerHTML = h;
+  $("amCuenta").textContent =
+    (pl.length ? "" : "Sin plantas encuadradas: se detecta lo visible en pantalla · ") +
+    (L.length ? `${L.length} ambiente${L.length === 1 ? "" : "s"}${sinTipo ? ` · ${sinTipo} sin tipo` : ""}` : "");
+}
+let AM_OCUP = false;
+async function ambDetectar() {
+  if (AM_OCUP) return;
+  if (!dpRotulos().length)
+    return toast("No se encontraron nombres de ambientes en el plano: márquelos con «Área de ambiente»");
+  AM_OCUP = true;
+  const bt = $("ambDlg").querySelector('[data-am="detectar"]'),
+    t0 = performance.now();
+  bt.disabled = true;
+  try {
+    AM_RES = await dpAmbDetectar(AM_PL, (i, n) => ($("amCuenta").textContent = `Detectando ambientes… ${i} de ${n}`));
+  } finally {
+    AM_OCUP = false;
+    bt.disabled = false;
+  }
+  console.debug(`Ambientes detectados en ${Math.round(performance.now() - t0)} ms`);
+  plSobreDibujar();
+  ambRender();
+  toast(
+    AM_RES.nuevas || AM_RES.asig
+      ? `${AM_RES.nuevas} ambiente${AM_RES.nuevas === 1 ? "" : "s"} detectado${AM_RES.nuevas === 1 ? "" : "s"}: revise su tipo`
+      : "No se detectaron ambientes nuevos"
+  );
+}
+$("ambDlg").addEventListener("click", e => {
+  if (e.target.id === "ambDlg") return ambCerrar();
+  const b = e.target.closest("[data-am]");
+  if (b && b.dataset.am === "cerrar") return ambCerrar();
+  if (b && b.dataset.am === "max") return AM_VW.maximizar();
+  if (b && b.dataset.am === "detectar") return ambDetectar();
+  const v = e.target.closest("[data-am-ver]");
+  if (v) return dsVerIds([v.dataset.amVer]);
+  const pt = e.target.closest("[data-am-pt]");
+  if (pt) {
+    const [x, y] = pt.dataset.amPt.split(",").map(Number),
+      m = 3 / EPL.f;
+    plVer(x - m, y - m, x + m, y + m);
+    return plSobreDibujar();
+  }
+});
+$("ambDlg").addEventListener("change", e => {
+  if (e.target.id === "amPlanta") {
+    AM_PL = +e.target.value;
+    AM_RES = null;
+    return ambRender();
+  }
+  const c = e.target.closest("[data-am-k]");
+  if (!c) return;
+  const el = dsD().els.find(x => String(x.id) === c.dataset.id);
+  if (!el || !el.ar) return;
+  const k = c.dataset.amK,
+    v = c.value;
+  if (k === "n") el.ar.n = v.replace(/[<>]/g, "").trim().slice(0, 60);
+  else if (k === "amb") {
+    if (Object.hasOwn(PL_AMB, v)) el.ar.amb = v;
+    else delete el.ar.amb;
+  } else if (k === "tp") el.ar.tp = PL_TAREA[v] ? v : "tech";
+  edCambio();
+  plSobreDibujar();
+  ambRender();
+});
+$("ambDlg").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    ambCerrar();
+  }
+  e.stopPropagation();
+});
 
 /* ---------- Actualizar arquitectura ----------
    Cuando el arquitecto entrega una versión nueva: se compara con la anterior línea por línea (lo quitado en rojo y

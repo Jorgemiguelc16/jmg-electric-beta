@@ -34,6 +34,137 @@ function plDentro(x, y, p) {
 }
 // Ambientes de cocina y lavandería (por el nombre del área): sus tomacorrientes son del circuito de cocina
 const PL_COCINA = /cocina|lavander|kitchen/i;
+/* Tipos de ambiente de vivienda (el ambiente es un área del diseño con ar.amb). Para cada uno:
+   n   nombre;
+   re  palabras con que el arquitecto suele rotularlo en el plano (criterio de la plataforma, para reconocerlo; el
+       proyectista confirma o cambia el tipo);
+   lux iluminancia mantenida mínima del Anexo «Requisitos mínimos de iluminación» de la Norma EM.010 (2019), tabla
+       1. Vivienda: «1.1» zona privada; «1.2» zonas comunes, que se adopta en pasadizos y escaleras como situación
+       similar (columna 2 del Anexo);
+   cne lo que exige el CNE-Utilización para ese ambiente (Reglas 150-700, 150-702, 150-704 y Sección 170).
+   El orden es el de búsqueda: el primero que coincide gana («cocina-comedor» es cocina, «patio de servicio» es
+   lavandería, «cuarto de limpieza» es depósito). */
+const PL_AMB = {
+  bano: {
+    n: "Baño",
+    re: /\bba[ñn]os?\b|\bs\.?\s?s\.?\s?h\.?\s?h\b|\bs\.?\s?h\b|\bservicios? higi[eé]nico|\btoilet|\bw\.?\s?c\b|\btocador/i,
+    lux: 100,
+    em: "1.1",
+    cne: "150-702(13): un tomacorriente cerca del lavatorio; 150-702(14): a 1 m de la ducha o tina y nunca a menos de 500 mm; 150-700(13): con diferencial a menos de 3 m de la ducha o tina; 170-326: el interruptor fuera del alcance desde la ducha"
+  },
+  lav: {
+    n: "Lavandería o cuarto de trabajo doméstico",
+    re: /\blavander|\blavadero|\bplanchado|\bpatio de servicio|\btendal/i,
+    lux: 500,
+    em: "1.1",
+    cne: "150-702(12): al menos un tomacorriente doble; 150-704(7): circuito derivado independiente; 150-702(15): el de la lavadora detrás de ella, a no más de 600 mm del piso"
+  },
+  coc: {
+    n: "Cocina",
+    re: /\bcocina|\bkitchen/i,
+    lux: 300,
+    em: "1.1",
+    cne: "150-702(7): un tomacorriente por refrigerador, uno detrás de la cocina a gas (a no más de 130 mm del piso), en el mostrador ningún punto a más de 900 mm de un tomacorriente y uno doble en el comedor de la cocina; 150-702(9): no detrás del fregadero"
+  },
+  arm: {
+    n: "Clóset o vestidor",
+    re: /\bcl[oó]set|\bwalk.?in|\bwalking|\bvestidor|\bropero|\barmario/i,
+    lux: 500,
+    em: "1.1",
+    cne: "150-702(16): sin tomacorrientes en el interior, salvo los que permite; 170-204: luminaria en el techo o en la pared sobre la puerta, no colgante"
+  },
+  dep: {
+    n: "Depósito o almacén",
+    re: /\bdep[oó]sito|\balmac[eé]n|\bdespensa|\balacena|\bcuarto de (?:limpieza|m[aá]quinas|bombas|basura)|\bmaestranza/i,
+    lux: 500,
+    em: "1.1",
+    cne: "150-702(12): al menos un tomacorriente doble en cada cuarto de depósito"
+  },
+  esc: {
+    n: "Escalera",
+    re: /\bescaleras?\b/i,
+    lux: 150,
+    em: "1.2",
+    cne: "170-328: iluminada; con cuatro o más peldaños, interruptores de tres vías en la cabecera y en la base"
+  },
+  gar: {
+    n: "Garaje o cochera",
+    re: /\bgaraje|\bgarage|\bcochera|\bestacionamiento|\bparqueo/i,
+    lux: 50,
+    em: "1.1",
+    cne: "150-702(20): un tomacorriente doble por cada espacio para un carro; 150-704(10): circuito independiente si tiene puerta eléctrica"
+  },
+  terr: {
+    n: "Terraza, balcón o porche",
+    re: /\bterraza|\bbalc[oó]n|\bporche|\bazotea|\blogia\b/i,
+    lux: 20,
+    em: "1.1",
+    cne: "150-702(4): al menos un tomacorriente doble; 150-708: a prueba de intemperie si está expuesto"
+  },
+  patio: {
+    n: "Patio o jardín",
+    re: /\bpatio|\bjard[ií]n(?:es)?\b|\b[aá]rea verde/i,
+    lux: 20,
+    em: "1.1",
+    cne: "150-702(18): al menos un tomacorriente doble en el exterior de la vivienda; 150-708: a prueba de intemperie"
+  },
+  dorm: {
+    n: "Dormitorio",
+    re: /\bdormitorio|\bdorm\b|\bhabitaci[oó]n|\balcoba|\brec[aá]mara|\bcuarto\b/i,
+    lux: 50,
+    em: "1.1",
+    cne: "150-702(3): ningún punto de la pared utilizable a más de 2 m de un tomacorriente"
+  },
+  est: {
+    n: "Estudio o cuarto de trabajo",
+    re: /\bestudio|\bescritorio|\bbiblioteca|\boficina|\btaller/i,
+    lux: 500,
+    em: "1.1",
+    cne: "150-702(3): ningún punto de la pared utilizable a más de 2 m de un tomacorriente"
+  },
+  sala: {
+    n: "Sala o sala de estar",
+    re: /\bsala\b|\bestar\b|living|\bstar\b|recibo/i,
+    lux: 100,
+    em: "1.1",
+    cne: "150-702(3): ningún punto de la pared utilizable a más de 2 m de un tomacorriente"
+  },
+  com: {
+    n: "Comedor",
+    re: /\bcomedor/i,
+    lux: 100,
+    em: "1.1",
+    cne: "150-702(3): ningún punto de la pared utilizable a más de 2 m de un tomacorriente"
+  },
+  pas: {
+    n: "Pasadizo o hall",
+    re: /\bpasadizo|\bpasillo|\bcorredor|\bcirculaci[oó]n|\bhall\b|\bvest[ií]bulo|\brecibidor|\bdistribuidor/i,
+    lux: 100,
+    em: "1.2",
+    cne: "150-702(11): ningún punto a más de 4.5 m de un tomacorriente doble; 150-700(12): en corredores de uso público, uno doble cada 10 m"
+  },
+  otro: { n: "Otro", re: null, lux: null, em: "", cne: "" }
+};
+/* Tipo de ambiente de un texto del plano, o "" si no es el nombre de un ambiente: el texto debe empezar con el nombre
+   (después de un «Nº» o un número), para no tomar notas ni leyendas («TOMACORRIENTE - COCINA», «en baños»); si
+   nombra varios ambientes («COMEDOR - COCINA»), gana el primero de PL_AMB */
+function plAmbDe(s) {
+  const t = String(s || "")
+    .trim()
+    .replace(/^(?:n[º°o]\.?\s*\d*|\d+)[\s.:-]*/i, "")
+    .replace(/^medio\s+/i, "");
+  let k0 = "",
+    ini = false;
+  for (const k of Object.keys(PL_AMB)) {
+    const re = PL_AMB[k].re;
+    if (!re) continue;
+    const m = t.search(re);
+    if (m < 0) continue;
+    if (m === 0) ini = true;
+    if (!k0) k0 = k;
+  }
+  return ini ? k0 : "";
+}
 // Área de un polígono (unidades del dibujo al cuadrado)
 function plAreaPol(p) {
   let a = 0;
@@ -231,8 +362,14 @@ function planoCalc(PL, c, v) {
     medIds = new Set(sims.filter(s => PL_MED.has(s.k)).map(s => s.id)),
     patIds = new Set(sims.filter(s => s.k === "pat").map(s => s.id)),
     esAli = t => t.ali || [t.c0, t.c1].some(id => medIds.has(id) || patIds.has(id)),
-    // Ambientes de cocina o lavandería marcados como áreas
-    cocinas = els.filter(e => e.ar && e.t === "lin" && PL_COCINA.test(e.ar.n || "") && e.pts.length >= 6),
+    // Ambientes de cocina o lavandería marcados como áreas: por su tipo de ambiente o, si no lo tiene, por su nombre
+    cocinas = els.filter(
+      e =>
+        e.ar &&
+        e.t === "lin" &&
+        e.pts.length >= 6 &&
+        (e.ar.amb ? e.ar.amb === "coc" || e.ar.amb === "lav" : PL_COCINA.test(e.ar.n || ""))
+    ),
     enCocina = s => cocinas.some(a => plDentro(s.x, s.y, a.pts)),
     tubs = tubs0,
     tabs = sims.filter(e => e.k === "tab"),
