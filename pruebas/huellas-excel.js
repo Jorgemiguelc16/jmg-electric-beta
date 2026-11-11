@@ -1,7 +1,7 @@
 // Huellas de las hojas del Excel de cada caso de pruebas (herramientas/pruebas-excel.mjs). No editar a mano:
 // se regeneran con «npm run pruebas-excel -- --actualizar» después de revisar el libro.
 const HUELLAS_EXCEL = {
- "fecha": "2026-11-07",
+ "fecha": "2026-11-11",
  "casos": {
   "C1": {
    "Memoria": "a8201aae99d7e6e3",
@@ -44,28 +44,28 @@ const HUELLAS_EXCEL = {
    "Anexos": "bf199af58888e375"
   },
   "C5": {
-   "Memoria": "ce3ad9b7602e71c1",
-   "Cálculos": "d83458c281787c51",
+   "Memoria": "f2c5d4ae525ae534",
+   "Cálculos": "9393def5fa4953f6",
    "Unifilar": "760d1c30d0b19e26",
    "Alturas": "2ccf26e51c5cab18",
    "Detalles": "67ff91bef8d83d51",
-   "Tableros": "343e31a1aa513b1b",
-   "Metrado": "d7de218dc9a38f57",
+   "Tableros": "4e9dd33dfbdf4674",
+   "Metrado": "a3b3393e5fe3646a",
    "Anexos": "bf199af58888e375"
   },
   "C6": {
-   "Memoria": "565b34b54e00142c",
-   "Cálculos": "ae877ddf0a5c9310",
+   "Memoria": "1aa686cbbc3dd504",
+   "Cálculos": "9b743cc08977a9b0",
    "Unifilar": "1f42d3ef846d23d2",
    "Alturas": "2ccf26e51c5cab18",
    "Detalles": "67ff91bef8d83d51",
-   "Tableros": "d58069632e60ea0f",
-   "Metrado": "21c99b23c0b3c7f8",
+   "Tableros": "f71de415a02848ee",
+   "Metrado": "b661d5d6a93c8a2c",
    "Anexos": "bf199af58888e375"
   },
   "C7": {
    "Memoria": "a4232b66ffe7bbc8",
-   "Cálculos": "075c9cde6bb8cdf3",
+   "Cálculos": "9c24efc211ac3634",
    "Unifilar": "99eb6b420dc3890f",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "90d9dafa129b1559",
@@ -77,7 +77,7 @@ const HUELLAS_EXCEL = {
   },
   "C8": {
    "Memoria": "d060fb10bad4c435",
-   "Cálculos": "4cb02c9c57634d67",
+   "Cálculos": "ebc8aaa2d24b621e",
    "Unifilar": "99eb6b420dc3890f",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "90d9dafa129b1559",
@@ -158,15 +158,15 @@ const HUELLAS_EXCEL = {
    "Anexos": "bf199af58888e375"
   },
   "P8": {
-   "Memoria": "09513a4b72c577c5",
-   "Cálculos": "bfa6b60e84b5e220",
+   "Memoria": "d9b273b4a65ce1ba",
+   "Cálculos": "245a2e115ad1e149",
    "Unifilar": "27e5496e174088ef",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "5ac1b7e3700e20cc",
-   "Tableros": "cbc065cd84306604",
+   "Tableros": "e6add2c37a5ec04b",
    "TG": "2041c8a404fd9f72",
    "Medidores": "7328ef623aec7bd7",
-   "Metrado": "cb9f69337fe27837",
+   "Metrado": "726d4e63ee69499c",
    "Anexos": "825d539a9d431bec"
   },
   "P9": {
@@ -203,7 +203,7 @@ const HUELLAS_EXCEL = {
   },
   "P12": {
    "Memoria": "8093e0d8d49ae215",
-   "Cálculos": "8c57024325dbbe93",
+   "Cálculos": "96ff8d51d206ce12",
    "Unifilar": "99eb6b420dc3890f",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "90d9dafa129b1559",
@@ -224,18 +224,18 @@ const HUELLAS_EXCEL = {
    "Anexos": "bf199af58888e375"
   },
   "P14": {
-   "Memoria": "93d26d152414fccb",
-   "Cálculos": "91375abe6f1025e5",
+   "Memoria": "af17cacea64f632d",
+   "Cálculos": "bebc3a2c892dfe0e",
    "Unifilar": "053b13a515bb0cd8",
    "Alturas": "2ccf26e51c5cab18",
    "Detalles": "67ff91bef8d83d51",
-   "Tableros": "5358c1c5f42d39fb",
-   "Metrado": "768aba2220711443",
+   "Tableros": "036350861b7b6c35",
+   "Metrado": "c53afc87695b63f0",
    "Anexos": "bf199af58888e375"
   },
   "P15": {
    "Memoria": "839538e856b2cb4a",
-   "Cálculos": "e37fb052cdbcc275",
+   "Cálculos": "bc9146e113d6d249",
    "Unifilar": "99eb6b420dc3890f",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "90d9dafa129b1559",
@@ -257,12 +257,12 @@ const HUELLAS_EXCEL = {
   },
   "P17": {
    "Memoria": "2845c195894c616c",
-   "Cálculos": "5e1715a97c45556e",
+   "Cálculos": "506dfaf485a084d3",
    "Unifilar": "d804b5744b86b9f2",
    "Alturas": "2ccf26e51c5cab18",
    "Detalles": "67ff91bef8d83d51",
    "Tableros": "2df942c43d550077",
-   "Metrado": "38f755dfd90db99d",
+   "Metrado": "9e6e5710afd4e70e",
    "Anexos": "bf199af58888e375"
   },
   "P18": {
@@ -287,12 +287,12 @@ const HUELLAS_EXCEL = {
   },
   "P20": {
    "Memoria": "b3376f41215602d7",
-   "Cálculos": "0e4f7238f69fe272",
+   "Cálculos": "d959dd709adca096",
    "Unifilar": "d804b5744b86b9f2",
    "Alturas": "2ccf26e51c5cab18",
    "Detalles": "67ff91bef8d83d51",
    "Tableros": "2df942c43d550077",
-   "Metrado": "9f0f58cd8aaa09b8",
+   "Metrado": "2c5f1bbabbc77f68",
    "Anexos": "bf199af58888e375"
   },
   "P21": {
@@ -317,7 +317,7 @@ const HUELLAS_EXCEL = {
   },
   "P23": {
    "Memoria": "90da7e49132e9e05",
-   "Cálculos": "99454ad2765caf39",
+   "Cálculos": "51bf1ef1491751a3",
    "Unifilar": "99eb6b420dc3890f",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "90d9dafa129b1559",
@@ -328,20 +328,20 @@ const HUELLAS_EXCEL = {
    "Anexos": "825d539a9d431bec"
   },
   "P24": {
-   "Memoria": "1918de089fdbf448",
-   "Cálculos": "25ade7c1a3addb92",
+   "Memoria": "c427bbd7fb62215c",
+   "Cálculos": "5f0872fbc016a4be",
    "Unifilar": "99eb6b420dc3890f",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "522c97ea61fd691c",
-   "Tableros": "51cc6fa558805882",
+   "Tableros": "59b3d951979b5633",
    "TG": "ed75f99ac02a3657",
    "Medidores": "16674cc543be4589",
-   "Metrado": "8be468b47855623e",
+   "Metrado": "85c7574f1fc0d48a",
    "Anexos": "825d539a9d431bec"
   },
   "P25": {
    "Memoria": "a4232b66ffe7bbc8",
-   "Cálculos": "075c9cde6bb8cdf3",
+   "Cálculos": "9c24efc211ac3634",
    "Unifilar": "9e9be3fdd8c2e131",
    "Alturas": "feabdd5f29b25985",
    "Detalles": "e321977a26b2a27c",

@@ -112,8 +112,27 @@ function cardBalance(r, nro) {
       return `<tr${i.fijo ? ' class="fix"' : ""}><td class="t">${esc(lab(i))}</td><td>${fmt(i.P, 0)}</td><td><strong>${i.fase}</strong></td><td class="t"><select class="fsel" data-fase="${esc(i.key)}" aria-label="Fase de ${esc(lab(i))}"><option value="">Automático</option>${b.nm.map(n => `<option value="${n}"${f === n ? " selected" : ""}>Fijar en ${n}</option>`).join("")}</select></td></tr>`;
     })
     .join("");
+  // Cada tablero: su alimentador trifásico se dimensiona con su carga repartida, así que también debe quedar parejo
+  const T = (b.tabs || []).filter(t => t.ph[0] + t.ph[1] + t.ph[2] > 0),
+    tabla =
+      T.length > 1 || (T.length === 1 && T[0].tab !== "TG")
+        ? `<div class="tbl-wrap"><table class="bal-tabs"><thead><tr><th class="t">Tablero</th>${b.nm.map(n => `<th>${n} (W)</th>`).join("")}<th>Desbalance</th><th class="t">Estado</th></tr></thead><tbody>${T.map(
+            t =>
+              `<tr><td class="t"><b>${esc(t.tab)}</b>${t.tab === "TG" ? ' <span class="hint">(total)</span>' : ""}</td>${t.ph.map(v => `<td>${fmt(v, 0)}</td>`).join("")}<td>${fmt(t.desb, 1)} %</td><td class="t">${
+                t.desb <= 10
+                  ? pillS("ok", "≤ 10 %")
+                  : t.desb <= t.desbMin + 0.05
+                    ? `${pillS("warn", "Mínimo posible")}${t.mayor ? ` <span class="hint">divida ${esc(t.mayor.id)} · ${esc(t.mayor.desc || "")} (${fmt(t.mayor.P, 0)} W) o aliméntelo trifásico</span>` : ""}`
+                    : `${pillS("warn", "Fases fijadas")} <span class="hint">el automático lograría ${fmt(t.desbMin, 1)} %</span>`
+              }</td></tr>`
+          ).join("")}</tbody></table></div>`
+        : "";
   return `<section class="card"><h2><span><span class="num">${nro}</span>Balance de cargas por fase</span><span class="ref">${pillS(st, `Desbalance ${fmt(b.desb, 1)} %`)}</span></h2>
-  <div class="body"><div class="phases">${bars}</div><p class="balmsg ${st}">${msg}</p>${b.nFix ? `<button type="button" class="btn sec sm" data-balreset>Restablecer automático</button>` : ""}</div>
+  <div class="body"><div class="phases">${bars}</div><p class="balmsg ${st}">${msg}</p>${b.nFix ? `<button type="button" class="btn sec sm" data-balreset>Restablecer automático</button>` : ""}</div>${
+    tabla
+      ? `<div class="body"><p class="hint"><b>Balance de cada tablero.</b> Cada tablero se reparte primero por sí solo (su alimentador trifásico lleva su carga); luego se elige qué grupo de sus circuitos va a cada fase para que el total también quede parejo.</p></div>${tabla}`
+      : ""
+  }
   <div class="tbl-wrap"><table><thead><tr><th class="t">Carga</th><th>Potencia (W)</th><th>Fase</th><th class="t">Asignación</th></tr></thead><tbody>${rows}</tbody></table></div>
   <div class="body"><p class="hint">«Automático» busca el reparto con el menor desbalance posible. Fije la fase de una carga y el resto se reacomoda alrededor. Desbalance = (fase más cargada − promedio) / promedio.</p></div></section>`;
 }

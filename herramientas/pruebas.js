@@ -77,4 +77,47 @@ console.log(
 );
 // Cálculo con el diseño del plano (casos con las medidas calculadas a mano)
 mal += require("./pruebas-calc-plano.js")(ctx);
+/* Balance de fases en dos niveles: en cada caso trifásico, cada tablero secundario queda con el menor desbalance
+   posible para sus circuitos (sin fases fijadas), el TG lleva el total y una fase fijada se respeta */
+{
+  const fallas = [],
+    calc = p => vm.runInContext("calcular", ctx)(vm.runInContext("proyectoDe", ctx)(JSON.parse(JSON.stringify(p))));
+  let n = 0;
+  casos.forEach(cp => {
+    const r = calc(cp.p);
+    if (!r.bal) return;
+    r.bal.tabs.forEach(t => {
+      n++;
+      if (t.tab === "TG" && Math.abs(t.desb - r.bal.desb) > 1e-9) fallas.push(`${cp.id} TG: no es el total`);
+      if (t.tab !== "TG" && t.desb > t.desbMin + 1e-6)
+        fallas.push(`${cp.id} ${t.tab}: ${t.desb.toFixed(1)} % y podría ser ${t.desbMin.toFixed(1)} %`);
+    });
+  });
+  // Vivienda de 3 pisos con TD-1 (C6): antes TD-1 102 %, TD-2 103 % y TD-3 155 % (con una fase vacía) y el total en
+  // 1.2 %; ahora cada tablero en su mínimo, con sus tres fases usadas, y el total dentro del 10 %
+  const c6 = calc(casos.find(c => c.id === "C6").p),
+    tb = k => c6.bal.tabs.find(t => t.tab === k);
+  if (
+    !(
+      tb("TD-1").desb < 5 &&
+      tb("TD-2").desb < 51 &&
+      tb("TD-3").desb < 81 &&
+      Math.min(...tb("TD-3").ph) > 0 &&
+      c6.bal.desb <= 10
+    )
+  )
+    fallas.push(
+      `C6: ${c6.bal.tabs.map(t => `${t.tab} ${t.desb.toFixed(1)} %`).join(", ")} · total ${c6.bal.desb.toFixed(1)} %`
+    );
+  // Una fase fijada por el proyectista se respeta (y su tablero no se rota)
+  const p6 = JSON.parse(JSON.stringify(casos.find(c => c.id === "C6").p)),
+    q = c6.circ.find(x => x.tab === "TD-2" && !x.f3);
+  p6.FIX = { uni: { [q.key]: "T" }, multi: {} };
+  const f6 = calc(p6);
+  if (f6.bal.items.find(x => x.key === q.key).fase !== "T") fallas.push("C6: la fase fijada no se respetó");
+  if (fallas.length) {
+    mal++;
+    console.log("✘ Balance por tablero\n" + fallas.map(x => "    " + x).join("\n"));
+  } else console.log(`✔ Balance por tablero: ${n} tableros en el menor desbalance posible; fase fijada respetada`);
+}
 process.exit(mal ? 1 : 0);
