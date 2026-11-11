@@ -2160,6 +2160,84 @@ prueba("Ambientes: nombres del plano, tipo de ambiente, detección y ventana", a
   );
 });
 
+prueba("Revisión: reglas de seguridad del CNE por ambiente (baño, lavandería, circuitos y escalera)", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  await ev("document.body.classList.remove('sin-acceso'); $('acceso').hidden = true; 1");
+  // Ambientes: baño (x 0–6), lavandería (x 6–10) y una escalera dentro del baño; la columna (círculo en 3, 4) es
+  // la ducha, marcada a mano desde la arquitectura
+  const R = await J(`(() => {
+    const X = ${OX}, Y = ${OY}, ar = (x0, y0, x1, y1, amb) => dsAgregar({ t: "lin", c: true, capa: "E-AREAS", pts: [X + x0, Y + y0, X + x1, Y + y0, X + x1, Y + y1, X + x0, Y + y1], ar: { tp: "tech", n: "", amb } });
+    ar(0, 0, 6, 8, "bano"); ar(6, 0, 10, 8, "lav"); ar(4.5, 6.5, 5.5, 7.5, "esc");
+    const tb = dsAgregar({ t: "sim", k: "tab", x: X + 0.5, y: Y + 0.5, r: 0, capa: "E-TABLEROS", nom: "TG", nc: 6 }),
+      s = (k, x, y, cir, o = {}) => dsAgregar({ t: "sim", k, x: X + x, y: Y + y, r: 0, capa: "E-DIBUJO", cir, tab: tb.id, ...o });
+    s("toma", 3.3, 4, "C-1"); s("toma", 3.8, 4, "C-1"); s("int", 3, 4.5, "C-1");
+    s("toma", 8, 6, "C-2"); s("luz", 2, 7, "C-2");
+    s("aire", 8, 2, "C-3", { p: 1500 }); s("toma", 1, 1, "C-3");
+    s("fza", 1, 3, "C-4", { p: 4000 }); s("toma", 1, 2, "C-4");
+    s("luz", 5, 7, "C-5", { enc: "a" }); s("int3", 4.6, 6.6, "C-5", { enc: "a" });
+    const col = PL_MOD.trazos.find(t => t.ent === "CIRCLE");
+    PL_ASEL.clear(); PL_ASEL.add(col.e);
+    return { tb: tb.id };
+  })()`);
+  await ev("edMenuAccion('ducha'); 1");
+  ok(
+    (await J("EPL.duchas.length")) === 1,
+    "la ducha se marca desde la arquitectura (clic derecho › Es una ducha o tina)"
+  );
+  ok((await J("dpDuchas().length")) === 1, "la ducha marcada se reconoce");
+  const V = await J("dsVerificar().map(o => [o.nivel, o.t])"),
+    hay = (nv, re) => V.some(([n, t]) => n === nv && re.test(t));
+  ok(hay("seg", /tomacorriente a 0\.15 m de la ducha/), "150-702(14): tomacorriente a menos de 500 mm de la ducha");
+  ok(hay("aviso", /tomacorriente a 0\.65 m de la ducha/), "150-702(14): a menos de 1 m, aviso");
+  ok(
+    hay("seg", /interruptor a 0\.35 m de la ducha/),
+    "170-326(3): interruptor al alcance desde la ducha (criterio 0.6 m)"
+  );
+  ok(hay("seg", /C-2.*lavandería comparten el circuito/), "150-704(7): la lavandería sin circuito independiente");
+  ok(hay("seg", /C-3.*aire acondicionado comparte/), "150-704(12): el aire acondicionado sin circuito independiente");
+  ok(hay("seg", /C-4.*20\.20 A comparte/), "150-702(2): carga de más de 15 A sin circuito independiente");
+  ok(hay("seg", /tres vías/), "170-328: escalera con un solo interruptor de tres vías");
+  ok(V[0][0] === "seg", "lo de seguridad va primero en la lista");
+  // Con el segundo interruptor de tres vías, la escalera cumple
+  await ev(
+    `(() => { dsAgregar({ t: "sim", k: "int3", x: ${OX} + 5.4, y: ${OY} + 7.4, r: 0, capa: "E-DIBUJO", cir: "C-5", tab: "${R.tb}", enc: "a" }); return 1; })()`
+  );
+  ok(
+    !(await J("dsVerificar().some(o => /tres vías/.test(o.t))")),
+    "con interruptores de tres vías arriba y abajo, la escalera cumple"
+  );
+  // Diferencial: el circuito del cálculo (con el diseño) sin diferencial
+  const dif = await J(`(() => { const L0 = LAST; LAST = { circ: [{ src: { t: "plano", tab: "${R.tb}", cir: "C-1" } }] };
+    const v = dsVerificar().some(o => o.nivel === "seg" && /sin interruptor diferencial/.test(o.t));
+    LAST = { circ: [{ src: { t: "plano", tab: "${R.tb}", cir: "C-1" }, idName: "ID-1" }] };
+    const w = dsVerificar().some(o => /sin interruptor diferencial/.test(o.t));
+    LAST = L0; return [v, w]; })()`);
+  ok(dif[0] && !dif[1], "150-700(13): tomacorriente del baño sin diferencial (y con ID-1, cumple)");
+  // Criterio editable del alcance desde la ducha
+  await ev(
+    "revAbrir(); $('revDuc').value = '0.3'; $('revDuc').dispatchEvent(new Event('change', { bubbles: true })); 1"
+  );
+  ok(
+    (await J("dsCrit().duc")) === 0.3 && !(await J("dsVerificar().some(o => /interruptor a 0.35 m/.test(o.t))")),
+    "el alcance desde la ducha es un criterio editable"
+  );
+  ok(
+    /de seguridad/.test(await ev("$('revNota').textContent")) &&
+      (await ev("!!document.querySelector('#revLista .rev-it.seg .rev-seg')")),
+    "la ventana marca lo de seguridad"
+  );
+  await ev("revCerrar(); 1");
+  ok(
+    (await J("planoValido({ ...EPL, duchas: [EPL.duchas[0], -1, 'x'] }).duchas.length")) === 1,
+    "la ducha marcada se guarda y se valida"
+  );
+  await clic('[data-ed="cancelar"]');
+  await ev(
+    "document.querySelector('.welcome:not([hidden]) .vw-btn.def, .welcome:not([hidden]) .btn:not(.sec)')?.click(); 1"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();

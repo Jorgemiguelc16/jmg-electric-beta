@@ -767,6 +767,7 @@ function plSobreDibujar() {
   g.lineWidth = 1.5 * d;
   g.font = `600 ${11.5 * d}px "IBM Plex Sans", Arial, sans-serif`;
   if (typeof dpDibCambios === "function") dpDibCambios(g, d);
+  if (typeof dpDibDuchas === "function") dpDibDuchas(g, d);
   // Plantas encuadradas
   EPL.plantas.forEach(p => {
     const [a, b] = plAPant(p.x0, p.y1),
@@ -2618,6 +2619,10 @@ function edMenuAbrir(e) {
     const t = PLH.obj >= 0 ? PL_MOD.trazos[PLH.obj] : null;
     tit(`Arquitectura · ${na} objeto${na > 1 ? "s" : ""}`);
     b("borrar", "Borrar (se oculta; el DXF no cambia)", "Supr");
+    // Ducha o tina para la verificación del baño (CNE-U 150-702(14), 150-700(13) y 170-326)
+    const duc = new Set(EPL.duchas || []);
+    if ([...PL_ASEL].some(e => !duc.has(e))) b("ducha", "Es una ducha o tina");
+    if ([...PL_ASEL].some(e => duc.has(e))) b("noducha", "No es una ducha o tina");
     if (t) {
       b("ocultar", `Ocultar la capa ${esc(t.capa)}`);
       b("aislar", `Aislar la capa ${esc(t.capa)}`);
@@ -2873,6 +2878,19 @@ function edMenuAccion(a) {
     return toast(r.gap ? `Unidas con un tramo recto de ${plFm(r.gap)} m` : "Unidas en una sola");
   }
   if (a === "todorecto") return dsCurvar("recto");
+  if (a === "ducha" || a === "noducha") {
+    const s = new Set(EPL.duchas || []);
+    PL_ASEL.forEach(e => (a === "ducha" ? s.add(e) : s.delete(e)));
+    if (s.size) EPL.duchas = [...s];
+    else delete EPL.duchas;
+    edCambio();
+    if (!$("revDlg").hidden) revRender();
+    return toast(
+      a === "ducha"
+        ? "Ducha o tina marcada: la revisión mide desde ella los tomacorrientes e interruptores del baño"
+        : "Ya no se toma como ducha o tina"
+    );
+  }
   if (a === "borrarArq") {
     DS_SEL.clear();
     return edBorrar(false);

@@ -621,6 +621,10 @@ function planoValido(v) {
             .map(x => txt(x, 120))
         }
       : {}),
+    // Objetos de la arquitectura marcados como ducha o tina (su número de objeto en el DXF)
+    ...(Array.isArray(v.duchas) && v.duchas.length
+      ? { duchas: [...new Set(v.duchas.filter(i => Number.isInteger(i) && i >= 0 && i < 1e7))].slice(0, 5000) }
+      : {}),
     // Objetos de la arquitectura borrados de la vista (su número de objeto en el DXF; el archivo no cambia)
     ...(Array.isArray(v.borr) && v.borr.length
       ? { borr: [...new Set(v.borr.filter(i => Number.isInteger(i) && i >= 0 && i < 1e7))].slice(0, 500000) }

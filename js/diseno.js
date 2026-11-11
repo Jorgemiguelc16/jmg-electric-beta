@@ -4006,9 +4006,11 @@ function dsResumen0() {
         : hayTub
           ? '<div class="ds-aviso ok">✓ Todas las tuberías y artefactos están conectados</div>'
           : "";
-  const rv = D.els.length ? dsVerificar().filter(o => o.nivel === "aviso").length : 0;
+  const vf = D.els.length ? dsVerificar() : [],
+    rv = vf.filter(o => o.nivel === "aviso").length,
+    rs = vf.filter(o => o.nivel === "seg").length;
   const revision = D.els.length
-    ? `<div class="ds-aviso${rv ? "" : " ok"}"><b>Revisión:</b> ${rv ? `${rv} aviso${rv > 1 ? "s" : ""}` : "sin avisos"}<div><button type="button" data-dsx="rev">Revisar diseño</button></div></div>`
+    ? `<div class="ds-aviso${rv || rs ? "" : " ok"}${rs ? " seg" : ""}"><b>Revisión:</b> ${[rs ? `${rs} de seguridad` : "", rv ? `${rv} aviso${rv > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ") || "sin avisos"}<div><button type="button" data-dsx="rev">Revisar diseño</button></div></div>`
     : "";
   const orden = [
     ...Object.keys(DS_CAT),
@@ -4434,7 +4436,9 @@ $("elDlg").addEventListener("keydown", e => {
    más salidas que el criterio, tuberías con más curvas que el criterio entre dos cajas o artefactos, tomacorrientes
    sin conductor de protección marcado, letras de encendido sin interruptor (o sin luminarias) y tableros sin
    circuitos. Los límites son criterios de la plataforma, editables en la ventana; verifíquelos con el CNE. */
-const dsCrit = () => ({ sal: 12, cur: 360, ...((dsD() && dsD().crit) || {}) });
+// duc: alcance desde la ducha o tina para los interruptores (CNE-U 170-326(3) no da la distancia; criterio: 0.6 m,
+// la zona 2 de los baños de la IEC 60364-7-701)
+const dsCrit = () => ({ sal: 12, cur: 360, duc: 0.6, ...((dsD() && dsD().crit) || {}) });
 // Curvas de una tubería: suma de los cambios de dirección (en los vértices y en los arcos), en grados
 function dsGiroTotal(el) {
   const P = dsCurva(el);
@@ -4594,11 +4598,15 @@ function dsVerificar() {
     "Clic en el medio de la tubería para elegir sus conductores."
   );
   dpVerificar(add);
+  // Reglas de seguridad del CNE-Utilización por ambiente (baños, lavandería, escaleras, circuitos independientes)
+  dpVerifNorma(add);
   // Datos para el cálculo: salidas sin potencia o sin recorrido, circuitos mezclados, tableros que no coinciden
   dcAvisos().forEach(a => {
     if (a.t !== "info") add(a.t === "error" ? "aviso" : "info", a.m, a.ids.length ? a.ids : ["-"], DC_AYUDA[a.k] || "");
   });
-  return out;
+  // Primero lo de seguridad, luego los avisos y al final las notas
+  const ord = { seg: 0, aviso: 1, info: 2 };
+  return out.sort((a, b) => ord[a.nivel] - ord[b.nivel]);
 }
 const REV_VW = ventanaMovil(document.querySelector("#revDlg .vw"), "jmg-electric-revision", {
   w: 620,
@@ -4623,16 +4631,18 @@ function revRender() {
   const C = dsCrit();
   $("revSal").value = C.sal;
   $("revCur").value = C.cur;
+  $("revDuc").value = C.duc;
   REV_L = dsVerificar();
-  const av = REV_L.filter(o => o.nivel === "aviso").length;
+  const av = REV_L.filter(o => o.nivel === "aviso").length,
+    sg = REV_L.filter(o => o.nivel === "seg").length;
   $("revLista").innerHTML = REV_L.length
     ? REV_L.map(
         (o, i) =>
-          `<div class="rev-it ${o.nivel}"><i>${o.nivel === "aviso" ? "⚠" : "ℹ"}</i><span>${esc(o.t)}<small>${esc(o.d)}</small></span><span class="pla-b">${o.caja ? `<button type="button" class="vw-btn" data-revc="${o.caja}" title="Parte la tubería en el medio de su recorrido con una caja de paso">Poner caja</button>` : ""}<button type="button" class="vw-btn" data-revi="${i}" title="Elige y muestra estos elementos">Ver</button></span></div>`
+          `<div class="rev-it ${o.nivel}"><i>${o.nivel === "seg" ? "⛔" : o.nivel === "aviso" ? "⚠" : "ℹ"}</i><span>${o.nivel === "seg" ? '<em class="rev-seg">Seguridad</em>' : ""}${esc(o.t)}<small>${esc(o.d)}</small></span><span class="pla-b">${o.caja ? `<button type="button" class="vw-btn" data-revc="${o.caja}" title="Parte la tubería en el medio de su recorrido con una caja de paso">Poner caja</button>` : ""}<button type="button" class="vw-btn" data-revi="${i}" title="Elige y muestra estos elementos">Ver</button></span></div>`
       ).join("")
     : '<p class="rev-ok">✓ Sin observaciones: el diseño está conectado y completo.</p>';
   $("revNota").textContent = REV_L.length
-    ? `${av} aviso${av === 1 ? "" : "s"} · ${REV_L.length - av} nota${REV_L.length - av === 1 ? "" : "s"}`
+    ? `${sg ? `${sg} de seguridad · ` : ""}${av} aviso${av === 1 ? "" : "s"} · ${REV_L.length - av - sg} nota${REV_L.length - av - sg === 1 ? "" : "s"}`
     : "";
 }
 $("revDlg").addEventListener("click", e => {
@@ -4666,12 +4676,13 @@ $("revDlg").addEventListener("click", e => {
   }
 });
 $("revDlg").addEventListener("change", e => {
-  if (e.target.id !== "revSal" && e.target.id !== "revCur") return;
+  if (!["revSal", "revCur", "revDuc"].includes(e.target.id)) return;
   const D = dsD(),
     C = dsCrit();
   D.crit = {
     sal: Math.max(1, Math.min(100, Math.round(+$("revSal").value) || C.sal)),
-    cur: Math.max(90, Math.min(720, +$("revCur").value || C.cur))
+    cur: Math.max(90, Math.min(720, +$("revCur").value || C.cur)),
+    duc: Math.max(0, Math.min(3, parseFloat(String($("revDuc").value).replace(",", ".")) || C.duc))
   };
   edCambio();
   revRender();

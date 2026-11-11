@@ -691,6 +691,24 @@
 .rev-it.info i {
   color: #1f6fd6;
 }
+/* Reglas de seguridad del CNE: en rojo */
+.rev-it.seg {
+  background: color-mix(in srgb, #c62828 5%, transparent);
+}
+.rev-it.seg i {
+  color: #c62828;
+}
+.rev-seg {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #c62828;
+  color: #fff;
+  font: 600 10px var(--f-body);
+  font-style: normal;
+  vertical-align: 1px;
+}
 .rev-it small {
   display: block;
   color: #66737f;
@@ -1587,6 +1605,11 @@
   border-color: #9fd3ab;
   background: #f0faf2;
   color: #1f6b33;
+}
+.ds-aviso.seg {
+  border-color: #e3a1a1;
+  background: #fdf1f1;
+  color: #a51d1d;
 }
 .ds-aviso div {
   display: flex;

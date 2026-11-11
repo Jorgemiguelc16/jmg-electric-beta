@@ -890,6 +890,218 @@ $("ambDlg").addEventListener("keydown", e => {
   e.stopPropagation();
 });
 
+/* ---------- Verificación normativa del diseño: reglas de seguridad del CNE-Utilización por ambiente ----------
+   Se revisan con los ambientes marcados (tipo de ambiente, ar.amb) y las duchas o tinas del plano:
+   - 150-702(14): tomacorriente del baño a 1 m de la ducha o tina «en la medida de lo posible» y nunca a menos de 500 mm;
+   - 150-700(13): tomacorrientes de baños y lavanderías a menos de 3 m de la ducha o tina, con diferencial;
+   - 170-326(3): interruptores fuera del alcance de una persona en la ducha o tina (la distancia es criterio);
+   - 150-704(7): circuito independiente para los tomacorrientes de la lavandería;
+   - 150-704(12): circuitos independientes para el aire acondicionado;
+   - 150-702(2): electrodoméstico de más de 15 A en un circuito independiente;
+   - 170-328: escaleras de vivienda iluminadas y, con cuatro o más peldaños, con interruptores de tres vías en la
+     cabecera y en la base.
+   Las distancias se miden en planta, del centro del símbolo al borde de la ducha o tina. */
+// Duchas y tinas por el nombre de su bloque o de su capa
+const DP_DUCHA = /duch|shower|\btinas?\b|ba[ñn]era|bathtub|jacuzzi|acqua.?jet|hidromasaj/i;
+// Interruptores de tres vías (o su equivalente: conmutadores)
+const DP_3V = new Set(["int3", "int3PA", "conm", "int2v", "conmInt", "int4"]);
+/* Duchas y tinas del plano: las que marcó el proyectista (EPL.duchas: objetos de la arquitectura) y las que se
+   reconocen por su bloque o su capa; cada una con su rectángulo [x0, y0, x1, y1] */
+function dpDuchas() {
+  if (!PL_MOD || !EPL) return [];
+  const marc = new Set(EPL.duchas || []),
+    g = new Map();
+  PL_MOD.trazos.forEach(t => {
+    if (PL_BORR.has(t.e)) return;
+    const m = marc.has(t.e);
+    if (!m && !DP_DUCHA.test(t.bl || "") && !DP_DUCHA.test(t.capa)) return;
+    const [a, b, c, d] = dpCaja(t),
+      o = g.get(t.e);
+    if (!o) g.set(t.e, { e: t.e, m, caja: [a, b, c, d] });
+    else o.caja = [Math.min(o.caja[0], a), Math.min(o.caja[1], b), Math.max(o.caja[2], c), Math.max(o.caja[3], d)];
+  });
+  return [...g.values()];
+}
+// Distancia de un punto al rectángulo (0 si está dentro), en unidades del dibujo
+const dpDistCaja = (x, y, [a, b, c, d]) => Math.hypot(Math.max(a - x, 0, x - c), Math.max(b - y, 0, y - d));
+// Corriente de una carga especial (A): monofásica a 220 V; trifásica a la tensión del sistema
+function dpCorriente(el) {
+  const p = dsPotEl(el) || 0,
+    fp = parseFloat(PROY.fp) || 0.9,
+    f3 = (el.fs || (PL_ESP[el.k] || [])[1]) === 3,
+    s = SIST[MODE === "multi" ? PROY.sistG : PROY.sist] || SIST.mono220;
+  return f3 ? p / (SQ3 * (s.tri ? s.V : 380) * fp) : p / (220 * fp);
+}
+function dpVerifNorma(add) {
+  const D = dsD();
+  if (!D) return;
+  const f = EPL.f || 1,
+    C = dsCrit(),
+    sims = D.els.filter(e => e.t === "sim" && dsVis(e)),
+    amb = D.els.filter(e => e.t === "lin" && e.ar && e.ar.amb && e.pts.length >= 6),
+    // Ambiente de un punto: el más pequeño que lo contiene
+    ambDe = (x, y) =>
+      amb.filter(a => plDentro(x, y, a.pts)).sort((a, b) => plAreaPol(a.pts) - plAreaPol(b.pts))[0] || null,
+    nom = a => a.ar.n || PL_AMB[a.ar.amb].n,
+    m = v => fmt(v, 2),
+    clase = e => dsClase(e),
+    esToma = e => clase(e) === "to",
+    esInt = e => DS_CAT[e.k] && DS_CAT[e.k].g === "Interruptores";
+  if (!amb.length) {
+    if (sims.length)
+      add(
+        "info",
+        "Sin ambientes: no se verifican las reglas del CNE por ambiente",
+        ["-"],
+        "Marque los ambientes (Inicio › Ambientes › Detectar ambientes) para verificar baños, lavandería, escaleras y circuitos independientes (CNE-U 150-700, 150-702, 150-704 y 170-328)."
+      );
+    return;
+  }
+  const lugar = new Map(sims.map(e => [e.id, ambDe(e.x, e.y)])),
+    duchas = dpDuchas(),
+    // Duchas o tinas de un ambiente: las que tienen su centro adentro
+    duchasDe = a => duchas.filter(u => plDentro((u.caja[0] + u.caja[2]) / 2, (u.caja[1] + u.caja[3]) / 2, a.pts)),
+    banos = amb.filter(a => a.ar.amb === "bano");
+  // Baños sin ducha o tina reconocida: las distancias no se pueden medir
+  const sinDucha = banos.filter(a => !duchasDe(a).length);
+  if (sinDucha.length)
+    add(
+      "info",
+      `${sinDucha.length} baño${sinDucha.length > 1 ? "s" : ""} sin ducha o tina reconocida en el plano`,
+      sinDucha.map(a => a.id),
+      "Elija las líneas de la ducha o tina en la arquitectura y, con clic derecho, «Es una ducha o tina»: así se miden las distancias de los tomacorrientes e interruptores (CNE-U 150-702(14) y 170-326)."
+    );
+  // Circuito del cálculo (con el diseño) de una salida: para saber si tiene diferencial
+  const circ =
+      typeof LAST !== "undefined" && LAST && Array.isArray(LAST.circ)
+        ? LAST.circ.filter(q => q.src && q.src.t === "plano")
+        : [],
+    circDe = e => circ.find(q => q.src.tab === e.tab && q.src.cir === e.cir) || null;
+  sims.forEach(e => {
+    const a = lugar.get(e.id);
+    if (!a || (a.ar.amb !== "bano" && a.ar.amb !== "lav")) return;
+    const du = duchasDe(a),
+      d = du.length ? Math.min(...du.map(u => dpDistCaja(e.x, e.y, u.caja))) * f : null;
+    if (esToma(e)) {
+      if (a.ar.amb === "bano" && d !== null) {
+        if (d < 0.5)
+          add(
+            "seg",
+            `${nom(a)}: tomacorriente a ${m(d)} m de la ducha o tina`,
+            [e.id],
+            "CNE-U 150-702(14): nunca a menos de 500 mm de la tina o del compartimiento de ducha (medido en horizontal, sin atravesar paredes)."
+          );
+        else if (d < 1)
+          add(
+            "aviso",
+            `${nom(a)}: tomacorriente a ${m(d)} m de la ducha o tina`,
+            [e.id],
+            "CNE-U 150-702(14): en la medida de lo posible, a por lo menos 1 m de la tina o de la ducha."
+          );
+      }
+      // Diferencial: en el baño (sin ducha reconocida se supone cerca) y en la lavandería a menos de 3 m de una ducha
+      const cerca = d !== null ? d < 3 : a.ar.amb === "bano",
+        q = cerca && e.cir ? circDe(e) : null;
+      if (q && !q.idName)
+        add(
+          "seg",
+          `${nom(a)}: tomacorriente del ${e.cir} sin interruptor diferencial`,
+          [e.id],
+          "CNE-U 150-700(13): los tomacorrientes de baños y lavanderías a menos de 3 m de la tina o ducha deben estar protegidos por un interruptor diferencial para la protección de personas."
+        );
+    } else if (esInt(e) && d !== null && d < C.duc)
+      add(
+        "seg",
+        `${nom(a)}: interruptor a ${m(d)} m de la ducha o tina`,
+        [e.id],
+        `CNE-U 170-326(3): los interruptores no deben estar al alcance de una persona en la ducha o la tina. Alcance: ${m(C.duc)} m (criterio de la plataforma, editable arriba).`
+      );
+  });
+  // Circuitos: salidas de cada circuito (tablero y circuito)
+  const grupos = new Map();
+  sims.forEach(e => {
+    if (!e.cir || !clase(e)) return;
+    const k = (e.tab || "") + "|" + e.cir;
+    (grupos.get(k) || grupos.set(k, []).get(k)).push(e);
+  });
+  const nomCir = l => {
+    const tb = D.els.find(x => x.id === l[0].tab);
+    return `${l[0].cir}${tb && tb.nom ? " de " + tb.nom : ""}`;
+  };
+  grupos.forEach(l => {
+    // Lavandería: sus tomacorrientes en un circuito que no alimenta nada más
+    const enLav = l.filter(e => esToma(e) && lugar.get(e.id) && lugar.get(e.id).ar.amb === "lav");
+    if (enLav.length) {
+      const otras = l.filter(e => !enLav.includes(e));
+      if (otras.length)
+        add(
+          "seg",
+          `${nomCir(l)}: los tomacorrientes de la lavandería comparten el circuito con ${otras.length} salida${otras.length > 1 ? "s" : ""} más`,
+          [...enLav, ...otras].map(e => e.id),
+          "CNE-U 150-704(7): debe preverse un circuito derivado independiente para los tomacorrientes de la lavandería."
+        );
+    }
+    // Aire acondicionado: circuitos que no alimentan otros electrodomésticos
+    const aire = l.filter(e => e.k === "aire" || (clase(e) === "esp" && (e.ctp || (PL_ESP[e.k] || [])[0]) === "aire"));
+    if (aire.length && aire.length < l.length)
+      add(
+        "seg",
+        `${nomCir(l)}: el aire acondicionado comparte el circuito con otras salidas`,
+        l.map(e => e.id),
+        "CNE-U 150-704(12): uno o más circuitos derivados independientes para el aire acondicionado, que no alimenten a otro tipo de electrodomésticos."
+      );
+    // Electrodomésticos de más de 15 A: circuito independiente
+    l.filter(e => clase(e) === "esp" && !aire.includes(e)).forEach(e => {
+      const I = dpCorriente(e);
+      if (I > 15 && l.length > 1)
+        add(
+          "seg",
+          `${nomCir(l)}: ${e.cn || DS_CAT[e.k].n} de ${m(I)} A comparte el circuito`,
+          l.map(x => x.id),
+          "CNE-U 150-702(2): todo electrodoméstico de más de 15 A es una instalación fija, con su medio de desconexión y protección, alimentado desde un circuito derivado independiente."
+        );
+    });
+  });
+  // Escaleras: iluminadas y con interruptores de tres vías (los de la otra planta cuentan por su letra de encendido)
+  amb
+    .filter(a => a.ar.amb === "esc")
+    .forEach(a => {
+      const luces = sims.filter(e => clase(e) === "al" && lugar.get(e.id) === a);
+      if (!luces.length)
+        return add(
+          "seg",
+          `${nom(a)}: sin alumbrado`,
+          [a.id],
+          "CNE-U 170-328(1): todas las escaleras de una unidad de vivienda deben ser iluminadas."
+        );
+      const letras = new Set(luces.map(e => e.enc).filter(Boolean)),
+        tres = sims.filter(e => DP_3V.has(e.k) && e.enc && letras.has(e.enc));
+      if (tres.length < 2)
+        add(
+          "seg",
+          `${nom(a)}: su alumbrado no tiene interruptores de tres vías arriba y abajo`,
+          [a.id, ...luces.map(e => e.id), ...tres.map(e => e.id)],
+          "CNE-U 170-328(1): con cuatro o más peldaños, el alumbrado se controla con interruptores de tres vías (o su equivalente) en la cabecera y en la base; ponga a los dos la letra de encendido de estas luminarias. 170-328(2): las que van a un sótano o azotea sin áreas terminadas pueden tener un solo interruptor al inicio."
+        );
+    });
+}
+// Duchas y tinas reconocidas: un rectángulo celeste (las marcadas a mano, con línea continua)
+function dpDibDuchas(g, d) {
+  if (!PL_MOD || !EPL || (!(EPL.duchas || []).length && $("revDlg").hidden)) return;
+  g.save();
+  g.strokeStyle = "#0288d1";
+  g.fillStyle = "rgba(2, 136, 209, 0.08)";
+  g.lineWidth = 1.5 * d;
+  dpDuchas().forEach(u => {
+    const [x0, y0] = plAPant(u.caja[0], u.caja[3]),
+      [x1, y1] = plAPant(u.caja[2], u.caja[1]);
+    g.setLineDash(u.m ? [] : [4 * d, 3 * d]);
+    g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  });
+  g.restore();
+}
+
 /* ---------- Actualizar arquitectura ----------
    Cuando el arquitecto entrega una versión nueva: se compara con la anterior línea por línea (lo quitado en rojo y
    lo agregado en verde sobre el plano), se detecta si el dibujo se movió (y se mueve el diseño con él), se vuelven
