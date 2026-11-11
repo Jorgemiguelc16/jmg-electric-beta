@@ -235,6 +235,8 @@ function edAbrir(conArchivo) {
   dsAsegurar();
   DS_SEL.clear();
   DS_N = 0;
+  // Las puntas conectadas, justo en el dibujo de su artefacto (diseños guardados antes de que llegaran exactas)
+  if (EPL && EPL.dis) dsReconectar();
   ED.base = edSnap();
   ED.hist = [ED.base];
   ED.redo = [];

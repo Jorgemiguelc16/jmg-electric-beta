@@ -1259,7 +1259,63 @@ const dsCentroCon = el => {
   const f = dsFormaCon(el.k);
   return dsAMundo(el, f.c[0], f.c[1]);
 };
-// Punto del borde del artefacto en la dirección de (x, y): allí termina la tubería
+/* Hasta dónde llega el dibujo del símbolo k desde el punto c en la dirección (dx, dy), en sus unidades: el punto más
+   lejano donde esa recta toca una de sus líneas, círculos, elipses, rectángulos o triángulos (o la «S» del
+   interruptor; no las letras del tipo, que se pueden mover). Así la tubería llega justo al dibujo, sin dejar un
+   espacio. null si la recta no toca nada. */
+function dsAlcanceSim(k, c, dx, dy) {
+  let t = -1;
+  const [ox, oy] = c,
+    seg = (ax, ay, bx, by) => {
+      const ex = bx - ax,
+        ey = by - ay,
+        den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-12) return;
+      const s = ((ax - ox) * ey - (ay - oy) * ex) / den,
+        u = ((ax - ox) * dy - (ay - oy) * dx) / den;
+      if (s >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && s > t) t = s;
+    },
+    // Elipse (o círculo) de centro (ex, ey) y semiejes rx, ry
+    eli = (ex, ey, rx, ry) => {
+      const px = (ox - ex) / rx,
+        py = (oy - ey) / ry,
+        vx = dx / rx,
+        vy = dy / ry,
+        A = vx * vx + vy * vy,
+        B = 2 * (px * vx + py * vy),
+        C = px * px + py * py - 1,
+        D = B * B - 4 * A * C;
+      if (D < 0 || !A) return;
+      const s = (-B + Math.sqrt(D)) / (2 * A);
+      if (s >= 0 && s > t) t = s;
+    };
+  dsPrims(k).forEach(p => {
+    const a = p.a;
+    if (p.t === "l") seg(a[0], a[1], a[2], a[3]);
+    else if (p.t === "c") eli(a[0], a[1], a[2], a[2]);
+    else if (p.t === "e") eli(a[0], a[1], a[2], a[3]);
+    else if (p.t === "r" || p.t === "t") {
+      if (p.t === "t" && dsEsLetra(k, p)) return;
+      let [x0, y0, w, h] = a;
+      if (p.t === "t") {
+        w = a[2] * 0.6 * p.tx.length;
+        h = a[2] * 0.8;
+        x0 = p.an === "middle" ? a[0] - w / 2 : a[0];
+        y0 = a[1] - h;
+      }
+      seg(x0, y0, x0 + w, y0);
+      seg(x0 + w, y0, x0 + w, y0 + h);
+      seg(x0 + w, y0 + h, x0, y0 + h);
+      seg(x0, y0 + h, x0, y0);
+    } else if (p.t === "p")
+      for (let i = 0; i + 1 < a.length; i += 2) {
+        const j = i + 2 < a.length - 1 ? i + 2 : 0;
+        seg(a[i], a[i + 1], a[j], a[j + 1]);
+      }
+  });
+  return t >= 0 ? t : null;
+}
+// Punto del borde del artefacto en la dirección de (x, y): allí termina la tubería, tocando el dibujo del símbolo
 function dsBorde(el, x, y) {
   const f = dsFormaCon(el.k),
     [a, b] = dsALocal(el, x, y);
@@ -1269,8 +1325,59 @@ function dsBorde(el, x, y) {
   if (d < 1e-9) return dsCentroCon(el);
   dx /= d;
   dy /= d;
-  const t = f.r || Math.min(dx ? f.w / Math.abs(dx) : Infinity, dy ? f.h / Math.abs(dy) : Infinity);
-  return dsAMundo(el, f.c[0] + dx * t, f.c[1] + dy * t);
+  const t = dsAlcanceSim(el.k, f.c, dx, dy);
+  if (t !== null) return dsAMundo(el, f.c[0] + dx * t, f.c[1] + dy * t);
+  // Sin dibujo en esa dirección (un símbolo que no rodea su centro): el punto del dibujo más cercano a la tubería
+  const q = dsCercaSim(el.k, a, b);
+  return q ? dsAMundo(el, q[0], q[1]) : dsCentroCon(el);
+}
+// Punto del dibujo del símbolo k más cercano a (x, y), en sus unidades (sin las letras del tipo)
+function dsCercaSim(k, x, y) {
+  let m = Infinity,
+    r = null;
+  const prueba = (px, py) => {
+      const d = Math.hypot(px - x, py - y);
+      if (d < m) {
+        m = d;
+        r = [px, py];
+      }
+    },
+    seg = (ax, ay, bx, by) => {
+      const ex = bx - ax,
+        ey = by - ay,
+        L = ex * ex + ey * ey || 1,
+        s = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L));
+      prueba(ax + s * ex, ay + s * ey);
+    },
+    caja = (x0, y0, w, h) => {
+      seg(x0, y0, x0 + w, y0);
+      seg(x0 + w, y0, x0 + w, y0 + h);
+      seg(x0 + w, y0 + h, x0, y0 + h);
+      seg(x0, y0 + h, x0, y0);
+    };
+  dsPrims(k).forEach(p => {
+    const a = p.a;
+    if (p.t === "l") seg(a[0], a[1], a[2], a[3]);
+    else if (p.t === "c") {
+      const d = Math.hypot(x - a[0], y - a[1]) || 1;
+      prueba(a[0] + ((x - a[0]) / d) * a[2], a[1] + ((y - a[1]) / d) * a[2]);
+    } else if (p.t === "e")
+      for (let i = 0; i < 72; i++) {
+        const q = (i * Math.PI) / 36;
+        prueba(a[0] + a[2] * Math.cos(q), a[1] + a[3] * Math.sin(q));
+      }
+    else if (p.t === "r") caja(a[0], a[1], a[2], a[3]);
+    else if (p.t === "t" && !dsEsLetra(k, p)) {
+      const w = a[2] * 0.6 * p.tx.length,
+        h = a[2] * 0.8;
+      caja(p.an === "middle" ? a[0] - w / 2 : a[0], a[1] - h, w, h);
+    } else if (p.t === "p")
+      for (let i = 0; i + 1 < a.length; i += 2) {
+        const j = i + 2 < a.length - 1 ? i + 2 : 0;
+        seg(a[i], a[i + 1], a[j], a[j + 1]);
+      }
+  });
+  return r;
 }
 // Radio en que el artefacto atrae la punta de la tubería (en el dibujo)
 const dsRadioCon = el => {

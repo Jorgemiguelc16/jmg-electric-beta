@@ -2238,6 +2238,43 @@ prueba("Revisión: reglas de seguridad del CNE por ambiente (baño, lavandería,
   );
 });
 
+prueba("Editor de diseño: la tubería llega justo al dibujo de cada artefacto (sin espacio)", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  // Para cada símbolo (y girado), una tubería que llega desde lejos: su punta debe quedar sobre el dibujo
+  const R = await J(`(() => {
+    const dSeg = (x, y, a, b, c, d) => { const ex = c - a, ey = d - b, L = ex * ex + ey * ey || 1, s = Math.max(0, Math.min(1, ((x - a) * ex + (y - b) * ey) / L)); return Math.hypot(x - a - s * ex, y - b - s * ey); };
+    const dist = (k, x, y) => { let m = Infinity; dsPrims(k).forEach(p => { const a = p.a;
+      if (p.t === "l") m = Math.min(m, dSeg(x, y, ...a));
+      else if (p.t === "c") m = Math.min(m, Math.abs(Math.hypot(x - a[0], y - a[1]) - a[2]));
+      else if (p.t === "e") for (let i = 0; i < 720; i++) { const q = i * Math.PI / 360; m = Math.min(m, Math.hypot(x - a[0] - a[2] * Math.cos(q), y - a[1] - a[3] * Math.sin(q))); }
+      else if (p.t === "r") { const [x0, y0, w, h] = a; m = Math.min(m, dSeg(x, y, x0, y0, x0 + w, y0), dSeg(x, y, x0 + w, y0, x0 + w, y0 + h), dSeg(x, y, x0 + w, y0 + h, x0, y0 + h), dSeg(x, y, x0, y0 + h, x0, y0)); }
+      else if (p.t === "p") for (let i = 0; i + 1 < a.length; i += 2) { const j = i + 2 < a.length - 1 ? i + 2 : 0; m = Math.min(m, dSeg(x, y, a[i], a[i + 1], a[j], a[j + 1])); }
+      else if (p.t === "t" && !dsEsLetra(k, p)) { const w = a[2] * 0.6 * p.tx.length, h = a[2] * 0.8, x0 = p.an === "middle" ? a[0] - w / 2 : a[0], y0 = a[1] - h; m = Math.min(m, dSeg(x, y, x0, y0, x0 + w, y0), dSeg(x, y, x0 + w, y0, x0 + w, y0 + h), dSeg(x, y, x0 + w, y0 + h, x0, y0 + h), dSeg(x, y, x0, y0 + h, x0, y0)); } }); return m; };
+    const out = [];
+    ["int", "int3", "conm", "toma", "luz", "braq", "aire", "tomaMult", "telTV", "posLuz", "subida"].forEach((k, i) => [0, 37].forEach(r => {
+      const s = dsAgregar({ t: "sim", k, x: ${OX} + 1 + (i % 6) * 1.5, y: ${OY} + 2 + Math.floor(i / 6) * 2 + (r ? 1 : 0), r, capa: "E-DIBUJO" }),
+        t = dsAgregar({ t: "tub", pts: [s.x - 0.8, s.y + 0.6, s.x, s.y], c: false, modo: "techo", capa: "E-TUBERIAS-TECHO", c1: s.id });
+      edCambio();
+      const [a, b] = dsALocal(s, t.pts[2], t.pts[3]);
+      out.push([k, r, +dist(k, a, b).toFixed(4)]);
+    }));
+    return out; })()`);
+  const mal = R.filter(x => x[2] > 0.01);
+  ok(
+    !mal.length,
+    `${R.length} llegadas, todas sobre el dibujo del símbolo${mal.length ? " · con espacio: " + JSON.stringify(mal) : ""}`
+  );
+  ok(
+    R.some(x => x[0] === "int") && R.some(x => x[1] === 37),
+    "incluye el interruptor (antes quedaba a 4 unidades) y símbolos girados"
+  );
+  await clic('[data-ed="cancelar"]');
+  await ev(
+    "document.querySelector('.welcome:not([hidden]) .vw-btn.def, .welcome:not([hidden]) .btn:not(.sec)')?.click(); 1"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();
