@@ -624,8 +624,11 @@ function plGuardarVista() {
 }
 // Tamaño de los lienzos: el del panel en pantalla, en píxeles del dispositivo
 function plTam() {
-  const r = plLienzo.getBoundingClientRect(),
-    d = plDpr(),
+  const r = plLienzo.getBoundingClientRect();
+  // Mientras el lienzo no tiene un tamaño real (oculto o acomodándose) no se toca la vista: el zoom se ajustaría a
+  // ese tamaño casi nulo y el plano quedaría diminuto al volver
+  if (r.width < 40 || r.height < 40) return false;
+  const d = plDpr(),
     w = Math.max(1, Math.round(r.width * d)),
     h = Math.max(1, Math.round(r.height * d));
   if (plBase.width === w && plBase.height === h) return false;

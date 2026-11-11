@@ -59,6 +59,17 @@
   gap: 0;
   border-top: 1px solid var(--ws-line, #d6dde6);
 }
+/* Cada parte en su columna: al ocultar un panel (o los dos, en la presentación) el plano no se corre a la columna
+   del panel, que queda sin ancho */
+.ed-main > .ed-izq {
+  grid-column: 1;
+}
+.ed-main > .pl-lienzo {
+  grid-column: 2;
+}
+.ed-main > .ed-der {
+  grid-column: 3;
+}
 /* Lienzo: en Seleccionar, flecha (clic elige, arrastrar desplaza); con una herramienta, cursor en cruz */
 .pl-lienzo {
   position: relative;

@@ -2275,6 +2275,37 @@ prueba("Editor de diseño: la tubería llega justo al dibujo de cada artefacto (
   );
 });
 
+prueba("Editor de diseño: presentación y paneles ocultos sin perder el plano ni el zoom", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  const vista = () => J("({ w: plLienzo.clientWidth, h: plLienzo.clientHeight, s: PLV.s, cx: PLV.cx, cy: PLV.cy })");
+  const v0 = await vista();
+  await ev("edPresentar(true); 1");
+  await esperar(400);
+  const v1 = await vista();
+  ok(v1.w > v0.w && v1.h >= v0.h, `en la presentación el plano ocupa la pantalla (${v0.w}×${v0.h} → ${v1.w}×${v1.h})`);
+  await ev("edPresentar(false); 1");
+  await esperar(400);
+  const v2 = await vista();
+  ok(
+    v2.w === v0.w && Math.abs(v2.s / v0.s - 1) < 1e-6 && Math.abs(v2.cx - v0.cx) < 1e-6,
+    `al salir vuelve el mismo tamaño y el mismo zoom (${v0.s.toFixed(3)} → ${v2.s.toFixed(3)})`
+  );
+  await ev("plPanel.oculto = true; plPanel(); 1");
+  await esperar(400);
+  const v3 = await vista(),
+    der = await J("$('edProp').clientWidth");
+  ok(
+    v3.w > v0.w && der > 100,
+    `sin el panel izquierdo, el plano se agranda y las propiedades siguen a la derecha (${v3.w}, ${der})`
+  );
+  await ev("plPanel.oculto = false; plPanel(); 1");
+  await clic('[data-ed="cancelar"]');
+  await ev(
+    "document.querySelector('.welcome:not([hidden]) .vw-btn.def, .welcome:not([hidden]) .btn:not(.sec)')?.click(); 1"
+  );
+});
+
 // Ejecución
 let mal = 0;
 const t0 = Date.now();
