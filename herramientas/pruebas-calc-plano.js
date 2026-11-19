@@ -1,5 +1,5 @@
 /* Pruebas del cálculo con el diseño del plano (parte de «npm test»).
-   Un diseño pequeño, con las medidas calculadas a mano, para comprobar planoCalc() (js/calculo-plano.js) y calcUni
+   Un diseño pequeño, con las medidas calculadas a mano, para comprobar planoCalc() (js/calculo/calculo-plano.js) y calcUni
    con «Calcular con el diseño»: recorridos por las tuberías con sus tramos verticales, derivaciones, potencia de
    cada salida (propia, del tipo de luminaria o de Parámetros), cargas especiales y alimentador del medidor al TG.
    Alturas por defecto: techo 2.9 m, tablero 1.8 m (borde superior), tomacorriente 0.4 m, terma 1.5 m, medidor 1.1 m. */

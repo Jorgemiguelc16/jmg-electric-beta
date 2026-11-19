@@ -10,19 +10,19 @@ const { crearContexto } = require("./contexto.js");
 const { DOMParser } = require("./mini-dom.js");
 
 const { ctx, cargar, run, raiz } = crearContexto([
-  "js/logo.js",
-  "js/dibujo.js",
-  "js/unifilar.js",
-  "js/rotulo.js",
-  "js/exportar-planos.js",
-  "js/simbolos.js",
-  "js/alturas.js",
-  "js/detalles.js",
-  "js/tableros.js",
-  "js/medidores.js",
-  "js/tablerogeneral.js",
-  "js/descargas.js",
-  "js/dxf.js"
+  "js/base/logo.js",
+  "js/planos/dibujo.js",
+  "js/planos/unifilar.js",
+  "js/planos/rotulo.js",
+  "js/planos/exportar-planos.js",
+  "js/planos/simbolos.js",
+  "js/planos/alturas.js",
+  "js/planos/detalles.js",
+  "js/planos/tableros.js",
+  "js/planos/medidores.js",
+  "js/planos/tablerogeneral.js",
+  "js/exportar/descargas.js",
+  "js/editor/dxf.js"
 ]);
 ctx.DOMParser = DOMParser;
 ctx.TextDecoder = TextDecoder;

@@ -1,5 +1,5 @@
 /* DOMParser mínimo para las pruebas sin navegador: lee el SVG que generan los planos (bien formado, sin CDATA ni
-   comentarios) con lo justo que usa svgDxf() de js/exportar-planos.js: documentElement, tagName, getAttribute,
+   comentarios) con lo justo que usa svgDxf() de js/planos/exportar-planos.js: documentElement, tagName, getAttribute,
    textContent, querySelectorAll("*") y closest("[atributo]"). */
 const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 const decodificar = t =>

@@ -1,6 +1,6 @@
 /* Pruebas de la memoria en Excel («npm run pruebas-excel»), solo para desarrollo.
    En Chrome sin ventana (herramientas/chrome.mjs), para cada caso de pruebas/casos.js calcula el proyecto, genera el
-   libro con exportar() (js/excel.js), lo vuelve a abrir con ExcelJS y saca la «huella» (resumen SHA-1) de cada hoja:
+   libro con exportar() (js/exportar/excel.js), lo vuelve a abrir con ExcelJS y saca la «huella» (resumen SHA-1) de cada hoja:
    valor, fórmula y formato de cada celda, alturas de fila, anchos de columna, celdas combinadas, configuración de
    página y cantidad de imágenes. La compara con pruebas/huellas-excel.js: si un cambio en el código altera una hoja
    sin querer, la prueba lo dice. La fecha se fija en el 1 de enero de 2026 para que la huella no cambie con el día.

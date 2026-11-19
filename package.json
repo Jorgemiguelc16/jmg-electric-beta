@@ -15,7 +15,8 @@
     "estilos-sin-uso": "node herramientas/estilos-sin-uso.js",
     "estilos-tapados": "node herramientas/estilos-tapados.js",
     "capturas": "node herramientas/capturas.mjs",
-    "estres": "node herramientas/estres.mjs"
+    "estres": "node herramientas/estres.mjs",
+    "verificar": "npm run revisar && npm run revisar-formato && npm test && npm run pruebas-planos && npm run pruebas-dxf && npm run pruebas-excel && npm run pruebas-ui"
   },
   "devDependencies": {
     "eslint": "9.9.1",

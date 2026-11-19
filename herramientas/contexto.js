@@ -16,22 +16,22 @@ const nada = new Proxy(function () {}, {
 });
 // Archivos del motor, en el orden de index.html
 const MOTOR = [
-  "js/tablas-cne.js",
-  "js/textos.js",
-  "js/datos.js",
-  "js/calculo.js",
-  "js/calculo-conductores.js",
-  "js/calculo-demanda.js",
-  "js/calculo-tierra-fases.js",
-  "js/calculo-plano.js",
-  "js/iluminacion.js",
-  "js/calculo-vivienda.js",
-  "js/calculo-edificio.js",
-  "js/verificaciones.js",
-  "js/resultados.js",
-  "js/metrado.js",
-  "js/presupuesto.js",
-  "js/proyectos.js"
+  "js/base/tablas-cne.js",
+  "js/base/textos.js",
+  "js/base/datos.js",
+  "js/calculo/calculo.js",
+  "js/calculo/calculo-conductores.js",
+  "js/calculo/calculo-demanda.js",
+  "js/calculo/calculo-tierra-fases.js",
+  "js/calculo/calculo-plano.js",
+  "js/calculo/iluminacion.js",
+  "js/calculo/calculo-vivienda.js",
+  "js/calculo/calculo-edificio.js",
+  "js/calculo/verificaciones.js",
+  "js/resultados/resultados.js",
+  "js/resultados/metrado.js",
+  "js/resultados/presupuesto.js",
+  "js/proyectos/proyectos.js"
 ];
 
 // Crea el contexto con el motor y, después, los archivos extra (por ejemplo, los de los planos)

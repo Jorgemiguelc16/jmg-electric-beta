@@ -13,8 +13,9 @@ const textos =
   leer("index.html") +
   leer("manual/manual.html") +
   fs
-    .readdirSync(path.join(raiz, "js"))
-    .map(f => leer("js/" + f))
+    .readdirSync(path.join(raiz, "js"), { recursive: true })
+    .filter(f => f.endsWith(".js"))
+    .map(f => leer(path.join("js", f)))
     .join("");
 const usado = n => CONSERVAR.has(n) || new RegExp(`(^|[^\\w-])${n.replace(/[-]/g, "\\-")}([^\\w-]|$)`).test(textos);
 

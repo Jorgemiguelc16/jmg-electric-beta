@@ -10,7 +10,7 @@ const globals = require("globals");
 
 const raiz = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(raiz, "index.html"), "utf8");
-const archivos = [...html.matchAll(/<script src="(js\/[^"?]+)/g)].map(m => m[1]).filter(f => f !== "js/logo.js");
+const archivos = [...html.matchAll(/<script src="(js\/[^"?]+)/g)].map(m => m[1]).filter(f => f !== "js/base/logo.js");
 
 // Unión de los archivos, guardando dónde empieza cada uno para traducir los números de línea
 let texto = "const LOGO_JPG = '';\n";
@@ -44,11 +44,34 @@ const avisos = linter.verify(texto, [
   }
 ]);
 
+/* Orden del código: cada archivo de js/ está cargado en index.html (y no dos veces), aparece en la guía del código y
+   lleva la misma versión de caché (?v=) que los demás, para que el navegador no use una copia vieja al publicar */
+const orden = [];
+const enDisco = fs
+  .readdirSync(path.join(raiz, "js"), { recursive: true })
+  .filter(f => f.endsWith(".js"))
+  .map(f => "js/" + f.replace(/\\/g, "/"));
+const cargados = [...html.matchAll(/<script src="(js\/[^"?]+)(\?v=([^"]+))?"/g)];
+const guia = fs.readFileSync(path.join(raiz, "GUIA-DEL-CODIGO.md"), "utf8");
+enDisco.forEach(f => {
+  const n = cargados.filter(m => m[1] === f).length;
+  if (!n) orden.push(`${f}: no se carga en index.html`);
+  if (n > 1) orden.push(`${f}: se carga ${n} veces en index.html`);
+  if (!guia.includes("`" + f.slice(3) + "`")) orden.push(`${f}: falta en GUIA-DEL-CODIGO.md`);
+});
+cargados.forEach(m => !enDisco.includes(m[1]) && orden.push(`index.html carga ${m[1]}, que no existe`));
+const versiones = [...new Set([...html.matchAll(/\.(?:js|css)\?v=([^"]+)"/g)].map(m => m[1]))];
+if (versiones.length > 1) orden.push(`index.html usa varias versiones de caché: ${versiones.join(", ")}`);
+const sinV = cargados.filter(m => !m[2]).map(m => m[1]);
+if (sinV.length) orden.push(`sin versión de caché (?v=): ${sinV.join(", ")}`);
+orden.forEach(t => avisos.push({ line: 0, severity: 2, message: t, orden: true }));
+
 if (!avisos.length) {
   console.log(`Sin observaciones en ${archivos.length} archivos.`);
   process.exit(0);
 }
-for (const a of avisos) console.log(`${ubicar(a.line)}  ${a.severity === 2 ? "ERROR" : "aviso"}  ${a.message}`);
+for (const a of avisos)
+  console.log(`${a.orden ? "orden" : ubicar(a.line)}  ${a.severity === 2 ? "ERROR" : "aviso"}  ${a.message}`);
 const errores = avisos.filter(a => a.severity === 2).length;
 console.log(`\n${errores} error(es) y ${avisos.length - errores} aviso(s) en ${archivos.length} archivos.`);
 process.exit(errores ? 1 : 0);
