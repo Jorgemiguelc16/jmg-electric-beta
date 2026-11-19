@@ -403,7 +403,10 @@ function edMenuCircuitos(tb) {
 }
 function edMenuAccion(a) {
   const fn = ED_MENU.fn,
-    ctx = ED_MENU.ctx;
+    ctx = ED_MENU.ctx,
+    q = ED_MENU.hidden ? null : ED_MENU.getBoundingClientRect();
+  // Dónde estaba el menú: la lista que abre una opción (elegir la planta…) sale en el mismo lugar
+  ED_MENU.ult = q ? { x: q.left, y: q.top, t: Date.now() } : null;
   if (a === "asigcir") return edMenuCircuitos(null);
   if (a.startsWith("asigtab:")) return edMenuCircuitos(dsD().els.find(e => e.id === a.slice(8)));
   if (a.startsWith("asig:")) {

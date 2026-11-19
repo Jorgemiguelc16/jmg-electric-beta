@@ -40,6 +40,9 @@ function dpElegirPlanta(titulo, desde, fn) {
         .join(""),
     fn
   );
+  // Abierta desde el menú del clic derecho: en el mismo lugar, para que se vea
+  const u = ED_MENU.ult;
+  if (u && Date.now() - u.t < 1500) edMenuPos(u.x, u.y);
 }
 function dpCopiarAPlanta() {
   const sel = dsSel().filter(dsEditable);

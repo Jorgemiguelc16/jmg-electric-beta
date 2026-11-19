@@ -1683,8 +1683,15 @@ prueba(
       "(() => { const o = JSON.parse(JSON.stringify(_c2)); dsAgregar(o); edCambio(); window._c3 = o; return 1; })()"
     );
     ok((await ev("_c3.nom")) === "CP-3", "la caja copiada toma el número siguiente");
+    // Por el menú del clic derecho: la lista de plantas sale donde estaba el menú (no lejos, junto a la caja)
+    const pos = await J(
+      "(() => { DS_SEL.clear(); DS_SEL.add(_c.id); edMenuLista([_c.x, _c.y], '<button type=\"button\" data-edm=\"montante\">m</button>', null); edMenuPos(300, 200); const a = ED_MENU.getBoundingClientRect(); edMenuAccion('montante'); const b = ED_MENU.getBoundingClientRect(); return [ED_MENU.hidden, Math.round(a.left - b.left), Math.round(a.top - b.top), ED_MENU.textContent]; })()"
+    );
+    ok(
+      JSON.stringify(pos) === JSON.stringify([false, 0, 0, "Montante hasta la planta2do piso"]),
+      `la lista de plantas sale donde estaba el menú (${JSON.stringify(pos)})`
+    );
     // Montante desde la caja: en el 2do piso va otra caja igual
-    await ev("DS_SEL.clear(); DS_SEL.add(_c.id); dpMontante(); 1");
     await clic('#edMenu [data-edm="sal:1"]');
     const par = await J(
       "(() => { const o = dsD().els.find(e => e.id === _c.mon); window._p = o; return o && [o.k, dpPlantaEl(o), o.mon === _c.id, o.nom]; })()"
