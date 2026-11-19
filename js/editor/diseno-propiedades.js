@@ -269,6 +269,7 @@ function dsProps(c) {
           : cat.s !== "can" && cat.s !== "tie" && !PL_MED.has(el.k)
             ? campo("Circuito", circ(el.cir, el.tab)) + lista
             : "") +
+      (DP_MON.has(el.k) ? dsPropsPaso(el, campo) : "") +
       (dsConEnc(el)
         ? campo(
             "Encendido",
@@ -294,6 +295,9 @@ function dsProps(c) {
     h =
       `<div class="ed-pt">Directriz</div>` +
       campo("Texto", `<input type="text" data-dsp="s" value="${esc(el.s)}" maxlength="120">`) +
+      (el.aut
+        ? `<p class="ds-crit">Rótulo automático: el texto sigue a los alimentadores que pasan por la caja o el montante. Si lo cambia, queda como lo escriba.</p>`
+        : "") +
       campo(
         "Altura",
         `<input type="number" data-dsp="ht" value="${+(el.ht * EPL.f).toFixed(3)}" step="0.01" min="0.01"><i>m</i>`
@@ -649,8 +653,15 @@ function dsPropCambio(e) {
         el.cir = cir.replace(/[<>]/g, "").slice(0, 12);
         if (tb) el.tab = tb;
       }
-    } else if (k === "s") el.s = v.replace(/[<>]/g, "").slice(0, 200) || el.s;
-    else if (k === "tit")
+    } else if (k === "s") {
+      el.s = v.replace(/[<>]/g, "").slice(0, 200) || el.s;
+      // Escrito a mano: deja de ser rótulo automático
+      delete el.aut;
+    } else if (k === "nom" && DS_CAJAS.has(el.k)) {
+      const n = v.replace(/[<>]/g, "").slice(0, 20);
+      if (n && dsD().els.some(o => o !== el && DS_CAJAS.has(o.k) && o.nom === n)) toast(`Ya hay una caja ${n}`);
+      else if (n) el.nom = n;
+    } else if (k === "tit")
       el.tit = v.replace(/[<>]/g, "").slice(0, 60) || (el.t === "cua" ? "CUADRO DE CIRCUITOS" : "LEYENDA");
     else if (k === "ht") el.ht = Math.max(0.01, parseFloat(v) || 0.1) / EPL.f;
     else if (k === "rad") el.rad = Math.max(0.01, parseFloat(v) || 0.1) / EPL.f;
@@ -672,6 +683,7 @@ function dsPropClic(e) {
   if (!b) return;
   const a = b.dataset.dsa;
   if (a === "girar") dsGirar();
+  else if (a === "rotulo") dcPonerRotulo();
   else if (a === "ambtipo")
     luxElegir(
       dsSel()

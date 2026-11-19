@@ -224,6 +224,8 @@ const DS_CAT = Object.fromEntries(
 );
 // Color por tipo de símbolo (opción de la vista, criterio de la plataforma; la norma no fija colores): dentro de
 // cada grupo, un color distinto para cada tipo, en el orden del catálogo
+// Cajas de paso: llevan su número (CP-1, CP-2…) y pueden ser el arranque de un montante
+const DS_CAJAS = new Set(["caja", "cajaCuad"]);
 const DS_PAL = [
   "#c62828",
   "#ef6c00",

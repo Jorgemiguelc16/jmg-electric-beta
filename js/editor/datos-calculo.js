@@ -282,7 +282,7 @@ function dcRender() {
       ).join("");
   h += `<p class="dc-nota"><b>Cómo se mide (criterio de la plataforma):</b> el recorrido es el camino más corto por las tuberías del circuito, desde el tablero hasta cada salida, con las derivaciones. Se suman los tramos verticales: la tubería por el techo va a la altura del techo (${m(+PROY.hTecho || 2.9)} m) y la del piso a 0 m; en cada artefacto se sube o se baja hasta su altura de montaje (la suya o la de Parámetros › Alturas) y en el tablero desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza. Cada montante suma la altura de entrepiso (${m(+PROY.hEnt || 3.1)} m) por piso. La potencia de cada salida es la suya o, si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). La caída de tensión se calcula con la carga conectada del circuito hasta la salida más alejada (Regla 050-102); la sección es la menor que cumple la capacidad y esa caída. Agrupamiento: cada circuito usa el factor de la Tabla 5C (ítem 1) según el mayor número de circuitos que van juntos en alguna de sus tuberías (entre dos columnas de la tabla, la del número mayor). Áreas: en vivienda se suman las techadas por dimensiones interiores (Regla 050-110) y el sótano al 75 %; en otros usos, el contorno exterior (Regla 050-210); el piso de cada área es el de su planta. Los tableros y pisos que no están dibujados se calculan con los datos escritos.</p>`;
   if (L)
-    h += `<p class="dc-nota"><button type="button" class="vw-btn" data-dc="escribir">Escribir en el plano los conductores y diámetros del cálculo</button> Pone en cada tubería sus conductores (fases, neutros y tierra), sus secciones y el diámetro de la tubería según todos los circuitos que lleva (40 % de ocupación). En las tuberías de los interruptores, sus retornos (criterio: unipolar 2, doble o de tres vías 3, de cuatro vías 4 conductores, sin tierra).</p>`;
+    h += `<p class="dc-nota"><button type="button" class="vw-btn" data-dc="escribir">Escribir en el plano los conductores y diámetros del cálculo</button> Pone en cada tubería sus conductores (fases, neutros y tierra), sus secciones y el diámetro de la tubería según todos los circuitos que lleva (40 % de ocupación). En el tramo que comparten varios alimentadores (del banco a una caja de paso, un montante), los de todos ellos, cada uno con su conductor de protección (criterio del proyectista). En las tuberías de los interruptores, sus retornos (criterio: unipolar 2, doble o de tres vías 3, de cuatro vías 4 conductores, sin tierra).</p>`;
   $("dcC").innerHTML = h;
 }
 /* Conductores de la tubería de un interruptor (retornos; criterio de la plataforma, editable en la tubería): el
@@ -308,9 +308,11 @@ function dcEscribir() {
     Q = new Map(LAST.circ.filter(q => q.src && q.src.t === "plano").map(q => [q.src.tab + "|" + q.id, q])),
     n380 = LAST.sk === "tri380",
     tri = dsCirTri(D),
-    red = dsRedCond(D, tri);
+    red = dsRedCond(D, tri),
+    AL = dcAlimentadores();
   let n = 0,
-    ret = 0;
+    ret = 0,
+    comp = 0;
   D.els.forEach(t => {
     // Alimentadores y conductor de tierra: los del cálculo, según el tablero o el pozo al que llegan
     const fin = [t.c0, t.c1].map(id => por.get(id)).filter(Boolean),
@@ -336,17 +338,7 @@ function dcEscribir() {
           LAST.mode === "multi" && (tbF.nom || "TG") === "TG" && fin.some(s => s.k === "bmed")
             ? LAST.alims.find(x => x.pKey === "bm")
             : null,
-        a =
-          aBM ||
-          LAST.alims.find(x =>
-            tbF.dep != null && LAST.mode === "multi"
-              ? x.pKey === "tipo" && LAST.T[x.ti] && LAST.T[x.ti]._i === tbF.dep
-              : (tbF.nom || "TG") === "TG"
-                ? x === LAST.alims[0]
-                : x.desc.endsWith("→ " + tbF.nom) ||
-                  x.desc.includes("→ " + tbF.nom + " ") ||
-                  (tbF.nom === "TSG" && x.pKey === "servP")
-          );
+        a = aBM || dcAliDe(tbF);
       // Banco junto al TG: la tubería del TG al banco lleva las fases y neutros de todos los suministros
       if (!aBM && LAST.tgbm && LAST.mode === "multi" && (tbF.nom || "TG") === "TG" && fin.some(s => s.k === "bmed")) {
         const g = LAST.tgbm;
@@ -358,13 +350,24 @@ function dcEscribir() {
         return;
       }
       if (!a) return;
-      const fa = a.s.tri ? 3 : 2;
-      t.cond = { f: fa, n: Math.max(0, a.s.n - fa), t: true };
-      delete t.condA;
-      if (a.tubo && DS_DIAS.includes(a.tubo.mm)) t.dia = a.tubo.mm;
-      t.sec = `${a.s.n}-1×${a.S} + 1×${a.St} T mm² (alimentador)`;
+      dcEscribirAli(t, [a]);
       n++;
       return;
+    }
+    /* Tramo de alimentadores que no llega a un tablero (del banco a una caja de paso, el montante, de una caja a
+       otra): los conductores de todos los alimentadores que pasan por él */
+    if (t.t === "tub" && !t.cir && AL.length) {
+      const pas = AL.filter(x => x.a && x.ids.has(t.id));
+      if (pas.length) {
+        dcEscribirAli(
+          t,
+          pas.map(x => x.a),
+          pas.map(x => x.nom)
+        );
+        n++;
+        if (pas.length > 1) comp++;
+        return;
+      }
     }
     if (t.t !== "tub" || t.ali || !t.cir || !t.tab) return;
     if (![t.cir, ...(t.cx || [])].some(c => Q.has(t.tab + "|" + c))) return;
@@ -397,7 +400,7 @@ function dcEscribir() {
   D.cirt = true;
   edCambio();
   toast(
-    `Conductores y diámetros del cálculo en ${n + ret} tubería${n + ret === 1 ? "" : "s"}${ret ? ` (${ret} de interruptores, con sus retornos)` : ""}`
+    `Conductores y diámetros del cálculo en ${n + ret} tubería${n + ret === 1 ? "" : "s"}${ret ? ` (${ret} de interruptores, con sus retornos)` : ""}${comp ? `; ${comp} con varios alimentadores juntos` : ""}`
   );
 }
 $("dcDlg").addEventListener("click", e => {
@@ -449,3 +452,224 @@ $("dcDlg").addEventListener("keydown", e => {
   }
   e.stopPropagation();
 });
+
+/* ---------- Alimentadores que pasan por las cajas de paso y los montantes ----------
+   Con el recorrido de cada alimentador (planoCalc: ids de rutas y desdeMed), qué alimentadores pasan por cada caja
+   de paso o montante, sus conductores del cálculo, el número de cada caja (CP-1, CP-2…) y el rótulo automático
+   («Sube por muro para TD-02, TD-03 y TD-04»). El número, el rótulo y el conductor de protección de cada
+   alimentador en el tramo compartido son criterio del proyectista. */
+// Alimentador del cálculo (LAST.alims) que llega a un tablero del plano
+function dcAliDe(tbF) {
+  if (!LAST || !LAST.alims) return null;
+  const nom = tbF.nom || "TG";
+  return (
+    LAST.alims.find(x =>
+      tbF.dep != null && LAST.mode === "multi"
+        ? x.pKey === "tipo" && LAST.T[x.ti] && LAST.T[x.ti]._i === tbF.dep
+        : nom === "TG"
+          ? x === LAST.alims[0]
+          : x.desc.endsWith("→ " + nom) || x.desc.includes("→ " + nom + " ") || (nom === "TSG" && x.pKey === "servP")
+    ) || null
+  );
+}
+// Conductores de un alimentador: «2-1×10 + 1×10 T mm²»
+const dcTxtAli = a => `${a.s.n}-1×${a.S} + 1×${a.St} T mm²`;
+/* Alimentadores del plano: cada tablero con el recorrido de su alimentador (ids de tuberías y artefactos), el
+   medidor del banco del que sale (M-1, M-2…) y sus conductores del cálculo (si se calculó con el diseño). El
+   recorrido es desde su medidor del banco si lo tiene; si no, desde el TG. */
+function dcAlimentadores(R) {
+  if (R === undefined) R = dcDatos().R;
+  if (!R) return [];
+  const D = dsD(),
+    meds = D.els.filter(e => e.k === "bmed").flatMap(b => dsMedidoresBanco(b)),
+    conPlano = !!(LAST && LAST.plano);
+  return D.els
+    .filter(e => e.k === "tab")
+    .map(tb => {
+      const nom = tb.nom || "TG",
+        ms = meds.filter(m => m.tab && m.tab === nom),
+        desdeBanco = ms.length > 0 || (MODE === "multi" && tb.dep != null),
+        r =
+          nom === "TG"
+            ? R.rutas.TG
+            : desdeBanco
+              ? R.desdeMed[tb.id] || R.rutas[nom]
+              : R.rutas[nom] || R.desdeMed[tb.id];
+      if (!r || !r.ids) return null;
+      return {
+        tb,
+        nom,
+        med: ms.length === 1 ? ms[0].n : "",
+        ids: new Set(r.ids),
+        a: conPlano ? dcAliDe(tb) : null
+      };
+    })
+    .filter(Boolean);
+}
+// Conductores de uno o varios alimentadores en una tubería, y su diámetro (40 % de ocupación, como los circuitos)
+function dcEscribirAli(t, A, noms) {
+  if (A.length === 1) {
+    const a = A[0],
+      fa = a.s.tri ? 3 : 2;
+    t.cond = { f: fa, n: Math.max(0, a.s.n - fa), t: true };
+    delete t.condA;
+    if (a.tubo && DS_DIAS.includes(a.tubo.mm)) t.dia = a.tubo.mm;
+    t.sec = `${dcTxtAli(a)} (alimentador${noms ? " " + noms[0] : ""})`;
+    return;
+  }
+  let F = 0,
+    N = 0,
+    area = 0;
+  const grupos = new Map();
+  A.forEach(a => {
+    const fa = a.s.tri ? 3 : 2;
+    F += fa;
+    N += Math.max(0, a.s.n - fa);
+    area += a.s.n * (OD[a.S] || 0) ** 2 + (OD[a.St] || 0) ** 2;
+    const k = `${a.s.n}-1×${a.S} + 1×${a.St} T`;
+    grupos.set(k, (grupos.get(k) || 0) + 1);
+  });
+  area = (area * Math.PI) / 4;
+  const tb = TUBOS.find(([, , di]) => area <= (0.4 * Math.PI * di * di) / 4);
+  t.cond = { f: Math.min(12, F), n: Math.min(6, N), t: true };
+  delete t.condA;
+  if (tb && DS_DIAS.includes(tb[0])) t.dia = tb[0];
+  const sec = [...grupos].map(([k, c]) => (c > 1 ? `${c}×(${k})` : k)).join(" + ") + " mm²",
+    a = ` (alimentadores ${noms.join(", ")})`;
+  t.sec = (sec + (sec.length + a.length <= 160 ? a : "")).slice(0, 160);
+}
+// Alimentadores que pasan por un elemento (caja de paso o canalización vertical)
+const dcAliPor = (el, AL) => AL.filter(x => x.ids.has(el.id));
+// «TD-02, TD-03 y TD-04»
+const dcLista = l => (l.length < 2 ? l.join("") : l.slice(0, -1).join(", ") + " y " + l[l.length - 1]);
+/* Texto del rótulo de una caja o un montante: hacia dónde va cada alimentador que pasa. Con montante: sube a los
+   tableros de los pisos de arriba, baja a los de abajo y llega a los de su piso; sin él, pasa. */
+function dcRotuloTexto(el, AL) {
+  const pas = dcAliPor(el, AL);
+  if (!pas.length) return "";
+  const D = dsD(),
+    por = new Map(D.els.map(e => [e.id, e])),
+    cad = plMontanteTodo(el, por),
+    nom = l => dcLista(l.map(x => x.nom)),
+    piso = e => {
+      const i = dpPlantaEl(e);
+      return i >= 0 ? dpPisoDe(i) : null;
+    },
+    p0 = piso(el),
+    G = { sube: [], baja: [], llega: [], pasa: [] };
+  pas.forEach(x => {
+    const p = piso(x.tb);
+    if (!cad.some(id => x.ids.has(id)) || p0 === null || p === null) G.pasa.push(x);
+    else G[p > p0 ? "sube" : p < p0 ? "baja" : "llega"].push(x);
+  });
+  return [
+    G.sube.length && `Sube por muro para ${nom(G.sube)}`,
+    G.baja.length && `Baja por muro para ${nom(G.baja)}`,
+    G.llega.length && `Llega para ${nom(G.llega)}`,
+    G.pasa.length && `${G.pasa.length > 1 ? "Pasan los alimentadores" : "Pasa el alimentador"} de ${nom(G.pasa)}`
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+// Rótulos automáticos (aut: el elemento que rotulan): su texto sigue a los alimentadores que pasan
+function dcRotulosAuto() {
+  const D = dsD(),
+    R = D.els.filter(e => e.aut && (e.t === "txt" || e.t === "dir"));
+  if (!R.length) return;
+  let AL;
+  try {
+    AL = dcAlimentadores();
+  } catch (e) {
+    return;
+  }
+  const por = new Map(D.els.map(e => [e.id, e]));
+  R.forEach(t => {
+    const el = por.get(t.aut);
+    // Sin la caja o el montante que rotulaba: queda como texto propio
+    if (!el) return delete t.aut;
+    const s = dcRotuloTexto(el, AL);
+    if (s) t.s = s.slice(0, t.t === "dir" ? 120 : 200);
+  });
+}
+// Rótulo de la caja o el montante elegido: una directriz desde él (o se elige la que ya tiene)
+function dcPonerRotulo() {
+  const el = dsSel()[0];
+  if (!el) return;
+  const D = dsD(),
+    ya = D.els.find(e => e.aut === el.id);
+  if (ya) {
+    DS_SEL.clear();
+    DS_SEL.add(ya.id);
+    edProps();
+    plMostrar();
+    return toast("Esta caja ya tiene su rótulo: quedó elegido");
+  }
+  const s = dcRotuloTexto(el, dcAlimentadores());
+  if (!s)
+    return toast(
+      "Por aquí no pasa ningún alimentador: únalo con tuberías del banco de medidores (o del TG) hasta los tableros"
+    );
+  const capa = dsCapaPara("dir"),
+    d = 1.2 / EPL.f;
+  dsCapa(capa);
+  const r = dsAgregar({
+    t: "dir",
+    pts: [el.x, el.y, el.x + d, el.y + d],
+    s: s.slice(0, 120),
+    ht: dsMm(2.5),
+    capa,
+    aut: el.id
+  });
+  DS_SEL.clear();
+  DS_SEL.add(r.id);
+  edCambio();
+  edProps();
+  toast("Rótulo puesto: se actualiza solo con los tableros a los que va. Si cambia su texto, deja de actualizarse");
+}
+// Cajas de paso numeradas (CP-1, CP-2…): la nueva o la copiada toma el número siguiente (criterio del proyectista)
+function dsNombrarCajas() {
+  const cj = dsD().els.filter(e => e.t === "sim" && DS_CAJAS.has(e.k));
+  if (!cj.length) return;
+  const num = n => +(/^CP-(\d+)$/.exec(n || "") || [])[1] || 0,
+    ya = new Set();
+  let max = Math.max(0, ...cj.map(e => num(e.nom)));
+  cj.forEach(e => {
+    if (!e.nom || ya.has(e.nom)) e.nom = "CP-" + ++max;
+    ya.add(e.nom);
+  });
+}
+// Propiedades de una caja de paso o una canalización vertical: su número y los alimentadores que pasan
+function dsPropsPaso(el, campo) {
+  let AL = [];
+  try {
+    AL = dcAlimentadores();
+  } catch (e) {
+    AL = [];
+  }
+  const pas = dcAliPor(el, AL),
+    conRot = dsD().els.some(e => e.aut === el.id);
+  let h = DS_CAJAS.has(el.k)
+    ? campo("Número", `<input type="text" data-dsp="nom" value="${esc(el.nom || "")}" maxlength="20">`)
+    : "";
+  h += `<div class="ed-pt">Alimentadores que pasan${pas.length ? ` (${pas.length})` : ""}</div>`;
+  if (!pas.length)
+    return (
+      h +
+      `<p class="ds-ali-n">Ninguno. Una con tuberías el banco de medidores (o el TG) con los tableros pasando por aquí: las tuberías sin circuito siguen al alimentador solas.</p>`
+    );
+  return (
+    h +
+    `<table class="ds-ali"><tbody>${pas
+      .map(
+        x =>
+          `<tr><td>${x.med ? `${esc(x.med)} → ` : ""}<b>${esc(x.nom)}</b></td><td>${x.a ? esc(dcTxtAli(x.a)) : "—"}</td></tr>`
+      )
+      .join("")}</tbody></table>` +
+    (pas.some(x => !x.a)
+      ? `<p class="ds-ali-n">Los conductores salen del cálculo: calcule el proyecto con el diseño (Datos para el cálculo).</p>`
+      : "") +
+    `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="rotulo" title="Directriz con el texto «Sube por muro para…», que se actualiza sola">${
+      conRot ? "Ver su rótulo" : "Poner rótulo en el plano"
+    }</button></div>`
+  );
+}

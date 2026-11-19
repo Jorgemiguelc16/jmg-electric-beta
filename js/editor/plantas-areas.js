@@ -65,8 +65,11 @@ function dpCopiarAPlanta() {
    pasar por varios pisos, como el ducto que sube del banco de medidores a los tableros del 2do y del 3er piso: en
    cada planta intermedia va una canalización atravesando (09-93-07), enlazada con la de abajo (mon) y la de arriba
    (mon2), y en la última, la bajada (o la subida si el montante baja). Un montante ya hecho se prolonga desde su
-   extremo: ese extremo pasa a ser «atravesando». */
+   extremo: ese extremo pasa a ser «atravesando». También sale de una caja de paso, como se dibuja muchas veces el
+   montante de los alimentadores (criterio del proyectista): en el último piso va otra caja igual y la caja del
+   extremo sigue siendo caja al prolongarlo. */
 const DP_PAR = { subida: "bajada", bajada: "subida", atrav: "atrav" };
+const DP_MON = new Set([...Object.keys(DP_PAR), ...DS_CAJAS]);
 const dpPisoDe = i => plPisoPlanta(EPL.plantas[i], i);
 function dpEnlazar(a, b) {
   a[a.mon ? "mon2" : "mon"] = b.id;
@@ -74,9 +77,11 @@ function dpEnlazar(a, b) {
 }
 function dpMontante() {
   const el = dsSel()[0];
-  if (!el || !DP_PAR[el.k])
-    return toast("Elija una canalización hacia arriba, hacia abajo o atravesando (Biblioteca › Cajas y canalización)");
-  if (el.mon && el.mon2) return toast("Esta canalización ya está enlazada arriba y abajo");
+  if (!el || !DP_MON.has(el.k))
+    return toast(
+      "Elija una caja de paso o una canalización hacia arriba, hacia abajo o atravesando (Biblioteca › Cajas y canalización)"
+    );
+  if (el.mon && el.mon2) return toast("Este montante ya está enlazado arriba y abajo");
   const i = dpPlantaEl(el);
   if (i < 0) return toast("La canalización no está dentro de una planta encuadrada");
   const D = dsD(),
@@ -117,14 +122,14 @@ function dpMontante() {
       });
     };
     // Al prolongarlo, el extremo pasa a atravesar su piso
-    if (ya) el.k = "atrav";
+    if (ya && !DS_CAJAS.has(el.k)) el.k = "atrav";
     let prev = el;
     medio.forEach(m => {
       const a = nuevo(m, "atrav");
       dpEnlazar(prev, a);
       prev = a;
     });
-    const fin = nuevo(j, sube ? "bajada" : "subida");
+    const fin = nuevo(j, DS_CAJAS.has(el.k) ? el.k : sube ? "bajada" : "subida");
     dpEnlazar(prev, fin);
     edCambio();
     toast(

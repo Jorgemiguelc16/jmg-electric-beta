@@ -242,6 +242,8 @@ function edAbrir(conArchivo) {
     dsReconectar();
     dsPropagarCircuitos();
     dsCondAuto();
+    dsNombrarCajas();
+    dcRotulosAuto();
   }
   ED.base = edSnap();
   ED.hist = [ED.base];
@@ -287,6 +289,9 @@ function edCambio() {
     dsReconectar();
     dsPropagarCircuitos();
     dsCondAuto();
+    // Cajas de paso numeradas (CP-1, CP-2…) y rótulos de los alimentadores al día
+    dsNombrarCajas();
+    dcRotulosAuto();
   }
   const s = edSnap();
   if (ED.hist[ED.hist.length - 1] !== s) {

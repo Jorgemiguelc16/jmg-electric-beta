@@ -698,7 +698,9 @@ function disValido(v) {
           id: typeof e.id === "string" && /^d[0-9]{1,7}$/.test(e.id) ? e.id : "",
           capa: txt(e.capa, 60).trim() || "E-DIBUJO"
         },
-        cir = e.cir ? { cir: txt(e.cir, 12) } : {};
+        cir = e.cir ? { cir: txt(e.cir, 12) } : {},
+        // Rótulo automático: el texto lo escribe la plataforma con los alimentadores que pasan por esa caja o montante
+        aut = typeof e.aut === "string" && /^d[0-9]{1,7}$/.test(e.aut) ? { aut: e.aut } : {};
       if (e.t === "sim" && typeof e.k === "string" && /^[a-zA-Z0-9]{1,12}$/.test(e.k) && n(e.x) && n(e.y))
         return {
           ...b,
@@ -723,7 +725,7 @@ function disValido(v) {
           // Tablero del circuito del artefacto (lo hereda de la tubería que llega a él)
           ...(e.k !== "tab" && typeof e.tab === "string" && /^d[0-9]{1,7}$/.test(e.tab) ? { tab: e.tab } : {}),
           // Tablero: nombre, número de circuitos y descripción de cada uno
-          ...(e.k === "tab" && e.nom ? { nom: txt(e.nom, 20) } : {}),
+          ...((e.k === "tab" || e.k === "caja" || e.k === "cajaCuad") && e.nom ? { nom: txt(e.nom, 20) } : {}),
           ...(e.k === "tab" && n(e.nc) && e.nc >= 1 ? { nc: Math.min(60, Math.round(e.nc)) } : {}),
           ...(e.k === "tab" && Array.isArray(e.cd) ? { cd: e.cd.slice(0, 60).map(d => txt(d, 60)) } : {}),
           // Tablero de un departamento: índice de su tipo (edificio multifamiliar)
@@ -760,7 +762,16 @@ function disValido(v) {
           ...(e.elc === true ? { elc: true } : {})
         };
       if (e.t === "txt" && n(e.x) && n(e.y) && n(e.ht) && e.ht > 0)
-        return { ...b, t: "txt", x: e.x, y: e.y, ht: e.ht, r: n(e.r) ? e.r : 0, s: txt(e.s, 200) || "Texto" };
+        return {
+          ...b,
+          t: "txt",
+          x: e.x,
+          y: e.y,
+          ht: e.ht,
+          r: n(e.r) ? e.r : 0,
+          s: txt(e.s, 200) || "Texto",
+          ...aut
+        };
       // Leyenda automática: esquina superior izquierda y título
       // Cuadro de circuitos: esquina superior izquierda
       if (e.t === "cua" && n(e.x) && n(e.y))
@@ -781,7 +792,7 @@ function disValido(v) {
         };
       // Directriz: punta y quiebre, con su texto
       if (e.t === "dir" && Array.isArray(e.pts) && e.pts.length === 4 && e.pts.every(n) && n(e.ht) && e.ht > 0)
-        return { ...b, t: "dir", pts: e.pts.slice(), ht: e.ht, s: txt(e.s, 120) || "Texto" };
+        return { ...b, t: "dir", pts: e.pts.slice(), ht: e.ht, s: txt(e.s, 120) || "Texto", ...aut };
       if (
         (e.t === "lin" || e.t === "tub") &&
         Array.isArray(e.pts) &&
@@ -831,7 +842,7 @@ function disValido(v) {
                     }
                   : {}),
                 // Conductores que le dio el cálculo (texto: «2-1×2.5 + 1×2.5 T mm²»)
-                ...(e.sec ? { sec: txt(e.sec, 80) } : {}),
+                ...(e.sec ? { sec: txt(e.sec, 160) } : {}),
                 // Tubería de un alimentador (del medidor al tablero o entre tableros), sin circuito
                 ...(e.ali === true ? { ali: true } : {}),
                 // Etiquetas propias: longitud (total, por tramo u oculta) y circuito con diámetro (sin ellas, como el plano)

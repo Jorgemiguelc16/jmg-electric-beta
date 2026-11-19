@@ -1307,6 +1307,30 @@
   line-height: 1.35;
   color: var(--ws-text2, #66737f);
 }
+/* Alimentadores que pasan por una caja de paso o un montante */
+.ds-ali {
+  width: calc(100% - 20px);
+  margin: 2px 10px 6px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.ds-ali td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--ws-line, #d6dde6);
+  vertical-align: top;
+}
+.ds-ali td:last-child {
+  color: var(--ws-text2, #66737f);
+  text-align: right;
+  white-space: nowrap;
+}
+.ds-ali-n {
+  margin: 0;
+  padding: 2px 10px 6px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ws-text2, #66737f);
+}
 .ds-prev {
   display: grid;
   place-items: center;

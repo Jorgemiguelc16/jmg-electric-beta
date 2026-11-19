@@ -443,6 +443,20 @@ function plCamino(dj, fin) {
   });
   return out;
 }
+/* Tuberías y artefactos por los que pasa el camino de un plDijkstra hasta un nodo (ids, sin repetir): qué cajas de
+   paso, montantes y tuberías recorre un alimentador */
+function plIdsCamino(dj, fin) {
+  const s = new Set();
+  for (let v = fin, i = 0; i < 1e5; i++) {
+    const [k, id] = v.split(":");
+    if ((k === "D" || k === "V") && id) s.add(id);
+    if (!dj.A.has(v)) break;
+    v = dj.A.get(v)[0];
+  }
+  return [...s];
+}
+// Un recorrido con sus ids, sin enumerar (no cambia el resultado ni su JSON)
+const plConIds = (o, dj, fin) => Object.defineProperty(o, "ids", { value: plIdsCamino(dj, fin) });
 /* Resultado del cálculo con el diseño que usó y los elementos de su plano (sin enumerar: no cambia el resultado, su
    JSON ni sus copias). Lo lee la ventana Verificar longitudes. */
 function plConDiseno(r, PLD, PL) {
@@ -834,7 +848,7 @@ function planoCalc(PL, c, v) {
       tabs.forEach(tb => {
         const d = dm.D.get(`D:${tb.id}`);
         if (d != null) {
-          desdeMed[tb.id] = { L: d, Lh: dm.H.get(`D:${tb.id}`) };
+          desdeMed[tb.id] = plConIds({ L: d, Lh: dm.H.get(`D:${tb.id}`) }, dm, `D:${tb.id}`);
           if (bancos.length) rutasBM[tb.nom || "TG"] = desdeMed[tb.id];
         }
       });
@@ -856,7 +870,9 @@ function planoCalc(PL, c, v) {
       cerca = l =>
         l.reduce((o, m) => {
           const d = desde.D.get(`D:${m.id}`);
-          return d != null && (!o || d < o.L) ? { L: d, Lh: desde.H.get(`D:${m.id}`), de: m.id } : o;
+          return d != null && (!o || d < o.L)
+            ? plConIds({ L: d, Lh: desde.H.get(`D:${m.id}`), de: m.id }, desde, `D:${m.id}`)
+            : o;
         }, null);
     /* Alimentador general: desde el medidor de la concesionaria; si el plano no lo tiene, desde el banco de medidores
        (como antes). El tramo TG → banco de medidores, aparte. */
@@ -871,7 +887,8 @@ function planoCalc(PL, c, v) {
     tabs.forEach(tb => {
       if (tb === TG) return;
       const d = desde.D.get(`D:${tb.id}`);
-      if (d != null) rutas[tb.nom || "TG"] = { L: d, Lh: desde.H.get(`D:${tb.id}`), de: TG.id };
+      if (d != null)
+        rutas[tb.nom || "TG"] = plConIds({ L: d, Lh: desde.H.get(`D:${tb.id}`), de: TG.id }, desde, `D:${tb.id}`);
     });
   }
   // Áreas: polilíneas cerradas con datos de área (ar), sumadas por piso y por tipo (m²)

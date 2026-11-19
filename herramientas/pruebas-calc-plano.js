@@ -369,6 +369,21 @@ module.exports = function probarPlano(ctx) {
     calc({ ...MV2, calPlano: "1" }).T[0].Ld,
     15.1
   );
+  // Recorrido del alimentador (ids, sin enumerar): qué cajas, montantes y tuberías pasa (ventana de la caja de paso)
+  const idsTD3 = rv.pld.desdeMed.d58.ids;
+  ver(
+    "recorrido del alimentador al TD-03: banco, caja, montante de tres pisos y sus tuberías",
+    ["d1", "d52", "d50", "d53", "d51", "d54", "d57", "d59", "d58"].every(id => idsTD3.includes(id)) &&
+      !idsTD3.includes("d56") &&
+      !Object.keys(rv.pld.desdeMed.d58).includes("ids"),
+    true
+  );
+  // El montante sale de la caja de paso cuadrada (sin la canalización hacia arriba): 1.8 + 2 + 3.1 + 3.1 + 3 + 1.1
+  const MV3 = JSON.parse(JSON.stringify(MV));
+  MV3.PLANO.dis.els = MV3.PLANO.dis.els.filter(e => !["d51", "d53"].includes(e.id));
+  MV3.PLANO.dis.els.find(e => e.id === "d50").mon = "d54";
+  MV3.PLANO.dis.els.find(e => e.id === "d54").mon = "d50";
+  ver("montante desde la caja de paso: sube sin canalización aparte", calc({ ...MV3, calPlano: "1" }).T[0].Ld, 14.1);
 
   const s = ((Date.now() - t0) / 1000).toFixed(2);
   if (fallas.length) {

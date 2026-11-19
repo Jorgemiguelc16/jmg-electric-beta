@@ -1661,6 +1661,105 @@ prueba("Editor de diseño: montante a varios pisos, prolongarlo y caja de paso c
   ok(await ev("PLANO.dis.els.filter(e => e.mon2).length === 2"), "los enlaces del montante se guardan con el proyecto");
 });
 
+prueba(
+  "Editor de diseño: cajas de paso numeradas, montante desde la caja, alimentadores que pasan y rótulo",
+  async ok => {
+    await ejemplo("uni");
+    await abrirPlano();
+    // Banco con el medidor M-1 del TD-2; caja en el 1er piso; TD-2 en el 2do
+    await ev(
+      `(() => { EPL.plantas = [1, 2].map(n => ({ n: n + (n === 2 ? 'do' : 'er') + ' piso', x0: ${OX} + 20 * (n - 1), y0: ${OY}, x1: ${OX} + 20 * (n - 1) + 10, y1: ${OY} + 8 }));
+      const C = 'E-CANALIZACION';
+      window._b = dsAgregar({ t: 'sim', k: 'bmed', x: ${OX} + 2, y: ${OY} + 2, r: 0, capa: C, meds: [{ d: 'TD-2', f: 1 }] });
+      window._c = dsAgregar({ t: 'sim', k: 'cajaCuad', x: ${OX} + 6, y: ${OY} + 2, r: 0, capa: C });
+      window._c2 = dsAgregar({ t: 'sim', k: 'caja', x: ${OX} + 6, y: ${OY} + 6, r: 0, capa: C });
+      edCambio(); return 1; })()`
+    );
+    ok(
+      JSON.stringify(await J("[_c.nom, _c2.nom]")) === JSON.stringify(["CP-1", "CP-2"]),
+      "las cajas de paso se numeran solas: CP-1, CP-2"
+    );
+    await ev(
+      "(() => { const o = JSON.parse(JSON.stringify(_c2)); dsAgregar(o); edCambio(); window._c3 = o; return 1; })()"
+    );
+    ok((await ev("_c3.nom")) === "CP-3", "la caja copiada toma el número siguiente");
+    // Montante desde la caja: en el 2do piso va otra caja igual
+    await ev("DS_SEL.clear(); DS_SEL.add(_c.id); dpMontante(); 1");
+    await clic('#edMenu [data-edm="sal:1"]');
+    const par = await J(
+      "(() => { const o = dsD().els.find(e => e.id === _c.mon); window._p = o; return o && [o.k, dpPlantaEl(o), o.mon === _c.id, o.nom]; })()"
+    );
+    ok(
+      JSON.stringify(par) === JSON.stringify(["cajaCuad", 1, true, "CP-4"]),
+      `montante desde la caja: otra caja cuadrada en el 2do piso (${JSON.stringify(par)})`
+    );
+    await ev(
+      `(() => { const C = 'E-TUB-TECHO';
+      window._t = dsAgregar({ t: 'sim', k: 'tab', x: _p.x + 3, y: _p.y, r: 0, capa: 'E-TABLEROS', nom: 'TD-2', nc: 1, ct: ['al'] });
+      window._u1 = dsAgregar({ t: 'tub', pts: [_b.x, _b.y, _c.x, _c.y], modo: 'techo', capa: C, c0: _b.id, c1: _c.id });
+      window._u2 = dsAgregar({ t: 'tub', pts: [_p.x, _p.y, ...dsBorde(_t, _p.x, _p.y)], modo: 'techo', capa: C, c0: _p.id, c1: _t.id, ali: true });
+      edCambio(); return 1; })()`
+    );
+    const al = await J(
+      "(() => { const A = dcAlimentadores().find(x => x.nom === 'TD-2'); if (!A) { const R = dcDatos().R; return { noms: dcAlimentadores().map(x => x.nom), dm: Object.keys(R.desdeMed), ru: Object.keys(R.rutas), u1: [_u1.c0, _u1.c1, _u1.cir], u2: [_u2.c0, _u2.c1, _u2.cir], t: _t.id }; } return [A.med, A.ids.has(_c.id), A.ids.has(_p.id), A.ids.has(_u2.id)]; })()"
+    );
+    ok(
+      JSON.stringify(al) === JSON.stringify(["M-1", true, true, true]),
+      `el alimentador M-1 → TD-2 pasa por la caja, el montante y su tubería (${JSON.stringify(al)})`
+    );
+    ok(
+      (await ev("dcRotuloTexto(_c, dcAlimentadores())")) === "Sube por muro para TD-2",
+      "rótulo de la caja del 1er piso: «Sube por muro para TD-2»"
+    );
+    ok((await ev("dcRotuloTexto(_p, dcAlimentadores())")) === "Llega para TD-2", "en la caja del 2do piso: llega");
+    // Propiedades de la caja: su número y el alimentador que pasa
+    await ev("DS_SEL.clear(); DS_SEL.add(_c.id); edProps(); 1");
+    ok(
+      await ev(
+        "(() => { const t = document.querySelector('.ds-ali'); return !!t && /M-1 → TD-2/.test(t.textContent) && !!document.querySelector('[data-dsp=\"nom\"]'); })()"
+      ),
+      "propiedades de la caja: su número y «M-1 → TD-2»"
+    );
+    // Rótulo automático: sigue al nombre del tablero; escrito a mano, deja de seguirlo
+    await ev("dcPonerRotulo(); 1");
+    ok(
+      await ev(
+        "(() => { const r = dsD().els.find(e => e.aut === _c.id); window._r = r; return !!r && r.t === 'dir'; })()"
+      ),
+      "rótulo puesto como directriz desde la caja"
+    );
+    await ev("_t.nom = 'TD-02'; _b.meds[0].d = 'TD-02'; edCambio(); 1");
+    ok((await ev("_r.s")) === "Sube por muro para TD-02", "el rótulo se actualiza al cambiar el nombre del tablero");
+    await ev("DS_SEL.clear(); DS_SEL.add(_r.id); edProps(); 1");
+    await ev(
+      "(() => { const i = document.querySelector('[data-dsp=\"s\"]'); i.value = 'Sube por ducto'; i.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()"
+    );
+    ok(
+      (await ev("_r.s + '|' + (_r.aut || '')")) === "Sube por ducto|",
+      "escrito a mano: queda como lo escribió el proyectista"
+    );
+    // Tramo compartido: los conductores de los tres alimentadores, cada uno con su tierra, y la tubería que los contiene
+    const tc = await J(
+      "(() => { const a = { s: { n: 2, tri: false }, S: 10, St: 10 }, b = { s: { n: 2, tri: false }, S: 6, St: 6 }, t = {}; dcEscribirAli(t, [a, a, b], ['TD-02', 'TD-03', 'TD-04']); return [t.cond, t.sec, t.dia]; })()"
+    );
+    ok(
+      JSON.stringify(tc) ===
+        JSON.stringify([
+          { f: 6, n: 0, t: true },
+          "2×(2-1×10 + 1×10 T) + 2-1×6 + 1×6 T mm² (alimentadores TD-02, TD-03, TD-04)",
+          35
+        ]),
+      `tramo con tres alimentadores juntos (${JSON.stringify(tc)})`
+    );
+    await clic('[data-ed="aceptar"]');
+    await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+    ok(
+      await ev("PLANO.dis.els.some(e => e.k === 'cajaCuad' && e.nom === 'CP-1')"),
+      "el número de la caja se guarda con el proyecto"
+    );
+  }
+);
+
 prueba("Proyectos en la base de datos del navegador y respaldo con el plano DXF", async ok => {
   await ejemplo("uni");
   await abrirPlano();

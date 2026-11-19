@@ -94,6 +94,7 @@ function dsPintar(g) {
       if (el.k === "tab") dsDibSalidas(g, el, col, uk, dsGrosor(cap));
       // Banco de medidores: su lista numerada junto a él, solo si el proyectista la pide
       if (el.k === "bmed" && el.num === true) dsDibBanco(g, el, col, uk);
+      if (DS_CAJAS.has(el.k) && el.nom) dsDibNomCaja(g, el, col, uk);
     } else if (el.t === "txt") {
       const hp = el.ht * s;
       if (hp < 2) continue;
@@ -701,6 +702,24 @@ function dsDibSalidas(g, el, col, u, lw) {
     g.fillText(nom, xn, yy);
     g.restore();
   }
+}
+// Número de la caja de paso (CP-1, CP-2…) a su derecha, en el plano y en las láminas
+function dsDibNomCaja(g, el, col, u) {
+  if (3 * u < 4) return;
+  const b = dsBBox(el),
+    [xn, yn] = plAPant(b[2], (b[1] + b[3]) / 2),
+    x = xn + 1.2 * u;
+  g.save();
+  g.font = `700 ${(3 * u) / 0.72}px Arial, sans-serif`;
+  g.textAlign = "left";
+  g.textBaseline = "middle";
+  g.lineJoin = "round";
+  g.lineWidth = 3 * plDpr();
+  g.strokeStyle = PL_FONDO;
+  g.strokeText(el.nom, x, yn);
+  g.fillStyle = col;
+  g.fillText(el.nom, x, yn);
+  g.restore();
 }
 // Guiones del elemento en unidades del dibujo: la tubería por piso, discontinua; las demás, según su capa
 function dsGuiones(el, cap) {

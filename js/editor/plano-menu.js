@@ -156,9 +156,10 @@ function edMenuAbrir(e) {
       b("ruta", "Unir con tuberías (ruta automática)");
     b("bloque", "Guardar como bloque…");
     if (EPL.plantas.length > 1) b("aplanta", "Copiar a otra planta…");
-    if (sel.length === 1 && DP_PAR[sel[0].k] && EPL.plantas.length > 1 && !(sel[0].mon && sel[0].mon2))
+    if (sel.length === 1 && DP_MON.has(sel[0].k) && EPL.plantas.length > 1 && !(sel[0].mon && sel[0].mon2))
       b("montante", sel[0].mon ? "Prolongar el montante a otra planta…" : "Crear montante a otra planta…");
     if (sel.length === 1 && sel[0].mon) b("irmon", "Ir al otro extremo del montante");
+    if (sel.length === 1 && DP_MON.has(sel[0].k)) b("rotulo", "Rótulo de los alimentadores que pasan");
     b("similares", "Seleccionar todos los de este tipo");
     b("encuadrar", "Acercar a lo elegido");
     if (sel.length === 1 && sel[0].k === "tab") b("tablero", "Circuitos del tablero…");
@@ -577,6 +578,7 @@ function edMenuAccion(a) {
   if (a === "aplanta") return dpCopiarAPlanta();
   if (a === "montante") return dpMontante();
   if (a === "irmon") return dpIrMontante();
+  if (a === "rotulo") return dcPonerRotulo();
   if (a === "ventana") return elAbrir(sel[0].id);
   if (a === "props") {
     edProps.oculto = false;
