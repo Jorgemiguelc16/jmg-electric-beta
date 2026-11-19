@@ -1700,6 +1700,16 @@ prueba(
       JSON.stringify(par) === JSON.stringify(["cajaCuad", 1, true, "CP-4"]),
       `montante desde la caja: otra caja cuadrada en el 2do piso (${JSON.stringify(par)})`
     );
+    // Sin alimentador que pase todavía: la caja dice qué tiene y qué le falta
+    const pasos = await ev(
+      "(() => { DS_SEL.clear(); DS_SEL.add(_c.id); edProps(); const u = document.querySelector('.ds-pasos'); return u ? u.textContent : ''; })()"
+    );
+    ok(
+      /No llega ninguna tubería/.test(pasos) &&
+        /Montante: CP-1 \(1er piso\) → CP-4 \(2do piso\)/.test(pasos) &&
+        /Falta la tubería de CP-4/.test(pasos),
+      `la caja sin alimentador dice qué le falta (${pasos})`
+    );
     await ev(
       `(() => { const C = 'E-TUB-TECHO';
       window._t = dsAgregar({ t: 'sim', k: 'tab', x: _p.x + 3, y: _p.y, r: 0, capa: 'E-TABLEROS', nom: 'TD-2', nc: 1, ct: ['al'] });

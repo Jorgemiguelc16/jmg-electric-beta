@@ -652,11 +652,7 @@ function dsPropsPaso(el, campo) {
     ? campo("Número", `<input type="text" data-dsp="nom" value="${esc(el.nom || "")}" maxlength="20">`)
     : "";
   h += `<div class="ed-pt">Alimentadores que pasan${pas.length ? ` (${pas.length})` : ""}</div>`;
-  if (!pas.length)
-    return (
-      h +
-      `<p class="ds-ali-n">Ninguno. Una con tuberías el banco de medidores (o el TG) con los tableros pasando por aquí: las tuberías sin circuito siguen al alimentador solas.</p>`
-    );
+  if (!pas.length) return h + dsPasosPaso(el);
   return (
     h +
     `<table class="ds-ali"><tbody>${pas
@@ -672,4 +668,57 @@ function dsPropsPaso(el, campo) {
       conRot ? "Ver su rótulo" : "Poner rótulo en el plano"
     }</button></div>`
   );
+}
+/* Sin alimentadores que pasen: qué tiene y qué le falta a la caja o al montante, paso a paso (llega del banco o del
+   TG, sube a otra planta, sale hacia un tablero) */
+function dsPasosPaso(el) {
+  const D = dsD(),
+    por = new Map(D.els.map(e => [e.id, e])),
+    cad = [el, ...plMontanteTodo(el, por).map(id => por.get(id))],
+    tubs = e => D.els.filter(t => t.t === "tub" && (t.c0 === e.id || t.c1 === e.id)),
+    otro = (t, e) => por.get(t.c0 === e.id ? t.c1 : t.c0),
+    nomC = e => esc(e.nom || (DS_CAT[e.k] ? DS_CAT[e.k].n.toLowerCase() : "canalización")),
+    planta = e => {
+      const i = dpPlantaEl(e);
+      return i >= 0 ? EPL.plantas[i].n : "fuera de las plantas";
+    };
+  // Llega: una tubería de la cadena viene del banco, de un medidor o de un tablero
+  let llega = null;
+  cad.forEach(e =>
+    tubs(e).forEach(t => {
+      const o = otro(t, e);
+      if (!llega && o && (PL_MED.has(o.k) || o.k === "tab")) llega = { e, o };
+    })
+  );
+  const ok = (b, txt) => `<li class="${b ? "si" : "no"}"><span>${b ? "✔" : "✘"}</span> ${txt}</li>`,
+    filas = [
+      llega
+        ? ok(
+            true,
+            `Llega del ${llega.o.k === "tab" ? esc(llega.o.nom || "tablero") : "banco de medidores"} a ${nomC(llega.e)} (${esc(planta(llega.e))})`
+          )
+        : ok(false, "No llega ninguna tubería del banco de medidores ni del TG")
+    ];
+  if (cad.length > 1) filas.push(ok(true, `Montante: ${cad.map(e => `${nomC(e)} (${esc(planta(e))})`).join(" → ")}`));
+  else
+    filas.push(
+      `<li class="op"><span>·</span> Sin montante: si sube a otro piso, clic derecho › Crear montante a otra planta…</li>`
+    );
+  // Sale hacia el tablero: una tubería de la cadena llega a otro tablero, pero sin ser alimentador
+  const aTab = cad.find(e =>
+    tubs(e).some(t => {
+      const o = otro(t, e);
+      return o && o.k === "tab" && (!llega || o !== llega.o);
+    })
+  );
+  const ult = cad[cad.length - 1];
+  filas.push(
+    aTab
+      ? ok(false, `La tubería de ${nomC(aTab)} al tablero no es alimentador: elíjala y márquela como Alimentador`)
+      : ok(
+          false,
+          `Falta la tubería de ${nomC(ult)} (${esc(planta(ult))}) al tablero: dibújela desde el tablero con su opción Alimentador`
+        )
+  );
+  return `<ul class="ds-pasos">${filas.join("")}</ul>`;
 }
