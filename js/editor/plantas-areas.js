@@ -20,11 +20,30 @@ const dpPlantaEl = el => dpPlantaDe(...dpCentro(el));
 // Filtro del resumen del panel izquierdo: todas las plantas (−1) o una
 let DP_F = -1;
 const dpFiltrar = els => (DP_F >= 0 && EPL && EPL.plantas[DP_F] ? els.filter(el => dpPlantaEl(el) === DP_F) : els);
-// Desplazamiento de la planta i a la j (esquina inferior izquierda de cada encuadre)
+/* Desplazamiento de la planta i a la j: entre sus puntos base si las dos lo tienen (el mismo punto del edificio en
+   cada planta, por ejemplo el cruce de los ejes A y 1); si no, entre las esquinas inferiores izquierdas de sus
+   encuadres, que coinciden solo si se encuadraron igual */
+const dpTieneBase = p => Number.isFinite(p.bx) && Number.isFinite(p.by);
 function dpDesp(i, j) {
   const a = EPL.plantas[i],
     b = EPL.plantas[j];
+  if (dpTieneBase(a) && dpTieneBase(b)) return [b.bx - a.bx, b.by - a.by];
   return [b.x0 - a.x0, b.y0 - a.y0];
+}
+// Punto base de la planta que contiene el punto p (clic derecho › Punto base de la planta aquí)
+function dpPuntoBase(p) {
+  const i = dpPlantaDe(p[0], p[1]);
+  if (i < 0) return toast("El punto no está dentro de una planta encuadrada");
+  const P = EPL.plantas[i];
+  P.bx = p[0];
+  P.by = p[1];
+  edCambio();
+  const faltan = EPL.plantas.filter(q => !dpTieneBase(q)).map(q => q.n);
+  toast(
+    faltan.length
+      ? `Punto base de ${P.n}. Póngalo también en el mismo lugar de ${faltan.join(", ")} (por ejemplo, el cruce de dos ejes)`
+      : `Punto base de ${P.n}: el montante y «Copiar a otra planta» llevan lo elegido al mismo lugar de cada planta`
+  );
 }
 // Menú con las otras plantas, junto a lo elegido
 function dpElegirPlanta(titulo, desde, fn) {

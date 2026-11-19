@@ -265,6 +265,20 @@ function plSobreDibujar() {
     g.strokeRect(a, b, c - a, e - b);
     g.setLineDash([]);
     plEtiqueta(g, p.n, a + 4 * d, b + 4 * d, azul, "left", "top");
+    if (dpTieneBase(p)) {
+      const [x, y] = plAPant(p.bx, p.by),
+        r = 7 * d;
+      g.beginPath();
+      g.moveTo(x - r, y);
+      g.lineTo(x + r, y);
+      g.moveTo(x, y - r);
+      g.lineTo(x, y + r);
+      g.stroke();
+      g.beginPath();
+      g.arc(x, y, r * 0.55, 0, 2 * Math.PI);
+      g.stroke();
+      plEtiqueta(g, "PB", x + r, y - r, azul, "left", "bottom");
+    }
   });
   // Objeto bajo el cursor en Seleccionar: resaltado suave, para saber qué se elegiría con un clic
   if (PLH.sobre >= 0 && PLH.sobre !== PLH.obj && !PLH.h && !PLH.dsSobre) {

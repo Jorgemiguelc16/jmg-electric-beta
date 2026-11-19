@@ -618,7 +618,9 @@ function planoValido(v) {
             x1: p.x1,
             y1: p.y1,
             // Piso del cálculo de la planta: 1, 2… (0 sótano, −1 no se cuenta)
-            ...(Number.isInteger(p.piso) && p.piso >= -1 && p.piso <= 60 ? { piso: p.piso } : {})
+            ...(Number.isInteger(p.piso) && p.piso >= -1 && p.piso <= 60 ? { piso: p.piso } : {}),
+            // Punto base: el mismo punto del edificio en cada planta (montantes y copiar a otra planta)
+            ...(n(p.bx) && n(p.by) ? { bx: p.bx, by: p.by } : {})
           }))
       : [],
     tenue: v.tenue === true,

@@ -195,6 +195,17 @@ function edMenuAbrir(e) {
         `Restaurar ${PL_BORR.size} objeto${PL_BORR.size > 1 ? "s" : ""} borrado${PL_BORR.size > 1 ? "s" : ""}`
       );
   }
+  // Punto base de la planta: con dos o más plantas, sin nada del diseño elegido
+  const pb = PLH.eng ? [PLH.eng[0], PLH.eng[1]] : p,
+    ip = EPL.plantas.length > 1 && !sel.length ? dpPlantaDe(pb[0], pb[1]) : -1;
+  ED_MENU.pb = pb;
+  if (ip >= 0) {
+    sep();
+    b(
+      "pbase",
+      `${dpTieneBase(EPL.plantas[ip]) ? "Mover el" : "Poner el"} punto base de ${esc(EPL.plantas[ip].n)} aquí`
+    );
+  }
   ED_MENU.innerHTML = it.join("");
   ED_MENU.hidden = false;
   // Junto al cursor y dentro del editor (la escala del espacio de trabajo cambia el tamaño en pantalla)
@@ -579,6 +590,7 @@ function edMenuAccion(a) {
   if (a === "ruta") return dpRuta();
   if (a === "bloque") return dpGuardarBloque();
   if (a === "aplanta") return dpCopiarAPlanta();
+  if (a === "pbase") return dpPuntoBase(ED_MENU.pb);
   if (a === "montante") return dpMontante();
   if (a === "irmon") return dpIrMontante();
   if (a === "rotulo") return dcPonerRotulo();

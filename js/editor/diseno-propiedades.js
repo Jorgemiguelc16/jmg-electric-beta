@@ -42,9 +42,12 @@ const dsLumTxt = t =>
     .filter(Boolean)
     .join(" · ");
 /* Desplegable de circuito: las salidas de cada tablero del diseño (C-1, C-2… con su descripción), agrupadas por
-   tablero. v/tb: circuito y tablero actuales; v === null: la selección tiene circuitos distintos. */
-function dsCircSelect(D, v, tb) {
-  const tabs = D.els.filter(e => e.k === "tab" && e.nc > 0),
+   tablero. v/tb: circuito y tablero actuales; v === null: la selección tiene circuitos distintos. pl: la planta de
+   lo elegido; si tiene tableros, solo los suyos (y el del circuito actual), no los de los otros pisos. */
+function dsCircSelect(D, v, tb, pl = -1) {
+  const todos = D.els.filter(e => e.k === "tab" && e.nc > 0),
+    dePl = pl >= 0 ? todos.filter(t => dpPlantaEl(t) === pl) : [],
+    tabs = dePl.length ? todos.filter(t => dePl.includes(t) || t.id === tb) : todos,
     actual = v ? `${tb || ""}|${v}` : "";
   let hay = v === null || !v;
   const grupos = tabs
@@ -160,7 +163,11 @@ function dsProps(c) {
     capas = v =>
       `<select data-dsp="capa">${v === "" ? '<option value="" selected>(varias)</option>' : ""}${D.capas.map(x => `<option${x.n === v ? " selected" : ""}>${esc(x.n)}</option>`).join("")}</select>`,
     // Circuito: desplegable con las salidas de todos los tableros, agrupadas por tablero (guarda circuito y tablero)
-    circ = (v, tb) => dsCircSelect(D, v, tb),
+    plSel = (() => {
+      const P = new Set(sel.map(dpPlantaEl));
+      return P.size === 1 ? [...P][0] : -1;
+    })(),
+    circ = (v, tb) => dsCircSelect(D, v, tb, plSel),
     lista = "",
     acciones = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="girar">Girar ${DSU.giro || 90}°</button><button type="button" class="btn sec sm" data-dsa="copiar">Copiar</button><button type="button" class="btn sec sm ed-del" data-dsa="borrar">Borrar</button></div>`,
     curvas = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="curvo" title="Todos los tramos en arco">Curvar</button><button type="button" class="btn sec sm" data-dsa="recto" title="Todos los tramos rectos">Enderezar</button><button type="button" class="btn sec sm" data-dsa="invertir" title="Los arcos al otro lado">Invertir curvas</button></div>`;

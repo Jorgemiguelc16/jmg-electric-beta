@@ -1755,6 +1755,22 @@ prueba(
       (await ev("_r.s + '|' + (_r.aut || '')")) === "Sube por ducto|",
       "escrito a mano: queda como lo escribió el proyectista"
     );
+    // Circuito de una salida del 2do piso: solo los tableros de su piso
+    const grupos = await J(
+      "(() => { const tb1 = dsAgregar({ t: 'sim', k: 'tab', x: _c.x - 2, y: _c.y, r: 0, capa: 'E-TABLEROS', nom: 'TD-01', nc: 2, ct: ['al', 'tg'] }); _t.nc = 2; const lz = dsAgregar({ t: 'sim', k: 'luz', x: _t.x + 1, y: _t.y + 2, r: 0, capa: DS_SIS[DS_CAT.luz.s].capa }); edCambio(); DS_SEL.clear(); DS_SEL.add(lz.id); edProps(); const g = [...document.querySelectorAll('.ds-cir optgroup')].map(o => o.label); DS_SEL.clear(); dsD().els.splice(dsD().els.indexOf(tb1), 1); dsD().els.splice(dsD().els.indexOf(lz), 1); edCambio(); return g; })()"
+    );
+    ok(
+      JSON.stringify(grupos) === JSON.stringify(["TD-02"]),
+      `circuitos de una salida del 2do piso: solo su tablero (${JSON.stringify(grupos)})`
+    );
+    // Punto base: el montante cae en el mismo lugar del edificio aunque las plantas se encuadren distinto
+    const pb = await J(
+      `(() => { const [a, b] = EPL.plantas; a.x0 -= 3; dpPuntoBase([${OX} + 1, ${OY} + 1]); dpPuntoBase([${OX} + 21, ${OY} + 1]); const d = dpDesp(0, 1); a.x0 += 3; return [d, !!edMenuAccion]; })()`
+    );
+    ok(
+      JSON.stringify(pb[0]) === JSON.stringify([20, 0]),
+      `con punto base: desplazamiento entre los puntos base (${JSON.stringify(pb[0])})`
+    );
     // Tramo compartido: los conductores de los tres alimentadores, cada uno con su tierra, y la tubería que los contiene
     const tc = await J(
       "(() => { const a = { s: { n: 2, tri: false }, S: 10, St: 10 }, b = { s: { n: 2, tri: false }, S: 6, St: 6 }, t = {}; dcEscribirAli(t, [a, a, b], ['TD-02', 'TD-03', 'TD-04']); return [t.cond, t.sec, t.dia]; })()"
