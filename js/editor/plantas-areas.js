@@ -51,6 +51,7 @@ function dpCopiarAPlanta() {
       nuevos = dsClonar(sel, el => {
         dsTrasladar(el, dx, dy);
         delete el.mon;
+        delete el.mon2;
       });
     DS_SEL.clear();
     nuevos.forEach(el => DS_SEL.add(el.id));
@@ -60,19 +61,53 @@ function dpCopiarAPlanta() {
     toast(`${nuevos.length} elemento${nuevos.length > 1 ? "s" : ""} copiado${nuevos.length > 1 ? "s" : ""} a ${b.n}`);
   });
 }
-// Montante: la canalización vertical y su par en otra planta (hacia arriba ↔ hacia abajo), enlazadas
+/* Montante: la canalización vertical y su par en otra planta (hacia arriba ↔ hacia abajo), enlazadas (el.mon). Puede
+   pasar por varios pisos, como el ducto que sube del banco de medidores a los tableros del 2do y del 3er piso: en
+   cada planta intermedia va una canalización atravesando (09-93-07), enlazada con la de abajo (mon) y la de arriba
+   (mon2), y en la última, la bajada (o la subida si el montante baja). Un montante ya hecho se prolonga desde su
+   extremo: ese extremo pasa a ser «atravesando». */
 const DP_PAR = { subida: "bajada", bajada: "subida", atrav: "atrav" };
+const dpPisoDe = i => plPisoPlanta(EPL.plantas[i], i);
+function dpEnlazar(a, b) {
+  a[a.mon ? "mon2" : "mon"] = b.id;
+  b[b.mon ? "mon2" : "mon"] = a.id;
+}
 function dpMontante() {
   const el = dsSel()[0];
   if (!el || !DP_PAR[el.k])
     return toast("Elija una canalización hacia arriba, hacia abajo o atravesando (Biblioteca › Cajas y canalización)");
+  if (el.mon && el.mon2) return toast("Esta canalización ya está enlazada arriba y abajo");
   const i = dpPlantaEl(el);
   if (i < 0) return toast("La canalización no está dentro de una planta encuadrada");
-  dpElegirPlanta("Montante hacia la planta", i, j => {
-    const [dx, dy] = dpDesp(i, j),
-      par = dsAgregar({
+  const D = dsD(),
+    ya = el.mon && D.els.find(e => e.id === el.mon),
+    jYa = ya ? dpPlantaEl(ya) : -1;
+  dpElegirPlanta(ya ? "Prolongar el montante hasta la planta" : "Montante hasta la planta", i, j => {
+    const p0 = dpPisoDe(i),
+      p1 = dpPisoDe(j),
+      sube = p1 > p0;
+    if (p1 === p0) return toast("Esa planta es del mismo piso: elija una de otro piso");
+    // El montante sigue hacia donde no está su par
+    if (jYa >= 0 && dpPisoDe(jYa) > p0 === sube)
+      return toast(
+        `El montante ya va hacia ${EPL.plantas[jYa].n}: prolónguelo hacia el otro lado o desde su otro extremo`
+      );
+    if (!ya && el.k === "subida" && !sube)
+      return toast("Una canalización hacia arriba sube: elija una planta de un piso superior");
+    if (!ya && el.k === "bajada" && sube)
+      return toast("Una canalización hacia abajo baja: elija una planta de un piso inferior");
+    // Plantas de los pisos intermedios, en el orden del recorrido
+    const medio = EPL.plantas
+      .map((_, m) => m)
+      .filter(
+        m => m !== i && m !== j && (sube ? dpPisoDe(m) > p0 && dpPisoDe(m) < p1 : dpPisoDe(m) < p0 && dpPisoDe(m) > p1)
+      )
+      .sort((a, b) => (sube ? dpPisoDe(a) - dpPisoDe(b) : dpPisoDe(b) - dpPisoDe(a)));
+    const nuevo = (m, k) => {
+      const [dx, dy] = dpDesp(i, m);
+      return dsAgregar({
         t: "sim",
-        k: DP_PAR[el.k],
+        k,
         x: el.x + dx,
         y: el.y + dy,
         r: el.r || 0,
@@ -80,16 +115,27 @@ function dpMontante() {
         ...(el.cir ? { cir: el.cir } : {}),
         ...(el.tab ? { tab: el.tab } : {})
       });
-    el.mon = par.id;
-    par.mon = el.id;
+    };
+    // Al prolongarlo, el extremo pasa a atravesar su piso
+    if (ya) el.k = "atrav";
+    let prev = el;
+    medio.forEach(m => {
+      const a = nuevo(m, "atrav");
+      dpEnlazar(prev, a);
+      prev = a;
+    });
+    const fin = nuevo(j, sube ? "bajada" : "subida");
+    dpEnlazar(prev, fin);
     edCambio();
-    toast(`Montante de ${EPL.plantas[i].n} a ${EPL.plantas[j].n}: ${DS_CAT[par.k].n.toLowerCase()} en la otra planta`);
+    toast(
+      `Montante de ${EPL.plantas[i].n} a ${EPL.plantas[j].n}${medio.length ? `, atravesando ${medio.map(m => EPL.plantas[m].n).join(", ")}` : ""}: ${DS_CAT[fin.k].n.toLowerCase()} en la última planta`
+    );
   });
 }
 // Va al otro extremo del montante
 function dpIrMontante() {
   const el = dsSel()[0],
-    o = el && el.mon && dsD().els.find(e => e.id === el.mon);
+    o = el && (el.mon2 || el.mon) && dsD().els.find(e => e.id === (el.mon2 || el.mon));
   if (!o) return toast("Esta canalización no tiene su par en otra planta");
   DS_SEL.clear();
   DS_SEL.add(o.id);

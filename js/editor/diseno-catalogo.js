@@ -198,6 +198,7 @@ const DS_CAT = Object.fromEntries(
     ["med3", "Medidor de energía trifásico", "08-80-22 · 3∼", "tab", 5, "hMed", null, null, "abajo"],
     ["bmed", "Banco de medidores", "criterio", "tab", 5, "hMed", null, null, "abajo"],
     ["caja", "Caja, símbolo general (caja de paso)", "09-93-08", "can", 6, null],
+    ["cajaCuad", "Caja de paso cuadrada", "criterio", "can", 6, null],
     ["cajaCon", "Caja de conexión o de derivación", "09-93-09", "can", 6, null],
     ["terminal", "Terminal de consumidores", "09-93-10", "can", 6, null],
     ["subida", "Canalización hacia arriba", "09-93-05", "can", 6, null],

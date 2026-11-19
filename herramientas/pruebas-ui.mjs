@@ -1619,6 +1619,48 @@ prueba("Editor de diseño: plantas y montantes, bloques, plantillas, ruta autom�
   );
 });
 
+prueba("Editor de diseño: montante a varios pisos, prolongarlo y caja de paso cuadrada", async ok => {
+  await ejemplo("uni");
+  await abrirPlano();
+  await ev(
+    `(() => { EPL.plantas = [1, 2, 3].map(n => ({ n: n + (n === 2 ? 'do' : n === 1 ? 'er' : 'er') + ' piso', x0: ${OX} + 20 * (n - 1), y0: ${OY}, x1: ${OX} + 20 * (n - 1) + 10, y1: ${OY} + 8 }));
+      dsAgregar({ t: 'sim', k: 'cajaCuad', x: ${OX} + 8, y: ${OY} + 1, r: 0, capa: 'E-CANALIZACION' });
+      dsAgregar({ t: 'sim', k: 'subida', x: ${OX} + 9, y: ${OY} + 1, r: 0, capa: 'E-CANALIZACION' });
+      dsAgregar({ t: 'sim', k: 'subida', x: ${OX} + 9, y: ${OY} + 3, r: 0, capa: 'E-CANALIZACION' }); edCambio(); return 1; })()`
+  );
+  ok(
+    await ev("DS_CAT.cajaCuad && DS_CAT.cajaCuad.c === 'criterio' && plArt('cajaCuad')[1] === 'T'"),
+    "caja de paso cuadrada en la biblioteca, como criterio del proyectista"
+  );
+  // Del 1er al 3er piso de una vez: atraviesa el 2do y baja en el 3ro
+  await ev("DS_SEL.clear(); DS_SEL.add(dsD().els.filter(e => e.k === 'subida')[0].id); dpMontante(); 1");
+  await clic('#edMenu [data-edm="sal:2"]');
+  const m = await J(
+    `(() => { const D = dsD().els, s = D.filter(e => e.k === 'subida')[0], a = D.find(e => e.id === s.mon), b = a && D.find(e => e.id === a.mon2); return { a: a && [a.k, dpPlantaEl(a), a.mon === s.id], b: b && [b.k, dpPlantaEl(b), b.mon === a.id] }; })()`
+  );
+  ok(
+    JSON.stringify(m) === JSON.stringify({ a: ["atrav", 1, true], b: ["bajada", 2, true] }),
+    `montante del 1er al 3er piso: atraviesa el 2do y baja en el 3ro (${JSON.stringify(m)})`
+  );
+  // Prolongar: un montante al 2do piso que después sigue al 3ro
+  await ev("DS_SEL.clear(); DS_SEL.add(dsD().els.filter(e => e.k === 'subida')[1].id); dpMontante(); 1");
+  await clic('#edMenu [data-edm="sal:1"]');
+  const b2 = await ev("(() => { const s = dsD().els.filter(e => e.k === 'subida')[1]; return s.mon; })()");
+  await ev(`DS_SEL.clear(); DS_SEL.add(${JSON.stringify(b2)}); 1`);
+  await ev("dpMontante(); 1");
+  await clic('#edMenu [data-edm="sal:2"]');
+  const p = await J(
+    `(() => { const D = dsD().els, a = D.find(e => e.id === ${JSON.stringify(b2)}), c = D.find(e => e.id === a.mon2); return { a: a.k, c: c && [c.k, dpPlantaEl(c), c.mon === a.id] }; })()`
+  );
+  ok(
+    JSON.stringify(p) === JSON.stringify({ a: "atrav", c: ["bajada", 2, true] }),
+    `prolongado: la bajada del 2do pasa a atravesar y baja en el 3ro (${JSON.stringify(p)})`
+  );
+  await clic('[data-ed="aceptar"]');
+  await ev("(() => { const o = JSON.parse(JSON.stringify(estado())); aplicar(o); })()");
+  ok(await ev("PLANO.dis.els.filter(e => e.mon2).length === 2"), "los enlaces del montante se guardan con el proyecto");
+});
+
 prueba("Proyectos en la base de datos del navegador y respaldo con el plano DXF", async ok => {
   await ejemplo("uni");
   await abrirPlano();

@@ -568,6 +568,9 @@ function simboloDGE(o, k, x, y, z = 1) {
       C(x, y, 5 * z);
       C(x, y, 0.6 * z, { fi: INK_S, st: "" });
     },
+    // Caja de paso cuadrada (criterio del proyectista, no es un símbolo de la norma): un cuadrado, como se dibuja en
+    // muchos planos para la caja de paso de los alimentadores
+    cajaCuad: () => R(x - 5 * z, y - 5 * z, 10 * z, 10 * z, { fi: "#fff" }),
     subida: () => {
       L(x - 9 * z, y + 4 * z, x + 2 * z, y + 4 * z);
       L(x + 2 * z, y + 4 * z, x + 8 * z, y - 4 * z);

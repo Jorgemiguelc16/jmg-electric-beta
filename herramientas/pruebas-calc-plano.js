@@ -314,6 +314,62 @@ module.exports = function probarPlano(ctx) {
   const rm7 = calc({ ...M, calPlano: "1", tipos: [{ ...M.tipos[0], cant: "" }] });
   ver("unidades del tipo A: una por tablero dibujado", [rm7.T[0].cant, rm7.T[0].cantPlano], [1, true]);
 
+  /* Montante a varios pisos: del banco de medidores a una caja de paso, que sube (09-93-05), atraviesa el 2do piso
+     (09-93-07) y baja en el 3ro (09-93-06). Las tuberías de la caja al montante y del montante a cada tablero no están
+     marcadas como alimentador: lo siguen siendo por continuar el del banco (criterio). Todo por el techo (2.90 m):
+     banco 1.10 → techo 1.80; tablero (borde superior 1.80) → techo 1.10; entrepiso 3.10 m por piso. */
+  const plantas3 = [1, 2, 3].map(n => ({
+    n: `${n}${n === 1 ? "er" : n === 2 ? "do" : "er"} piso`,
+    x0: 100 * (n - 1) - 10,
+    y0: -10,
+    x1: 100 * (n - 1) + 50,
+    y1: 50
+  }));
+  const MV = {
+    MODE: "multi",
+    sistG: "tri380",
+    tipos: [{ nombre: "Tipo A", cant: "", area: 80, Ld: 30, nAl: 10, nTo: 12, Lc: 15 }],
+    PLANO: {
+      nombre: "montante.dxf",
+      sha: "2".repeat(40),
+      f: 1,
+      plantas: plantas3,
+      dis: {
+        capas: [],
+        els: [
+          sim("d1", "bmed", 0, 0),
+          sim("d2", "tab", 0, 10, { nom: "TG", nc: 0, gen: true, fs: 3 }),
+          tub("d9", [0, 0, 0, 10], { modo: "techo", c0: "d1", c1: "d2" }),
+          sim("d50", "cajaCuad", 2, 0),
+          sim("d51", "subida", 2, 1, { mon: "d54" }),
+          tub("d52", [0, 0, 2, 0], { modo: "techo", c0: "d1", c1: "d50" }),
+          tub("d53", [2, 0, 2, 1], { modo: "techo", c0: "d50", c1: "d51" }),
+          sim("d54", "atrav", 102, 1, { mon: "d51", mon2: "d57" }),
+          sim("d55", "tab", 106, 1, { nom: "TD-02", nc: 1, ct: ["al"], dep: 0 }),
+          tub("d56", [102, 1, 106, 1], { modo: "techo", c0: "d54", c1: "d55" }),
+          sim("d57", "bajada", 202, 1, { mon: "d54" }),
+          sim("d58", "tab", 205, 1, { nom: "TD-03", nc: 1, ct: ["al"], dep: 0 }),
+          tub("d59", [202, 1, 205, 1], { modo: "techo", c0: "d57", c1: "d58" }),
+          sim("d60", "luz", 106, 4, { cir: "C-1", tab: "d55" }),
+          tub("d61", [106, 1, 106, 4], { cir: "C-1", tab: "d55", c0: "d55", c1: "d60" }),
+          sim("d62", "luz", 205, 4, { cir: "C-1", tab: "d58" }),
+          tub("d63", [205, 1, 205, 4], { cir: "C-1", tab: "d58", c0: "d58", c1: "d62" })
+        ]
+      }
+    }
+  };
+  const rv = calc({ ...MV, calPlano: "1" });
+  // TD-03: 1.8 + 2 + 1 + 3.1 + 3.1 + 3 + 1.1 = 15.1 (el más largo del tipo); TD-02: 1.8 + 2 + 1 + 3.1 + 4 + 1.1 = 13
+  ver("montante a dos pisos: alimentador más largo del tipo, al 3er piso (dos entrepisos)", rv.T[0].Ld, 15.1);
+  ver("montante a dos pisos: dos tableros del tipo, dos unidades", rv.T[0].cant, 2);
+  const MV2 = JSON.parse(JSON.stringify(MV));
+  MV2.PLANO.dis.els = MV2.PLANO.dis.els.filter(e => !["d55", "d56", "d60", "d61"].includes(e.id));
+  ver(
+    "montante que atraviesa un piso sin tuberías propias: sigue hasta el 3er piso",
+    calc({ ...MV2, calPlano: "1" }).T[0].Ld,
+    15.1
+  );
+
   const s = ((Date.now() - t0) / 1000).toFixed(2);
   if (fallas.length) {
     console.log("✘ Cálculo con el diseño:");

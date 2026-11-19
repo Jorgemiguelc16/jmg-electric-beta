@@ -55,6 +55,7 @@ function dpGuardarBloque() {
         if (el[c] && !ids.has(el[c])) delete el[c];
       });
       delete el.mon;
+      delete el.mon2;
       if (el.t === "tub" && el.c0 !== el.tab) delete el.tab;
       return el;
     });

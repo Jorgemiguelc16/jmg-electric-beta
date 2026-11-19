@@ -218,6 +218,7 @@ const PL_ART = {
   vent: ["esp", "T"],
   aux: ["", "T"],
   caja: ["", "T"],
+  cajaCuad: ["", "T"],
   cajaCon: ["", "T"],
   terminal: ["", "T"],
   subida: ["", null],
@@ -247,6 +248,58 @@ const PL_ESP = {
 const PL_TRI = new Set(["toma3", "toma3Piso"]);
 // Medidores de la concesionaria (monofásico, trifásico y banco de medidores): de ellos salen los alimentadores
 const PL_MED = new Set(["med", "med3", "bmed"]);
+// Por donde pasa un alimentador sin cambiar de tubería: cajas de paso y canalizaciones verticales
+const PL_PASO = new Set(["caja", "cajaCuad", "cajaCon", "terminal", "subida", "bajada", "atrav"]);
+// Enlaces de una canalización vertical con otros pisos: su par (mon) y, en una que atraviesa, el siguiente (mon2)
+const plMontanteDe = e => [e.mon, e.mon2].filter(Boolean);
+// Todas las canalizaciones verticales de la cadena de un montante (las de los otros pisos)
+function plMontanteTodo(e, por) {
+  const ya = new Set([e.id]),
+    pila = [e];
+  while (pila.length)
+    plMontanteDe(pila.pop()).forEach(id => {
+      const o = por.get(id);
+      if (o && !ya.has(id)) {
+        ya.add(id);
+        pila.push(o);
+      }
+    });
+  ya.delete(e.id);
+  return [...ya];
+}
+/* Cadenas de montantes: cada una, la lista de sus canalizaciones verticales en orden (subida → atravesando → bajada),
+   a partir de los enlaces mon y mon2 */
+function plCadenas(sims, por) {
+  const vistos = new Set(),
+    out = [];
+  sims.forEach(s => {
+    if (vistos.has(s.id) || !plMontanteDe(s).length) return;
+    // Un extremo: el elemento con un solo enlace válido; desde ahí, se recorre la cadena
+    const enl = e => plMontanteDe(e).filter(id => por.has(id)),
+      grupo = [];
+    let ini = s;
+    const ya = new Set([s.id]),
+      pila = [s];
+    while (pila.length) {
+      const e = pila.pop();
+      grupo.push(e);
+      enl(e).forEach(id => !ya.has(id) && (ya.add(id), pila.push(por.get(id))));
+    }
+    ini = grupo.find(e => enl(e).length <= 1) || s;
+    const ch = [ini],
+      usado = new Set([ini.id]);
+    for (let e = ini; ; ) {
+      const sig = enl(e).find(id => !usado.has(id));
+      if (!sig) break;
+      e = por.get(sig);
+      usado.add(e.id);
+      ch.push(e);
+    }
+    grupo.forEach(e => vistos.add(e.id));
+    if (ch.length > 1) out.push(ch);
+  });
+  return out;
+}
 // Descripción por defecto de cada tipo de circuito y su «tipo» en el resultado (el que leen el metrado y los avisos)
 const PL_DESC = { al: "Alumbrado", tg: "Tomacorrientes", tc: "Tomacorrientes cocina / lavandería" };
 const PL_TIPO = { al: "Alumbrado", tg: "Tomacorriente", tc: "Tomacorriente" };
@@ -412,7 +465,34 @@ function planoCalc(PL, c, v) {
     // La tubería que llega a un medidor es de un alimentador, aunque no esté marcada
     medIds = new Set(sims.filter(s => PL_MED.has(s.k)).map(s => s.id)),
     patIds = new Set(sims.filter(s => s.k === "pat").map(s => s.id)),
-    esAli = t => t.ali || [t.c0, t.c1].some(id => medIds.has(id) || patIds.has(id)),
+    esAli0 = t => t.ali || [t.c0, t.c1].some(id => medIds.has(id) || patIds.has(id)),
+    /* Un alimentador sigue por las cajas de paso y los montantes: la tubería sin circuito que continúa uno a través
+       de una caja o de una canalización vertical (y su par en otro piso) también es del alimentador, aunque no esté
+       marcada (criterio de la plataforma) */
+    ALI = (() => {
+      const s = new Set(tubs0.filter(esAli0)),
+        enNodo = new Map(),
+        porId = id => enNodo.get(id) || [];
+      tubs0.forEach(t => [t.c0, t.c1].forEach(id => id && enNodo.set(id, [...porId(id), t])));
+      const cola = [...s];
+      while (cola.length) {
+        const t = cola.pop();
+        [t.c0, t.c1].forEach(id => {
+          const n = id && por.get(id);
+          if (!n || !PL_PASO.has(n.k)) return;
+          [id, ...plMontanteTodo(n, por)].forEach(j =>
+            porId(j).forEach(u => {
+              if (!s.has(u) && !u.cir) {
+                s.add(u);
+                cola.push(u);
+              }
+            })
+          );
+        });
+      }
+      return s;
+    })(),
+    esAli = t => ALI.has(t),
     // Ambientes de cocina o lavandería marcados como áreas: por su tipo de ambiente o, si no lo tiene, por su nombre
     cocinas = els.filter(
       e =>
@@ -483,17 +563,24 @@ function planoCalc(PL, c, v) {
             });
       })
     );
-    // Montantes: la subida de un piso y la bajada del otro, unidas por la altura de entrepiso
-    sims.forEach(s => {
-      const o = s.mon && por.get(s.mon);
-      if (!o || s.id > o.id || !G.has(`D:${s.id}`) || !G.has(`D:${o.id}`)) return;
-      const pi = plantaDe(s.x, s.y),
-        pj = plantaDe(o.x, o.y),
-        k = Math.max(
-          1,
-          pi >= 0 && pj >= 0 ? Math.abs(plPisoPlanta(plantas[pi], pi) - plPisoPlanta(plantas[pj], pj)) : 1
-        );
-      arista(`D:${s.id}`, `D:${o.id}`, k * v.hEnt, 0, { pisos: k });
+    /* Montantes: la subida de un piso y la bajada del otro, unidas por la altura de entrepiso. Un montante puede pasar
+       por varios pisos (subida → atravesando → … → bajada): entre los extremos que este grupo de tuberías usa, cada
+       tramo de la cadena suma su altura de entrepiso por piso, también el que pasa por un piso sin tuberías propias */
+    const piso = e => {
+      const p = plantaDe(e.x, e.y);
+      return p >= 0 ? plPisoPlanta(plantas[p], p) : null;
+    };
+    plCadenas(sims, por).forEach(ch => {
+      const en = ch.map((e, i) => (G.has(`D:${e.id}`) ? i : -1)).filter(i => i >= 0);
+      if (en.length < 2) return;
+      for (let i = en[0]; i < en[en.length - 1]; i++) {
+        const a = ch[i],
+          b = ch[i + 1],
+          pa = piso(a),
+          pb = piso(b),
+          k = Math.max(1, pa !== null && pb !== null ? Math.abs(pa - pb) : 1);
+        arista(`D:${a.id}`, `D:${b.id}`, k * v.hEnt, 0, { pisos: k });
+      }
     });
     return G;
   }
