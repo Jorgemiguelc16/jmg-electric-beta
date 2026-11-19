@@ -367,6 +367,35 @@ legend .dd-x {
 }
 /* Vistas de resultados: se eligen solo en la cinta; el botón de la vista abierta queda marcado y un punto avisa
    lo que no cumple (rojo) o hay por revisar (ámbar) */
+/* Las vistas de los planos van en columnas de botones pequeños (.rs): mismo marcado y el punto a la derecha */
+.rs[data-view] {
+  position: relative;
+  padding-right: 18px;
+}
+.rs[data-view].on {
+  background: #dbe7f5;
+  border-color: #b9cde4;
+  box-shadow: inset 2px 0 0 var(--gold, #d9a23a);
+}
+.rs[data-view].bad::after,
+.rs[data-view].warn::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--bad);
+}
+.rs[data-view].warn::after {
+  background: #c98a12;
+}
+:root[data-theme="dark"] .rs[data-view].on {
+  background: #22344a;
+  border-color: #34506f;
+}
 .rb[data-view].on {
   background: #dbe7f5;
   border-color: #b9cde4;

@@ -3267,98 +3267,160 @@ prueba("Editor de diseño: etiquetas de cada tubería y salida (propiedades y cl
   );
 });
 
-prueba("Presupuesto: precios unitarios, desperdicio, porcentajes, precios recordados y hoja del Excel", async ok => {
-  await ejemplo("uni");
-  await ev(
-    `(() => { ponerDato("p_nombre", "Casa con precios"); PRESU = presuVacio(); saveDraft(); setTab("calculo"); verVista("presupuesto"); return 1; })()`
-  );
-  await esperar(300);
-  ok(
-    await ev(`!!document.querySelector(".pre-card") && /^0 de [0-9]+ partidas/.test($("preSt").textContent)`),
-    "la vista Presupuesto empieza sin precios"
-  );
-  const filas = await J(
-    `PRE_F.filter(x => !x.sec).map(x => ({ i: x.i, cod: x.cod, q: x.q, cant: x.cant, desp: x.desp }))`
-  );
-  const cond = filas.find(f => f.cod.startsWith("OE.5.2.3")),
-    caja = filas.find(f => f.cod.startsWith("OE.5.2.1"));
-  ok(
-    cond && Math.abs(cond.q - Math.round(cond.cant * 1.05 * 100) / 100) < 1e-9,
-    "en conductores la cantidad suma el desperdicio (5 %)"
-  );
-  ok(caja && caja.q === caja.cant && !caja.desp, "en las salidas la cantidad es el metrado");
-  const precio = (i, v) => poner(`[data-pre="${i}"]`, v);
-  await precio(cond.i, "2.5");
-  await precio(caja.i, "10");
-  await esperar(700);
-  const esp = Math.round((Math.round(cond.q * 2.5 * 100) / 100 + caja.q * 10) * 100) / 100;
-  const t = await J(
-    `({ cd: PRE_F && preCalc(LAST, metrado(LAST), false), txt: $("pre_cd").textContent, st: $("preSt").textContent })`
-  );
-  ok(Math.abs(t.cd.cd - esp) < 0.005, "el costo directo suma cantidad × precio");
-  ok(
-    Math.abs(t.cd.gg - Math.round(esp * 10) / 100) < 0.006 &&
-      Math.abs(t.cd.igv - Math.round(t.cd.sub * 18) / 100) < 0.006,
-    "gastos generales 10 % del CD e IGV 18 % del subtotal"
-  );
-  ok(/^2 de/.test(t.st), "cuenta las partidas con precio");
-  await poner('[data-prepct="gg"]', "5");
-  await esperar(600);
-  ok(
-    await ev(`PRESU.gg === 5 && libLoad()[PID].PRESU.gg === 5`),
-    "el porcentaje se cambia en la tabla y se guarda en el proyecto"
-  );
-  await precio(caja.i, "");
-  await esperar(600);
-  ok(
-    await ev(`PRESU.p[PRE_F[${caja.i}].desc] === null && /^1 de/.test($("preSt").textContent)`),
-    "un precio borrado queda sin precio"
-  );
-  await precio(caja.i, "10");
-  await esperar(600);
-  // Excel: hoja «Presupuesto» con fórmulas, después del Metrado
-  const xl = JSON.parse(
+prueba(
+  "Presupuesto: ventana Precios unitarios, desperdicio, porcentajes, recordados, documento y hoja del Excel",
+  async ok => {
+    await ejemplo("uni");
     await ev(
-      `(async () => { const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await exportar()); const ws = wb.getWorksheet("Presupuesto"); let f = 0, tot = null; ws.eachRow(r => r.eachCell(c => { if (c.value && c.value.formula) f++; if (c.value === "TOTAL PRESUPUESTO (S/)") tot = r.number; })); return JSON.stringify({ hojas: wb.worksheets.map(w => w.name), f, tot: tot && ws.getCell(tot, 9).value.formula }); })()`
-    )
-  );
-  ok(
-    xl.hojas.join() === "Memoria,Cálculos,Unifilar,Alturas,Detalles,Tableros,Metrado,Presupuesto,Anexos",
-    "el Excel lleva la hoja Presupuesto después del Metrado"
-  );
-  ok(xl.f > 20 && /^I\d+\+I\d+$/.test(xl.tot), "con fórmulas: parciales, títulos y total");
-  // Otro proyecto: las partidas sin precio toman el último usado («recordado»)
-  await ev(
-    `(() => { PID = null; PRESU = presuVacio(); ponerDato("p_nombre", "Casa nueva"); saveDraft(); verVista("presupuesto"); return 1; })()`
-  );
-  await esperar(400);
-  ok(
+      `(() => { ponerDato("p_nombre", "Casa con precios"); PRESU = presuVacio(); saveDraft(); setTab("calculo"); verVista("presupuesto"); return 1; })()`
+    );
+    await esperar(300);
+    ok(
+      await ev(
+        `!!document.querySelector(".pre-doc") && (m => !!m && m[1] === m[2])(document.querySelector(".pre-aviso").textContent.match(/^([0-9]+) de ([0-9]+) partidas sin precio/))`
+      ),
+      "la vista Presupuesto es el documento y avisa que faltan todos los precios"
+    );
+    await clic('.pre-doc [data-act="precios"]');
+    await esperar(200);
+    ok(
+      await ev("!$('puDlg').hidden && document.querySelectorAll('#puTab [data-pu]').length > 5"),
+      "el botón abre la ventana Precios unitarios"
+    );
+    const filas = await J(
+      `preCalc(LAST).filas.filter(x => !x.sec).map(x => ({ i: x.i, cod: x.cod, q: x.q, cant: x.cant, desp: x.desp }))`
+    );
+    const cond = filas.find(f => f.cod.startsWith("OE.5.2.3")),
+      caja = filas.find(f => f.cod.startsWith("OE.5.2.1"));
+    ok(
+      cond && Math.abs(cond.q - Math.round(cond.cant * 1.05 * 100) / 100) < 1e-9,
+      "en conductores la cantidad suma el desperdicio (5 %)"
+    );
+    ok(caja && caja.q === caja.cant && !caja.desp, "en las salidas la cantidad es el metrado");
+    const precio = (i, v) => poner(`#puTab [data-pu="${i}"]`, v);
+    await precio(cond.i, "2,5");
+    await precio(caja.i, "10");
+    ok(
+      await ev(
+        `!PRESU.p[preCalc(LAST).filas[${cond.i}].desc] && /2 cambios sin aplicar/.test($("puNota").textContent) && document.querySelectorAll("#puTab tr.cd-mod").length === 2`
+      ),
+      "los precios quedan pendientes (coma decimal aceptada) hasta aplicar"
+    );
+    // Enter pasa al precio de la partida siguiente
     await ev(
-      `document.querySelectorAll(".pre-rec").length === 2 && Object.values(PRESU.r).every(n => n === "Casa con precios")`
-    ),
-    "un proyecto nuevo propone los precios recordados"
-  );
-  await precio(cond.i, "3");
-  await esperar(600);
-  ok(
-    await ev(`document.querySelectorAll(".pre-rec").length === 1 && PRESU.p[PRE_F[${cond.i}].desc] === 3`),
-    "al cambiarlo, el precio queda como propio"
-  );
-  // Sin precios, el Excel no cambia
-  await ev(
-    `(() => { PRESU = presuVacio(); PRESU.p = Object.fromEntries(PRE_F.filter(x => !x.sec).map(x => [x.desc, null])); return 1; })()`
-  );
-  ok(
-    !(await ev(
-      `exportar().then(b => { const wb = new ExcelJS.Workbook(); return wb.xlsx.load(b).then(() => !!wb.getWorksheet("Presupuesto")); })`
-    )),
-    "sin precios, el Excel no lleva la hoja"
-  );
-  await ev(
-    `(() => { const L = libLoad(); Object.keys(L).forEach(k => delete L[k]); libSave(L); PRESU = presuVacio(); return 1; })()`
-  );
-});
-
+      `(() => { const l = [...document.querySelectorAll("#puTab [data-pu]")]; l[0].focus(); l[0].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); return 1; })()`
+    );
+    ok(
+      await ev(`document.activeElement === document.querySelectorAll("#puTab [data-pu]")[1]`),
+      "Enter pasa a la partida siguiente"
+    );
+    await clic('#puDlg [data-pu-a="apply"]');
+    await esperar(300);
+    const esp = Math.round((Math.round(cond.q * 2.5 * 100) / 100 + caja.q * 10) * 100) / 100;
+    const C = await J("preCalc(LAST, metrado(LAST), false)");
+    ok(Math.abs(C.cd - esp) < 0.005, "al aplicar, el costo directo suma cantidad × precio");
+    ok(
+      Math.abs(C.gg - Math.round(esp * 10) / 100) < 0.006 && Math.abs(C.igv - Math.round(C.sub * 18) / 100) < 0.006,
+      "gastos generales 10 % del CD e IGV 18 % del subtotal"
+    );
+    ok(
+      await ev(`/^2 de/.test($("puAv").textContent) && $("puApply").disabled`),
+      "cuenta las partidas con precio y no quedan cambios"
+    );
+    await poner('[data-pupct="gg"]', "5");
+    ok(await ev("PRESU.gg === 10"), "el porcentaje también queda pendiente");
+    await clic('#puDlg [data-pu-a="ok"]');
+    await esperar(600);
+    ok(
+      await ev(`PRESU.gg === 5 && libLoad()[PID].PRESU.gg === 5 && $("puDlg").hidden`),
+      "Aceptar aplica, guarda en el proyecto y cierra"
+    );
+    // Cancelar descarta
+    await ev("preciosUnitarios(true); 1");
+    await precio(caja.i, "99");
+    await clic('#puDlg [data-pu-a="cancel"]');
+    ok(await ev(`PRESU.p[preCalc(LAST).filas[${caja.i}].desc] === 10`), "Cancelar descarta los cambios");
+    // Documento: totales y monto en letras
+    await ev('verVista("presupuesto"); 1');
+    ok(
+      await ev(
+        `/^SON: .+ CON [0-9]{2}.100 SOLES$/.test(document.querySelector(".pre-letras").textContent) && document.querySelector(".pre-doc .pre-tot").textContent.includes(soles(preCalc(LAST).tot))`
+      ),
+      "el documento muestra el total y el monto en letras"
+    );
+    ok(
+      await ev(
+        "solesLetras(21000.5) === 'SON: VEINTIÚN MIL CON 50/100 SOLES' && solesLetras(1e6) === 'SON: UN MILLÓN CON 00/100 SOLES'"
+      ),
+      "monto en letras correcto"
+    );
+    // Precio borrado: sin precio
+    await ev("preciosUnitarios(true); 1");
+    await precio(caja.i, "");
+    await clic('#puDlg [data-pu-a="ok"]');
+    await esperar(300);
+    ok(
+      await ev(`PRESU.p[preCalc(LAST).filas[${caja.i}].desc] === null && preCalc(LAST).nP === 1`),
+      "un precio borrado queda sin precio"
+    );
+    await ev("preciosUnitarios(true); 1");
+    await precio(caja.i, "10");
+    await clic('#puDlg [data-pu-a="ok"]');
+    await esperar(600);
+    // Excel: hoja «Presupuesto» con fórmulas, después del Metrado
+    const xl = JSON.parse(
+      await ev(
+        `(async () => { const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await exportar()); const ws = wb.getWorksheet("Presupuesto"); let f = 0, tot = null; ws.eachRow(r => r.eachCell(c => { if (c.value && c.value.formula) f++; if (c.value === "TOTAL PRESUPUESTO (S/)") tot = r.number; })); return JSON.stringify({ hojas: wb.worksheets.map(w => w.name), f, tot: tot && ws.getCell(tot, 9).value.formula }); })()`
+      )
+    );
+    ok(
+      xl.hojas.join() === "Memoria,Cálculos,Unifilar,Alturas,Detalles,Tableros,Metrado,Presupuesto,Anexos",
+      "el Excel lleva la hoja Presupuesto después del Metrado"
+    );
+    ok(xl.f > 20 && /^I\d+\+I\d+$/.test(xl.tot), "con fórmulas: parciales, títulos y total");
+    // Otro proyecto: las partidas sin precio toman el último usado («recordado»)
+    await ev(
+      `(() => { PID = null; PRESU = presuVacio(); ponerDato("p_nombre", "Casa nueva"); saveDraft(); preciosUnitarios(true); return 1; })()`
+    );
+    await esperar(300);
+    ok(
+      await ev(
+        `document.querySelectorAll("#puTab .pu-or.rec").length === 2 && Object.values(PRESU.r).every(n => n === "Casa con precios")`
+      ),
+      "un proyecto nuevo propone los precios recordados"
+    );
+    await poner("#puFil", "rec");
+    ok(
+      await ev(`document.querySelectorAll("#puTab [data-pu]").length === 2`),
+      "el filtro muestra solo las partidas con precio recordado"
+    );
+    await poner("#puFil", "");
+    await precio(cond.i, "3");
+    await clic('#puDlg [data-pu-a="ok"]');
+    await esperar(600);
+    await ev("preciosUnitarios(true); 1");
+    ok(
+      await ev(
+        `document.querySelectorAll("#puTab .pu-or.rec").length === 1 && PRESU.p[preCalc(LAST).filas[${cond.i}].desc] === 3`
+      ),
+      "al cambiarlo, el precio queda como propio"
+    );
+    await ev("preciosUnitarios(false); 1");
+    // Sin precios, el Excel no cambia
+    await ev(
+      `(() => { PRESU = presuVacio(); PRESU.p = Object.fromEntries(preCalc(LAST, metrado(LAST), false).filas.filter(x => !x.sec).map(x => [x.desc, null])); return 1; })()`
+    );
+    ok(
+      !(await ev(
+        `exportar().then(b => { const wb = new ExcelJS.Workbook(); return wb.xlsx.load(b).then(() => !!wb.getWorksheet("Presupuesto")); })`
+      )),
+      "sin precios, el Excel no lleva la hoja"
+    );
+    await ev(
+      `(() => { const L = libLoad(); Object.keys(L).forEach(k => delete L[k]); libSave(L); PRESU = presuVacio(); return 1; })()`
+    );
+  }
+);
 prueba(
   "Niveles de iluminación: EM.010 por defecto, criterio del proyectista, bajo norma y ambientes propios",
   async ok => {

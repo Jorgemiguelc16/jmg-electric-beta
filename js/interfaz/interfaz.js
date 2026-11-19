@@ -128,7 +128,7 @@ function render(r) {
 // La vista se elige en la cinta (Resultados › Vistas): se marca la vista abierta, se ocultan las que el proyecto
 // no tiene y un punto avisa lo que no cumple (rojo) o hay por revisar (ámbar)
 function vistasCinta(S, st) {
-  document.querySelectorAll(".rb[data-view]").forEach(b => {
+  document.querySelectorAll(".rb[data-view], .rs[data-view]").forEach(b => {
     const k = b.dataset.view;
     b.hidden = !!S && !S[k];
     b.classList.toggle("on", !!S && k === VIEW);

@@ -9,8 +9,9 @@
      el último que el proyectista le puso en otro de sus proyectos (el guardado más reciente que la tenga) y queda
      marcada como «recordado» (PRESU.r) hasta que se cambie. Un precio borrado queda como null: «sin precio» a
      propósito, y ya no toma el recordado.
-   · En la vista «Presupuesto» (Resultados › Vistas) los precios y porcentajes se escriben en la tabla y los totales
-     cambian al instante; el Excel lleva la hoja «Presupuesto» (js/exportar/excel-presupuesto.js) cuando hay precios. */
+   · La vista «Presupuesto» (Resultados) es el documento: encabezado del proyecto, partidas con sus subtotales,
+     resumen y el total en letras. Los precios y porcentajes se escriben en la ventana Precios unitarios
+     (js/ventanas/precios.js), con vista previa hasta aplicar; el Excel lleva la hoja «Presupuesto» (js/exportar/excel-presupuesto.js) cuando hay precios. */
 const PRE_DEF = { gg: 10, ut: 10, igv: 18 };
 const presuVacio = () => ({ p: {}, r: {}, ...PRE_DEF });
 let PRESU = presuVacio();
@@ -71,8 +72,9 @@ function preCompletar(M) {
   return cambio;
 }
 /* Cálculo del presupuesto de un resultado: filas (las del metrado con cantidad a presupuestar, precio y parcial),
-   subtotal de cada título, CD, GG, utilidad, subtotal, IGV y total; nP de nT partidas tienen precio */
-function preCalc(r, M = metrado(r), completar = true) {
+   subtotal de cada título, CD, GG, utilidad, subtotal, IGV y total; nP de nT partidas tienen precio. P: los precios
+   (los del proyecto o, en la ventana Precios unitarios, los del proyecto con los cambios aún sin aplicar). */
+function preCalc(r, M = metrado(r), completar = true, P = PRESU) {
   if (completar) preCompletar(M);
   const d = Math.max(0, +r.c.pDesp || 0) / 100,
     filas = [];
@@ -87,7 +89,7 @@ function preCalc(r, M = metrado(r), completar = true) {
     }
     const desp = preConDesp(x) ? d : 0,
       q = r2(x.cant * (1 + desp)),
-      pu = PRESU.p[x.desc] ?? null,
+      pu = P.p[x.desc] ?? null,
       par = pu === null ? null : r2(q * pu);
     nT++;
     if (par !== null) {
@@ -95,86 +97,83 @@ function preCalc(r, M = metrado(r), completar = true) {
       cd += par;
       if (sec) sec.sub += par;
     }
-    filas.push({ ...x, desp, q, pu, par, rec: PRESU.r[x.desc] || "", i: filas.length });
+    filas.push({ ...x, desp, q, pu, par, rec: P.r[x.desc] || "", i: filas.length });
   });
   cd = r2(cd);
-  const gg = r2((cd * PRESU.gg) / 100),
-    ut = r2((cd * PRESU.ut) / 100),
+  const gg = r2((cd * P.gg) / 100),
+    ut = r2((cd * P.ut) / 100),
     sub = r2(cd + gg + ut),
-    igv = r2((sub * PRESU.igv) / 100);
-  return { filas, d, cd, gg, ut, sub, igv, tot: r2(sub + igv), nP, nT };
+    igv = r2((sub * P.igv) / 100);
+  return { filas, d, cd, gg, ut, sub, igv, tot: r2(sub + igv), nP, nT, P };
 }
 // El proyecto tiene precios (para el Excel y la impresión)
 const presuHay = r => preCalc(r).nP > 0;
 
-/* ---------- Vista «Presupuesto» ---------- */
-let PRE_F = [];
-function preEstadoTxt(C) {
-  return `${C.nP} de ${C.nT} partidas con precio unitario${C.nT > C.nP ? ` · faltan ${C.nT - C.nP}: no suman al costo directo` : ""}`;
+/* Monto en letras, como se escribe al pie de un presupuesto: «SON: DOCE MIL TRESCIENTOS CUATRO CON 50/100 SOLES» */
+function solesLetras(v) {
+  const U = ["", "UNO", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE", "DIEZ", "ONCE", "DOCE"]
+      .concat(["TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE", "VEINTE"])
+      .concat(["VEINTIUNO", "VEINTIDÓS", "VEINTITRÉS", "VEINTICUATRO", "VEINTICINCO", "VEINTISÉIS", "VEINTISIETE"])
+      .concat(["VEINTIOCHO", "VEINTINUEVE"]),
+    D = ["", "", "", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"],
+    C = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS"].concat(
+      ["OCHOCIENTOS", "NOVECIENTOS"]
+    );
+  const cien = n => {
+    if (n === 100) return "CIEN";
+    const c = Math.floor(n / 100),
+      r = n % 100,
+      dd = r < 30 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? " Y " + U[r % 10] : "");
+    return [C[c], dd].filter(Boolean).join(" ");
+  };
+  // «UNO» delante de mil o millones se dice «UN» (veintiún mil, un millón)
+  const apoc = s => s.replace(/VEINTIUNO$/, "VEINTIÚN").replace(/UNO$/, "UN");
+  const entero = n => {
+    if (n === 0) return "CERO";
+    const mill = Math.floor(n / 1e6),
+      miles = Math.floor((n % 1e6) / 1000),
+      resto = n % 1000,
+      p = [];
+    if (mill) p.push(mill === 1 ? "UN MILLÓN" : apoc(entero(mill)) + " MILLONES");
+    if (miles) p.push(miles === 1 ? "MIL" : apoc(cien(miles)) + " MIL");
+    if (resto) p.push(cien(resto));
+    return p.join(" ");
+  };
+  const t = Math.round(Math.max(0, v) * 100),
+    e = Math.floor(t / 100),
+    c = t % 100;
+  return `SON: ${entero(e)} CON ${String(c).padStart(2, "0")}/100 SOLES`;
 }
+
+/* ---------- Vista «Presupuesto»: el documento, como se presenta en un expediente ----------
+   Los precios unitarios y los porcentajes se escriben en la ventana Precios unitarios (js/ventanas/precios.js). */
 function cardPresupuesto(r) {
-  const C = preCalc(r);
-  PRE_F = C.filas;
-  const pct = (k, t, ref) =>
-    `<tr><td class="t">${t} <input type="number" class="pre-pct" min="0" max="100" step="0.5" data-prepct="${k}" value="${PRESU[k]}"> %<small>${ref}</small></td><td id="pre_${k}">${soles(C[k])}</td></tr>`;
-  return `<section class="card pre-card"><h2><span>Presupuesto de instalaciones eléctricas</span><span class="ref">Referencial · S/</span></h2>
-  <div class="body pre-cab"><p class="pre-st${C.nT > C.nP ? " w" : ""}" id="preSt">${preEstadoTxt(C)}</p><p class="hint">Escriba el precio unitario de cada partida (materiales y mano de obra). Desperdicio en tuberías y conductores: <b>${fmt(C.d * 100, 0)} %</b> (Parámetros › Tierra y metrado).</p></div>
-  <div class="tbl-wrap"><table class="pre-tab"><thead><tr><th class="t">Ítem</th><th class="t">Descripción</th><th>Und.</th><th>Metrado</th><th>Desp.</th><th>Cantidad</th><th>P. U. (S/)</th><th>Parcial (S/)</th></tr></thead><tbody>
-  ${C.filas
+  const C = preCalc(r),
+    j = r.c.proj || {},
+    hoy = new Date().toLocaleDateString("es-PE", { day: "2-digit", month: "long", year: "numeric" }),
+    falta = C.nT - C.nP,
+    dato = (k, v) => `<div><dt>${k}</dt><dd>${v ? esc(v) : "—"}</dd></div>`,
+    pct = (t, v, ref) =>
+      `${t} <span class="pre-p">(${fmt(v, v % 1 ? 1 : 0)} %)</span>${ref ? `<small>${ref}</small>` : ""}`;
+  const filas = C.filas
     .map(x =>
       x.sec
-        ? `<tr class="grp"><td colspan="7">${x.cod}  ${x.sec}</td><td class="n" data-psub="${x.i}">${x.sub ? soles(r2(x.sub)) : ""}</td></tr>`
-        : `<tr><td class="t">${x.cod}</td><td class="t" style="white-space:normal">${esc(x.desc)}</td><td>${x.und}</td><td>${fmt(x.cant, 0)}</td><td>${x.desp ? `${fmt(x.desp * 100, 0)} %` : "—"}</td><td>${fmt(x.q, x.q % 1 ? 2 : 0)}</td><td class="pre-pu"><input type="number" min="0" step="0.01" data-pre="${x.i}" value="${x.pu ?? ""}" placeholder="—" aria-label="Precio unitario de ${esc(x.desc)}">${x.rec ? `<i class="pre-rec" data-prec="${x.i}" title="Precio recordado de su proyecto «${esc(x.rec)}». Al cambiarlo queda como propio de este proyecto.">recordado</i>` : ""}</td><td class="n" data-ppar="${x.i}">${soles(x.par)}</td></tr>`
+        ? `<tr class="pre-sec"><td class="t">${x.cod}</td><td class="t" colspan="4">${esc(x.sec)}</td><td class="n">${x.sub ? soles(r2(x.sub)) : ""}</td></tr>`
+        : `<tr${x.pu === null ? ' class="pre-sin"' : ""}><td class="t">${x.cod}</td><td class="t pre-d">${esc(x.desc)}${x.desp ? `<small>Metrado ${fmt(x.cant, x.cant % 1 ? 2 : 0)} ${x.und} + ${fmt(x.desp * 100, 0)} % de desperdicio</small>` : ""}</td><td>${x.und}</td><td class="n">${fmt(x.q, x.q % 1 ? 2 : 0)}</td><td class="n">${x.pu === null ? '<span class="pre-falta">sin precio</span>' : soles(x.pu)}</td><td class="n">${soles(x.par)}</td></tr>`
     )
-    .join("")}
-  </tbody></table></div>
+    .join("");
+  return `<section class="card pre-doc"><h2><span>Presupuesto referencial de instalaciones eléctricas</span><span class="ref"><button type="button" class="btn sm" data-act="precios" title="Escribir los precios unitarios y los porcentajes">Precios unitarios…</button></span></h2>
+  <div class="body pre-cab"><dl class="pre-datos">${dato("Proyecto", j.nombre)}${dato("Propietario", j.prop)}${dato("Ubicación", j.ubic)}${dato("Fecha", hoy)}${dato("Moneda", "Soles (S/)")}</dl>
+  ${falta ? `<div class="pre-aviso"><span><b>${falta} de ${C.nT} partidas sin precio unitario:</b> no suman al costo directo.</span><button type="button" class="btn sm" data-act="precios">Completar precios</button></div>` : ""}</div>
+  <div class="tbl-wrap"><table class="pre-tab"><thead><tr><th class="t">Ítem</th><th class="t">Descripción</th><th>Und.</th><th>Cantidad</th><th>Precio (S/)</th><th>Parcial (S/)</th></tr></thead><tbody>${filas}</tbody></table></div>
   <div class="body pre-pie"><table class="pre-tot"><tbody>
-  <tr><td class="t"><b>Costo directo</b></td><td id="pre_cd"><b>${soles(C.cd)}</b></td></tr>
-  ${pct("gg", "Gastos generales", "criterio del proyectista")}
-  ${pct("ut", "Utilidad", "criterio del proyectista")}
-  <tr class="sub"><td class="t">Subtotal</td><td id="pre_sub">${soles(C.sub)}</td></tr>
-  ${pct("igv", "IGV", "16 % IGV + 2 % IPM, vigente")}
-  <tr class="tot"><td class="t">Total presupuesto (S/)</td><td id="pre_tot">${soles(C.tot)}</td></tr>
+  <tr><td class="t">Costo directo</td><td>${soles(C.cd)}</td></tr>
+  <tr><td class="t">${pct("Gastos generales", PRESU.gg, "criterio del proyectista")}</td><td>${soles(C.gg)}</td></tr>
+  <tr><td class="t">${pct("Utilidad", PRESU.ut, "criterio del proyectista")}</td><td>${soles(C.ut)}</td></tr>
+  <tr class="sub"><td class="t">Subtotal</td><td>${soles(C.sub)}</td></tr>
+  <tr><td class="t">${pct("IGV", PRESU.igv, "16 % IGV + 2 % IPM")}</td><td>${soles(C.igv)}</td></tr>
+  <tr class="tot"><td class="t">Total presupuesto</td><td>S/ ${soles(C.tot)}</td></tr>
   </tbody></table>
-  <p class="hint">Presupuesto referencial: las cantidades salen del metrado (partidas de la Norma Técnica de Metrados, R.D. N.° 073-2010-VIVIENDA) y los precios unitarios los pone el proyectista; se guardan en el proyecto. Una partida sin precio toma el último que usted le puso en otro proyecto (marcado «recordado») hasta que lo cambie. En tuberías y conductores, la cantidad suma el desperdicio al metrado neto. Gastos generales y utilidad son porcentajes del costo directo (criterio del proyectista); el IGV se aplica al subtotal. Con precios, se incluye en la hoja «Presupuesto» del Excel.</p></div></section>`;
+  <p class="pre-letras">${solesLetras(C.tot)}</p>
+  <p class="hint">Presupuesto referencial. Las cantidades salen del metrado (partidas de la Norma Técnica de Metrados, R.D. N.° 073-2010-VIVIENDA); en tuberías y conductores suman el desperdicio de Parámetros (${fmt(C.d * 100, 0)} %). Los precios unitarios (materiales y mano de obra) los pone el proyectista en <b>Precios unitarios</b> y se guardan en el proyecto; una partida sin precio toma el último que usted le puso en otro proyecto («recordado»). Gastos generales y utilidad son porcentajes del costo directo (criterio del proyectista); el IGV se aplica al subtotal. Con precios, se incluye en la hoja «Presupuesto» del Excel.</p></div></section>`;
 }
-// Totales en pantalla sin volver a dibujar la tabla (el cursor sigue en el campo)
-function preRefrescar() {
-  if (!LAST || !$("preSt")) return;
-  const C = preCalc(LAST, metrado(LAST), false);
-  PRE_F = C.filas;
-  C.filas.forEach(x => {
-    const el = document.querySelector(x.sec ? `[data-psub="${x.i}"]` : `[data-ppar="${x.i}"]`);
-    if (el) el.textContent = x.sec ? (x.sub ? soles(r2(x.sub)) : "") : soles(x.par);
-  });
-  ["gg", "ut", "igv"].forEach(k => ($("pre_" + k).textContent = soles(C[k])));
-  $("pre_cd").innerHTML = `<b>${soles(C.cd)}</b>`;
-  $("pre_sub").textContent = soles(C.sub);
-  $("pre_tot").textContent = soles(C.tot);
-  $("preSt").textContent = preEstadoTxt(C);
-  $("preSt").classList.toggle("w", C.nT > C.nP);
-}
-let PRE_T = null;
-document.addEventListener("input", e => {
-  const t = e.target;
-  if (!t.closest || !t.closest(".pre-card")) return;
-  const v = t.value.trim() === "" ? null : Number(t.value);
-  if (t.dataset.pre !== undefined) {
-    const x = PRE_F[+t.dataset.pre];
-    if (!x || x.sec) return;
-    if (v === null || !Number.isFinite(v) || v < 0) PRESU.p[x.desc] = null;
-    else PRESU.p[x.desc] = Math.min(v, 1e9);
-    // Escrito por el proyectista: ya no es «recordado»
-    delete PRESU.r[x.desc];
-    const m = document.querySelector(`[data-prec="${t.dataset.pre}"]`);
-    if (m) m.remove();
-  } else if (t.dataset.prepct) {
-    PRESU[t.dataset.prepct] = v === null || !Number.isFinite(v) ? 0 : Math.max(0, Math.min(100, v));
-  } else return;
-  preRefrescar();
-  clearTimeout(PRE_T);
-  PRE_T = setTimeout(() => {
-    saveDraft();
-    if (typeof histPush === "function") histPush();
-  }, 500);
-});

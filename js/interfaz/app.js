@@ -331,6 +331,7 @@ $("ws").addEventListener("click", e => {
   const a = ac.dataset.act;
   if (a === "nuevo") asistente(true, MODE);
   else if (a === "lux") luxAbrir();
+  else if (a === "precios") preciosUnitarios(true);
   else if (a === "json") $("btnSave").click();
   else if (a === "guardar") {
     saveDraft();

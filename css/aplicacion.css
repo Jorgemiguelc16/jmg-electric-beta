@@ -1024,58 +1024,74 @@ body.arrastrando * {
   padding: 8px 12px 10px;
 }
 
-/* Presupuesto (js/presupuesto.js): precio unitario y porcentajes escritos en la tabla, totales al pie */
+/* Presupuesto (js/resultados/presupuesto.js): el documento, como se presenta en el expediente */
 .pre-cab {
-  padding-bottom: 0;
+  padding-bottom: 6px;
 }
-.pre-st {
-  margin: 0 0 4px;
+.pre-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px 18px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: var(--bg2, #f6f8fa);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold, #d9a23a);
+}
+.pre-datos dt {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.pre-datos dd {
+  margin: 1px 0 0;
   font-weight: 600;
-  color: var(--navy);
+  color: var(--ink);
 }
-.pre-st.w {
-  color: var(--warn, #b26a00);
+.pre-aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 6px;
+  padding: 7px 10px;
+  background: #fbf3e2;
+  border: 1px solid #ecd3a0;
+  border-radius: 3px;
+  color: #6b4a00;
+  font-size: 12px;
 }
-.pre-tab td.n,
-.pre-tab tr.grp td.n {
+.pre-tab td.n {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-.pre-pu {
   white-space: nowrap;
 }
-.pre-pu input,
-.pre-pct {
-  width: 92px;
-  padding: 2px 6px;
-  font: inherit;
-  text-align: right;
-  color: var(--ink);
-  background: var(--panel);
-  border: 1px solid var(--line2);
-  border-radius: 2px;
+.pre-tab .pre-d {
+  white-space: normal;
 }
-.pre-pct {
-  width: 58px;
-  margin: 0 2px 0 6px;
-}
-.pre-pu input:focus,
-.pre-pct:focus {
-  outline: 2px solid var(--focus);
-  outline-offset: -1px;
-}
-.pre-rec {
+.pre-tab .pre-d small {
   display: block;
-  font-size: 10px;
-  font-style: normal;
-  color: var(--accent);
-  text-align: right;
-  cursor: help;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.pre-tab tr.pre-sec td {
+  background: var(--grp, #eef2f6);
+  font-weight: 700;
+  color: var(--navy);
+}
+.pre-tab tr.pre-sin td {
+  color: var(--muted);
+}
+.pre-falta {
+  font-size: 11px;
+  font-style: italic;
+  color: #a86b16;
 }
 .pre-tot {
   width: auto;
-  min-width: 380px;
-  margin: 0 0 10px auto;
+  min-width: 420px;
+  margin: 4px 0 8px auto;
 }
 .pre-tot td {
   padding: 4px 10px;
@@ -1084,6 +1100,9 @@ body.arrastrando * {
 }
 .pre-tot td.t {
   text-align: left;
+}
+.pre-p {
+  color: var(--muted);
 }
 .pre-tot small {
   margin-left: 8px;
@@ -1100,14 +1119,18 @@ body.arrastrando * {
   font-size: 14px;
   color: var(--navy);
 }
+.pre-letras {
+  margin: 0 0 10px auto;
+  max-width: 640px;
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
 @media print {
-  .pre-pu input,
-  .pre-pct {
-    border: 0;
-    background: none;
-    padding: 0;
-  }
-  .pre-rec {
+  .pre-doc .btn,
+  .pre-aviso {
     display: none;
   }
 }
