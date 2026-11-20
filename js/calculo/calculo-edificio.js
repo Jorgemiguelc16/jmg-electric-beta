@@ -330,8 +330,12 @@ function calcMulti(c) {
   T.forEach(t => {
     if (T.filter(x => x.tab === t.tab).length > 1) t.tab = nomTipo(t);
   });
-  T.forEach((t, ti) => {
-    const tab = t.tab;
+  /* Orden de los tableros en los resultados, el unifilar y las láminas: por su nombre (TD-01, TD-02…). Los factores
+     de la Regla 050-202(3)(a) siguen el orden de T (de mayor a menor carga): esto solo cambia cómo se muestran. */
+  const porNombre = [...T.keys()].sort((i, j) => T[i].tab.localeCompare(T[j].tab, "es", { numeric: true }));
+  porNombre.forEach(ti => {
+    const t = T[ti],
+      tab = t.tab;
     const f = alimentador(
       `Alimentador medidor → ${tab} (${t.nombre})`,
       t.md.MD,
@@ -389,8 +393,9 @@ function calcMulti(c) {
     });
     circ.push(...l);
   }
-  T.forEach((t, ti) => {
-    const fi = alims.findIndex(a => a.pKey === "tipo" && a.ti === ti),
+  porNombre.forEach(ti => {
+    const t = T[ti],
+      fi = alims.findIndex(a => a.pKey === "tipo" && a.ti === ti),
       up = alims[fi].dvAc;
     if (t.plano) {
       const L2 = t.plano.tb.circs.map(q0 => {

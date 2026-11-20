@@ -1763,6 +1763,15 @@ prueba(
       JSON.stringify(grupos) === JSON.stringify(["TD-02", "Circuitos de TD-02"]),
       `circuitos de una salida del 2do piso: solo su tablero (${JSON.stringify(grupos)})`
     );
+    // Revisión: una tubería juntada (C-1 con C-2 en «Lleva también») cuenta para las dos salidas del tablero,
+    // también si llega al tablero por su otra punta
+    const juntas = await J(
+      "(() => { const lz = dsAgregar({ t: 'sim', k: 'luz', x: _t.x + 1, y: _t.y + 3, r: 0, capa: DS_SIS[DS_CAT.luz.s].capa }), o = dsSalidasTab(_t)[0].p, u = dsAgregar({ t: 'tub', pts: [lz.x, lz.y, o[0], o[1]], modo: 'techo', capa: 'E-TUB-TECHO', c0: lz.id, c1: _t.id, cir: 'C-1', tab: _t.id, cx: ['C-2'] }); edCambio(); const de = () => dsVerificar().filter(x => /^TD-02:/.test(x.t)).map(x => x.t), a = de(); delete u.cx; edCambio(); const b = de(); [u, lz].forEach(e => dsD().els.splice(dsD().els.indexOf(e), 1)); edCambio(); return [a, b]; })()"
+    );
+    ok(
+      JSON.stringify(juntas) === JSON.stringify([[], ["TD-02: C-2 sin tubería"]]),
+      `revisión: la tubería juntada cuenta para C-1 y C-2 (${JSON.stringify(juntas)})`
+    );
     // Punto base: el montante cae en el mismo lugar del edificio aunque las plantas se encuadren distinto
     const pb = await J(
       `(() => { const [a, b] = EPL.plantas; a.x0 -= 3; dpPuntoBase([${OX} + 1, ${OY} + 1]); dpPuntoBase([${OX} + 21, ${OY} + 1]); const d = dpDesp(0, 1); a.x0 += 3; return [d, !!edMenuAccion]; })()`

@@ -159,7 +159,8 @@ function dsVerificar() {
         [tb.id],
         "Doble clic en el tablero para definir sus circuitos."
       );
-    const usados = new Set(tubs.filter(t => t.c0 === tb.id).map(t => t.cir)),
+    // Salidas con tubería (por cualquiera de sus puntas); una juntada lleva el suyo y los de «Lleva también»
+    const usados = new Set(tubs.filter(t => t.c0 === tb.id || t.c1 === tb.id).flatMap(t => [t.cir, ...(t.cx || [])])),
       libres = dsSalidasTab(tb)
         .filter(o => !usados.has(o.n))
         .map(o => o.n);

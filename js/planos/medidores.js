@@ -91,6 +91,14 @@ function bancoMedidores(r) {
   };
   const tri = SIST[r.sk].tri;
   const M = suministrosBanco(r);
+  /* Letra que cabe en un ancho (px): la de s o una más chica, hasta 4.6 (ancho medio de la letra en negrita, 0.6 de
+     su tamaño); si aún no cabe, el texto se corta con «…» */
+  const cabe = (txt, w, s) => {
+    const t = Math.max(4.6, Math.min(s, w / (0.6 * txt.length)));
+    if (t * 0.6 * txt.length <= w) return [txt, t];
+    const n = Math.max(1, Math.floor(w / (0.6 * t)) - 1);
+    return [txt.slice(0, n) + "…", t];
+  };
   T(20, 28, "BANCO DE MEDIDORES Y BALANCE DE FASES", { s: 13, b: 1, f: NAVY });
   T(
     20,
@@ -184,9 +192,16 @@ function bancoMedidores(r) {
       T(bx + bw / 2, vy + vh * 0.37, "0000", { s: 5.6, b: 1, a: "middle", f: INK });
       T(bx + bw / 2, vy + vh * 0.8, "kWh", { s: 5.6, b: 1, a: "middle", f: GR });
       R(bx + bw - 7, by + bh * 0.62, 2.5, 9, { fi: INK, st: "", sw: 0 });
-      T(bx + bw / 2, by + bh * 0.58, `${m.med} · ${m.nom}`, { s: 6.6, b: 1, a: "middle", f: NAVY });
+      // Número del medidor y su tablero (el nombre completo está en el cuadro de suministros)
+      [
+        [m.med || m.nom, 0.53, 6.6],
+        [m.tab, 0.64, 5.8]
+      ].forEach(([t0, fy, s0]) => {
+        const [t, s] = cabe(t0, bw - 16, s0);
+        T(bx + bw / 2, by + bh * fy, t, { s, b: 1, a: "middle", f: NAVY });
+      });
       const fc = m.fase.length === 1 ? COLF[m.fase] || INK : INK;
-      T(bx + bw / 2, by + bh * 0.74, m.fase, { s: 7, b: 1, a: "middle", f: fc });
+      T(bx + bw / 2, by + bh * 0.77, m.fase, { s: 7, b: 1, a: "middle", f: fc });
       T(bx + bw / 2, by + bh * 0.9, tp, { s: 6, a: "middle", f: GR });
       // Salida de la instalación interna hacia el tablero del suministro
       L(bx + bw / 2, by, bx + bw / 2, by - 10, 0.7, INK, "3 2");
@@ -310,14 +325,14 @@ function bancoMedidores(r) {
   yC += 18;
   const cols = [
     ["N.°", 20, 36, "middle"],
-    ["Suministro", 56, 150, "start"],
-    ["Conexión", 206, 70, "start"],
-    ["Caja", 276, 40, "start"],
-    ["MD (kW)", 316, 60, "end"],
-    ["Fase", 376, 50, "middle"],
-    ["ITM", 426, 60, "middle"],
-    ["Conductor de la instalación interna", 486, 220, "start"],
-    [`Calibre según ${bm.conc === "Luz del Sur" ? "Luz del Sur" : "Luz del Sur (referencia)"}`, 706, 230, "start"],
+    ["Suministro", 56, 190, "start"],
+    ["Conexión", 246, 70, "start"],
+    ["Caja", 316, 40, "start"],
+    ["MD (kW)", 356, 60, "end"],
+    ["Fase", 416, 50, "middle"],
+    ["ITM", 466, 60, "middle"],
+    ["Conductor de la instalación interna", 526, 210, "start"],
+    [`Calibre según ${bm.conc === "Luz del Sur" ? "Luz del Sur" : "Luz del Sur (referencia)"}`, 736, 200, "start"],
     ["Estado", 936, 167, "start"]
   ];
   const tx = ([, x, w, a]) => (a === "middle" ? x + w / 2 : a === "end" ? x + w - 6 : x + 6);
@@ -342,7 +357,10 @@ function bancoMedidores(r) {
     R(20, yC, W - 40, 14, { st: LN, fi: i % 2 ? "#fff" : "#f7f9fb", sw: 0.6 });
     const val = [
       m.med || String(i + 1),
-      m.tab === "TSG" ? "TSG · Servicios generales" : `${m.nom} · ${m.tipo} (${m.tab})`,
+      m.tab === "TSG"
+        ? "TSG · Servicios generales"
+        : // El tipo, si el nombre del suministro no lo dice ya (DISCOTECA-1 es del tipo DISCOTECA; A-1, del Tipo A)
+          `${m.nom}${m.nom.startsWith(m.tipo) ? "" : " · " + m.tipo} (${m.tab})`,
       m.tri ? "Trifásica" : "Monofásica",
       m.tri ? "LTR" : "LRM",
       fmt(m.kW, 2),
@@ -352,14 +370,16 @@ function bancoMedidores(r) {
       txt,
       est[0]
     ];
-    cols.forEach((cl, j) =>
-      T(tx(cl), yC + 10, val[j], {
-        s: 6.8,
+    cols.forEach((cl, j) => {
+      // Cada texto dentro de su columna
+      const [t, s] = cabe(val[j], cl[2] - 10, 6.8);
+      T(tx(cl), yC + 10, t, {
+        s,
         b: j === 1 || j === 9,
         a: cl[3],
         f: j === 9 ? est[1] : j === 5 && m.fase.length === 1 ? COLF[m.fase] || INK : INK
-      })
-    );
+      });
+    });
     yC += 14;
   });
   // Tabla de la concesionaria, transcrita

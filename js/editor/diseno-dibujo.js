@@ -651,6 +651,25 @@ function dsDibSalidas(g, el, col, u, lw) {
     ht = 3 * u;
   g.strokeStyle = col;
   g.lineWidth = lw;
+  /* Salidas juntadas: los circuitos que van en «Lleva también» de una tubería salen por la salida donde ella se
+     conecta; un trazo por el frente une sus puntos (se dibuja antes, los círculos quedan encima) */
+  dsD()
+    .els.filter(t => t.t === "tub" && !t.ali && t.cx && (t.c0 === el.id || t.c1 === el.id))
+    .forEach(t => {
+      const h = S.find(o => o.n === t.cir);
+      if (!h) return;
+      const [xh, yh] = aPant(h.a, h.b);
+      t.cx.forEach(c => {
+        const o = S.find(q => q.n === c);
+        if (!o) return;
+        const [xo, yo] = aPant(o.a, o.b);
+        g.strokeStyle = DSU.color === "cir" && !el.col ? plColorDis(dsColCir(t.cir, el.id)) : col;
+        g.beginPath();
+        g.moveTo(xo, yo);
+        g.lineTo(xh, yh);
+        g.stroke();
+      });
+    });
   S.forEach(o => {
     const co = DSU.color === "cir" && !el.col ? plColorDis(dsColCir(o.n, el.id)) : col;
     g.strokeStyle = co;
