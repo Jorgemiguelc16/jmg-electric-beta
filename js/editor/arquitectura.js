@@ -69,6 +69,11 @@ function dpCompararArq(ant, nue, antE) {
       p.x1 += dx;
       p.y0 += dy;
       p.y1 += dy;
+      // El punto base va con su planta
+      if (dpTieneBase(p)) {
+        p.bx += dx;
+        p.by += dy;
+      }
     });
   }
   // Líneas quitadas y agregadas (comparadas con el desplazamiento)

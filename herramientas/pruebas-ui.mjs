@@ -1757,10 +1757,10 @@ prueba(
     );
     // Circuito de una salida del 2do piso: solo los tableros de su piso
     const grupos = await J(
-      "(() => { const tb1 = dsAgregar({ t: 'sim', k: 'tab', x: _c.x - 2, y: _c.y, r: 0, capa: 'E-TABLEROS', nom: 'TD-01', nc: 2, ct: ['al', 'tg'] }); _t.nc = 2; const lz = dsAgregar({ t: 'sim', k: 'luz', x: _t.x + 1, y: _t.y + 2, r: 0, capa: DS_SIS[DS_CAT.luz.s].capa }); edCambio(); DS_SEL.clear(); DS_SEL.add(lz.id); edProps(); const g = [...document.querySelectorAll('.ds-cir optgroup')].map(o => o.label); DS_SEL.clear(); dsD().els.splice(dsD().els.indexOf(tb1), 1); dsD().els.splice(dsD().els.indexOf(lz), 1); edCambio(); return g; })()"
+      "(() => { const tb1 = dsAgregar({ t: 'sim', k: 'tab', x: _c.x - 2, y: _c.y, r: 0, capa: 'E-TABLEROS', nom: 'TD-01', nc: 2, ct: ['al', 'tg'] }); _t.nc = 2; const lz = dsAgregar({ t: 'sim', k: 'luz', x: _t.x + 1, y: _t.y + 2, r: 0, capa: DS_SIS[DS_CAT.luz.s].capa }); edCambio(); DS_SEL.clear(); DS_SEL.add(lz.id); edProps(); const g = [...document.querySelectorAll('.ds-cir optgroup')].map(o => o.label); edMenuCircuitos(null); g.push(ED_MENU.querySelector('.ed-mt').textContent); ED_MENU.hidden = true; DS_SEL.clear(); dsD().els.splice(dsD().els.indexOf(tb1), 1); dsD().els.splice(dsD().els.indexOf(lz), 1); edCambio(); return g; })()"
     );
     ok(
-      JSON.stringify(grupos) === JSON.stringify(["TD-02"]),
+      JSON.stringify(grupos) === JSON.stringify(["TD-02", "Circuitos de TD-02"]),
       `circuitos de una salida del 2do piso: solo su tablero (${JSON.stringify(grupos)})`
     );
     // Punto base: el montante cae en el mismo lugar del edificio aunque las plantas se encuadren distinto
@@ -1770,6 +1770,14 @@ prueba(
     ok(
       JSON.stringify(pb[0]) === JSON.stringify([20, 0]),
       `con punto base: desplazamiento entre los puntos base (${JSON.stringify(pb[0])})`
+    );
+    // Arquitectura nueva desplazada: el punto base se mueve con su planta (y el desplazamiento entre plantas no cambia)
+    const pbArq = await J(
+      `(() => { const s = JSON.stringify(EPL), p = EPL.plantas[0], b0 = [p.bx, p.by, p.x0], d0 = dpDesp(0, 1); const mu = dx => [[0, 0, 10, 0], [10, 0, 10, 8], [10, 8, 0, 8], [0, 8, 0, 0], [3, 0, 3, 8]].map(q => ({ capa: 'MUROS', k: 'L', p: q.map((v, i) => v + (i % 2 ? ${OY} : ${OX} + dx)) })); try { dpCompararArq({ trazos: mu(0) }, { trazos: mu(2) }, []); } catch (e) { return String(e); } const r = [p.bx - b0[0], p.by - b0[1], p.x0 - b0[2], JSON.stringify(dpDesp(0, 1)) === JSON.stringify(d0)]; EPL = JSON.parse(s); PL_CMP = null; edCambio(); return r; })()`
+    );
+    ok(
+      JSON.stringify(pbArq) === JSON.stringify([2, 0, 2, true]),
+      `arquitectura desplazada: el punto base va con su planta (${JSON.stringify(pbArq)})`
     );
     // Tramo compartido: los conductores de los tres alimentadores, cada uno con su tierra, y la tubería que los contiene
     const tc = await J(

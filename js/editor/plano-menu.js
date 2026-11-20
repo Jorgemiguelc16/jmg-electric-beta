@@ -392,7 +392,16 @@ const edAsignable = el =>
   (el.t === "sim" && el.k !== "tab" && !PL_MED.has(el.k) && el.k !== "pat") || (el.t === "tub" && !el.ali);
 // Submenú «Asignar circuito»: los tableros y, al elegir uno, sus salidas
 function edMenuCircuitos(tb) {
-  const tabs = dsD().els.filter(e => e.k === "tab" && e.nc > 0);
+  // Solo los tableros de la planta de lo elegido, si esa planta los tiene (como el desplegable de Propiedades)
+  const todos = dsD().els.filter(e => e.k === "tab" && e.nc > 0),
+    P = new Set(
+      dsD()
+        .els.filter(e => DS_SEL.has(e.id))
+        .map(dpPlantaEl)
+    ),
+    pl = P.size === 1 ? [...P][0] : -1,
+    dePl = pl >= 0 ? todos.filter(t => dpPlantaEl(t) === pl) : [],
+    tabs = dePl.length ? dePl : todos;
   if (!tb && tabs.length === 1) tb = tabs[0];
   ED_MENU.innerHTML = tb
     ? `<div class="ed-mt">Circuitos de ${esc(tb.nom || "tablero")}</div>` +
