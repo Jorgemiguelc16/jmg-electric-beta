@@ -528,7 +528,7 @@ function dsPuntoTub(p, engX) {
         tb = s && s.tab && D.els.find(e => e.id === s.tab);
       if (s && s.cir) PLH.cirIni = { cir: s.cir, tab: s.tab || "", nom: tb ? tb.nom || "" : "" };
       // Desde una caja o canalización del montante sin circuito: es el alimentador que sigue hacia su tablero
-      else if (s && DP_MON.has(s.k) && (s.mon || s.mon2)) {
+      else if (s && PL_PASO.has(s.k) && (s.ali === true || (DP_MON.has(s.k) && (s.mon || s.mon2) && s.ali !== false))) {
         PLH.ali = true;
         toast("Alimentador desde el montante: haga clic en el borde del tablero al que llega");
       }

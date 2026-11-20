@@ -638,8 +638,12 @@ function dsNombrarCajas() {
     ya.add(e.nom);
   });
 }
-// Propiedades de una caja de paso o una canalización vertical: su número y los alimentadores que pasan
-function dsPropsPaso(el, campo) {
+/* Uso de una caja o canalización: alimentador o circuito. Elegido por el proyectista (el.ali, o su circuito) o, si no,
+   el que se ve: alimentador si pasa uno o es parte de un montante sin circuito; circuito en lo demás */
+const dsUsoPaso = (el, pas) =>
+  el.ali ? "ali" : el.ali === false || el.cir ? "cir" : pas.length || el.mon || el.mon2 ? "ali" : "cir";
+// Propiedades de una caja de paso o una canalización: su uso, su número y los alimentadores que pasan (o su circuito)
+function dsPropsPaso(el, campo, circ) {
   let AL = [];
   try {
     AL = dcAlimentadores();
@@ -647,10 +651,23 @@ function dsPropsPaso(el, campo) {
     AL = [];
   }
   const pas = dcAliPor(el, AL),
-    conRot = dsD().els.some(e => e.aut === el.id);
-  let h = DS_CAJAS.has(el.k)
-    ? campo("Número", `<input type="text" data-dsp="nom" value="${esc(el.nom || "")}" maxlength="20">`)
-    : "";
+    conRot = dsD().els.some(e => e.aut === el.id),
+    uso = dsUsoPaso(el, pas);
+  let h =
+    campo(
+      "Uso",
+      `<select data-dsp="uso"><option value="ali"${uso === "ali" ? " selected" : ""}>Alimentador</option><option value="cir"${uso === "cir" ? " selected" : ""}>Circuito</option></select>`
+    ) +
+    (DS_CAJAS.has(el.k)
+      ? campo("Número", `<input type="text" data-dsp="nom" value="${esc(el.nom || "")}" maxlength="20">`)
+      : "");
+  // De un circuito: su circuito, como las salidas (la caja no se cuenta como salida)
+  if (uso === "cir")
+    return (
+      h +
+      campo("Circuito", circ(el.cir, el.tab)) +
+      `<p class="ds-crit">Caja o paso del circuito: no es una salida (no suma carga); la longitud sigue por ella.</p>`
+    );
   h += `<div class="ed-pt">Alimentadores que pasan${pas.length ? ` (${pas.length})` : ""}</div>`;
   if (!pas.length) return h + dsPasosPaso(el);
   return (

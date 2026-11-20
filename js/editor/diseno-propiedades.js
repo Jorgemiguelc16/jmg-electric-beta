@@ -285,7 +285,7 @@ function dsProps(c) {
           : cat.s !== "can" && cat.s !== "tie" && !PL_MED.has(el.k)
             ? campo("Circuito", circ(el.cir, el.tab)) + lista
             : "") +
-      (DP_MON.has(el.k) ? dsPropsPaso(el, campo) : "") +
+      (PL_PASO.has(el.k) ? dsPropsPaso(el, campo, circ) : "") +
       (dsConEnc(el)
         ? campo(
             "Encendido",
@@ -673,6 +673,13 @@ function dsPropCambio(e) {
       el.s = v.replace(/[<>]/g, "").slice(0, 200) || el.s;
       // Escrito a mano: deja de ser rótulo automático
       delete el.aut;
+    } else if (k === "uso" && PL_PASO.has(el.k)) {
+      // Alimentador: sin circuito (no lo toma de lo conectado); circuito: se elige debajo o lo toma de su tubería
+      if (v === "ali") {
+        el.ali = true;
+        delete el.cir;
+        delete el.tab;
+      } else el.ali = false;
     } else if (k === "kmon" && dpSimbolosMon(el).includes(v)) {
       el.k = v;
       // Una caja toma su número (CP-n) al guardar el cambio; otro símbolo no lo lleva
@@ -696,7 +703,7 @@ function dsPropCambio(e) {
   });
   edCambio();
   // Otro número de medidores del banco (o de dónde salen): su tabla cambia
-  if (k === "bmn" || k === "mman" || k === "kmon") edProps();
+  if (k === "bmn" || k === "mman" || k === "kmon" || k === "uso" || k === "cir") edProps();
 }
 function dsPropClic(e) {
   const b = e.target.closest("[data-dsa]");

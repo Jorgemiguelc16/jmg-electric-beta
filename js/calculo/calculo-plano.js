@@ -479,7 +479,12 @@ function planoCalc(PL, c, v) {
     // La tubería que llega a un medidor es de un alimentador, aunque no esté marcada
     medIds = new Set(sims.filter(s => PL_MED.has(s.k)).map(s => s.id)),
     patIds = new Set(sims.filter(s => s.k === "pat").map(s => s.id)),
-    esAli0 = t => t.ali || [t.c0, t.c1].some(id => medIds.has(id) || patIds.has(id)),
+    // También la que llega a una caja o canalización marcada como de alimentador (sin circuito)
+    aliIds = new Set(sims.filter(s => s.ali === true && PL_PASO.has(s.k)).map(s => s.id)),
+    esAli0 = t =>
+      t.ali ||
+      (!t.cir && [t.c0, t.c1].some(id => aliIds.has(id))) ||
+      [t.c0, t.c1].some(id => medIds.has(id) || patIds.has(id)),
     /* Un alimentador sigue por las cajas de paso y los montantes: la tubería sin circuito que continúa uno a través
        de una caja o de una canalización vertical (y su par en otro piso) también es del alimentador, aunque no esté
        marcada (criterio de la plataforma) */

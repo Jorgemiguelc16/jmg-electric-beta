@@ -722,6 +722,11 @@ function disValido(v) {
           ...(typeof e.enc === "string" && /^[a-z0-9]{1,3}(,[a-z0-9]{1,3}){0,3}$/.test(e.enc) ? { enc: e.enc } : {}),
           // Montante: la canalización vertical par en otra planta
           ...(typeof e.mon === "string" && /^d[0-9]{1,7}$/.test(e.mon) ? { mon: e.mon } : {}),
+          // Uso de una caja o canalización elegido por el proyectista: alimentador (true) o circuito (false)
+          ...(typeof e.ali === "boolean" &&
+          ["caja", "cajaCuad", "cajaCon", "terminal", "subida", "bajada", "atrav"].includes(e.k)
+            ? { ali: e.ali }
+            : {}),
           // Montante que atraviesa un piso: su enlace con el piso siguiente
           ...(typeof e.mon2 === "string" && /^d[0-9]{1,7}$/.test(e.mon2) ? { mon2: e.mon2 } : {}),
           // Tablero del circuito del artefacto (lo hereda de la tubería que llega a él)

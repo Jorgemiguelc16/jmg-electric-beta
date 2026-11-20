@@ -460,7 +460,8 @@ function dsPropagarCircuitos() {
   for (let vuelta = 0, cambio = true; cambio && vuelta < 50; vuelta++) {
     cambio = false;
     tubs.forEach(t => {
-      const ss = [t.c0, t.c1].map(id => por.get(id)).filter(s => s && s.k !== "tab");
+      // Una caja o canalización de alimentador (elegido así) no toma ni pasa circuitos
+      const ss = [t.c0, t.c1].map(id => por.get(id)).filter(s => s && s.k !== "tab" && s.ali !== true);
       if (t.cir)
         ss.forEach(s => {
           if (!s.cir) {
