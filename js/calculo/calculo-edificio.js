@@ -226,6 +226,14 @@ function calcMulti(c) {
     mdCom = fLoc * Pcom;
   if (PLD)
     Object.entries(PLD.areaDep).forEach(([i, o]) => {
+      // Áreas de un tipo junto a dos o más de sus tableros: se marcó más de un departamento (se sumarían)
+      if (o.junto)
+        PLD.avisos.push({
+          t: "aviso",
+          m: `Las áreas del ${(P.tipos[i] || {}).nombre || "tipo"} están junto a ${o.junto.length} de sus tableros (${o.junto.map(j => j.nom).join(", ")}): el área de un tipo es la de un solo departamento y se están sumando. Marque solo las de un departamento, o cree un tipo para cada uno si son distintos`,
+          ids: o.junto.flatMap(j => j.ids),
+          k: "area"
+        });
       if (o.plantas.size > 1)
         PLD.avisos.push({
           t: "aviso",

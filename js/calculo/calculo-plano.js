@@ -921,6 +921,7 @@ function planoCalc(PL, c, v) {
       const o = (areaDep[dep] = areaDep[dep] || { m2: 0, plantas: new Set() });
       o.m2 += m2;
       o.plantas.add(ip);
+      (o.cen = o.cen || []).push([cx / k, cy / k, ip, e.id]);
       return;
     }
     if (piso === null)
@@ -935,6 +936,21 @@ function planoCalc(PL, c, v) {
     if (tp === "sot" || (piso === 0 && tp === "tech")) return sumar(0, "sot", m2);
     if (tp === "libre") return sumar(piso, "libre", m2);
     sumar(piso, tp, m2);
+  });
+  /* Edificio: el área de un tipo es la de UN departamento. Cada área va al tablero de su tipo más cercano en su planta;
+     si las de un tipo quedan junto a dos o más de sus tableros, se marcó más de un departamento y el área se sumaría
+     dos veces (el aviso lo da el cálculo del edificio, con el nombre del tipo) */
+  Object.entries(areaDep).forEach(([dep, o]) => {
+    const tbs = tabs.filter(t => t.dep === +dep),
+      junto = new Map();
+    (o.cen || []).forEach(([x, y, ip, id]) => {
+      const c = tbs.filter(t => plantaDe(t.x, t.y) === ip);
+      if (!c.length) return;
+      const t = c.reduce((a, b) => (Math.hypot(b.x - x, b.y - y) < Math.hypot(a.x - x, a.y - y) ? b : a));
+      (junto.get(t) || junto.set(t, []).get(t)).push(id);
+    });
+    delete o.cen;
+    if (junto.size > 1) o.junto = [...junto].map(([t, ids]) => ({ nom: t.nom || "tablero", ids }));
   });
   // Edificio: áreas que no son de ningún departamento mientras algún tipo no tiene la suya (no se pide escrita si se marca)
   if (v && v.nTipos > 0) {

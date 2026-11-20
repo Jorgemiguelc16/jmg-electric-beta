@@ -290,6 +290,27 @@ module.exports = function probarPlano(ctx) {
   ver("TSG del plano: la electrobomba como motor", [s1 && s1.id, s1 && s1.P, rm2.SV[0].tipo], ["C-1", 1500, "motor"]);
   ver("alimentador TG → TSG del plano (1.8 + 6 + 1.8)", rm2.alims[1].L, 9.6);
   ver("área del tipo A, marcada en el plano", rm2.T[0].area, 80);
+  ver(
+    "área de un solo departamento del tipo: sin aviso de áreas sumadas",
+    rm2.plano.avisos.filter(a => /se están sumando/.test(a.m)).length,
+    0
+  );
+  // Dos departamentos del mismo tipo con su área cada uno: se sumarían; se avisa con los dos tableros
+  const M8 = JSON.parse(JSON.stringify(M2));
+  M8.PLANO.dis.els.push(sim("d35", "tab", -20, 15, { nom: "TD-A2", nc: 2, ct: ["al", "tg"], dep: 0 }), {
+    id: "d36",
+    t: "lin",
+    c: true,
+    capa: "E-AREAS",
+    pts: [-24, 10, -16, 10, -16, 20, -24, 20],
+    ar: { tp: "tech", n: "Dpto A2", dep: 0 }
+  });
+  const av8 = calc({ ...M8, calPlano: "1" }).plano.avisos.find(a => /se están sumando/.test(a.m));
+  ver(
+    "dos departamentos del mismo tipo con su área: aviso con sus dos tableros",
+    av8 && [av8.t, /TD-A1, TD-A2|TD-A2, TD-A1/.test(av8.m), [...av8.ids].sort()],
+    ["aviso", true, ["d34", "d36"]]
+  );
   // Tablero de departamento sin tipo elegido: con un solo tipo, pasa a ese tipo (con una nota); con varios, se avisa
   const M5 = JSON.parse(JSON.stringify(M));
   delete M5.PLANO.dis.els.find(e => e.id === "d3").dep;
