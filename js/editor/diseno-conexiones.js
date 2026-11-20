@@ -763,7 +763,8 @@ function dsSueltos() {
     tol = 0.01 / (EPL ? EPL.f : 1);
   tubs.forEach(t => [t.c0, t.c1].forEach(c => c && con.add(c)));
   D.els.forEach(el => {
-    if (dsConecta(el) && !con.has(el.id)) out.sims.push(el);
+    // Un piso por el que el montante solo pasa (enlazado abajo y arriba) no necesita tubería en ese piso
+    if (dsConecta(el) && !con.has(el.id) && !(el.mon && el.mon2)) out.sims.push(el);
   });
   // Una punta que toca un vértice de otra tubería (derivación) también cuenta como conectada
   const toca = (t, x, y) =>

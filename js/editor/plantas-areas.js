@@ -159,6 +159,18 @@ function dpMontante() {
     );
   });
 }
+/* Símbolo del montante en este piso (criterio del proyectista): en un piso por el que solo pasa, la canalización
+   atravesando (09-93-07) o una caja de paso (por ejemplo, para no pasar de las curvas permitidas entre cajas); en un
+   extremo, la canalización hacia arriba o hacia abajo, según adónde va su par, o una caja de paso */
+function dpSimbolosMon(el) {
+  if (!el || !DP_MON.has(el.k) || !(el.mon || el.mon2)) return [];
+  if (el.mon && el.mon2) return ["atrav", "cajaCuad", "caja"];
+  const o = dsD().els.find(e => e.id === (el.mon || el.mon2)),
+    i = dpPlantaEl(el),
+    j = o ? dpPlantaEl(o) : -1;
+  if (i < 0 || j < 0) return [];
+  return [dpPisoDe(j) > dpPisoDe(i) ? "subida" : "bajada", "cajaCuad", "caja"];
+}
 // Va al otro extremo del montante
 function dpIrMontante() {
   const el = dsSel()[0],

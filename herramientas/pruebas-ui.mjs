@@ -1772,6 +1772,36 @@ prueba(
       JSON.stringify(juntas) === JSON.stringify([[], ["TD-02: C-2 sin tubería"]]),
       `revisión: la tubería juntada cuenta para C-1 y C-2 (${JSON.stringify(juntas)})`
     );
+    // Montante que pasa por un piso: sin marca de «sin conectar» ahí; su símbolo se elige (canalización o caja)
+    const pasa = await J(
+      `(() => { EPL.plantas.push({ n: '3er piso', x0: ${OX} + 40, y0: ${OY}, x1: ${OX} + 50, y1: ${OY} + 8 }); const C = 'E-CANALIZACION', a = dsAgregar({ t: 'sim', k: 'subida', x: ${OX} + 3, y: ${OY} + 5, r: 0, capa: C }), b = dsAgregar({ t: 'sim', k: 'atrav', x: ${OX} + 23, y: ${OY} + 5, r: 0, capa: C }), c = dsAgregar({ t: 'sim', k: 'bajada', x: ${OX} + 43, y: ${OY} + 5, r: 0, capa: C });
+      a.mon = b.id; b.mon = a.id; b.mon2 = c.id; c.mon = b.id; edCambio();
+      const sl = dsSueltos().sims.map(e => e.id), out = [sl.includes(a.id), sl.includes(b.id), dpSimbolosMon(a), dpSimbolosMon(b), dpSimbolosMon(c)];
+      DS_SEL.clear(); DS_SEL.add(b.id); edProps();
+      const cambia = v => { const s = document.querySelector('[data-dsp="kmon"]'); s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); };
+      cambia('cajaCuad'); out.push(b.k, /^CP-\\d+$/.test(b.nom || ''), b.mon === a.id && b.mon2 === c.id, !!document.querySelector('[data-dsp="kmon"]'));
+      cambia('atrav'); out.push(b.k, b.nom === undefined);
+      PLH.pts = []; dsPuntoTub([c.x, c.y], [c.x, c.y, 9, { con: c.id }]); out.push(PLH.ali); PLH.pts = []; PLH.ali = false; PLH.conIni = null;
+      DS_SEL.clear(); [a, b, c].forEach(e => dsD().els.splice(dsD().els.indexOf(e), 1)); EPL.plantas.pop(); edCambio(); return out; })()`
+    );
+    ok(
+      JSON.stringify(pasa) ===
+        JSON.stringify([
+          true,
+          false,
+          ["subida", "cajaCuad", "caja"],
+          ["atrav", "cajaCuad", "caja"],
+          ["bajada", "cajaCuad", "caja"],
+          "cajaCuad",
+          true,
+          true,
+          true,
+          "atrav",
+          true,
+          true
+        ]),
+      `montante que pasa por un piso: sin marca, símbolo elegible y alimentador desde su extremo (${JSON.stringify(pasa)})`
+    );
     // Punto base: el montante cae en el mismo lugar del edificio aunque las plantas se encuadren distinto
     const pb = await J(
       `(() => { const [a, b] = EPL.plantas; a.x0 -= 3; dpPuntoBase([${OX} + 1, ${OY} + 1]); dpPuntoBase([${OX} + 21, ${OY} + 1]); const d = dpDesp(0, 1); a.x0 += 3; return [d, !!edMenuAccion]; })()`

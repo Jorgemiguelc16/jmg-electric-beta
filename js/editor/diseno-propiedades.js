@@ -215,6 +215,15 @@ function dsProps(c) {
         ? dsBancoPrev(dsMedidoresBanco(el))
         : `<div class="ds-prev">${dsIcono(el.k)}</div>`) +
       `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="simbolo" title="Relleno, tamaño, letra y grosor de este tipo de símbolo (criterio del proyectista)">Editar símbolo…</button>${dsSimb(el.k) ? '<span class="ds-crit">Con criterio del proyectista</span>' : ""}</div>` +
+      // Montante: qué va en este piso (canalización o caja de paso)
+      (dpSimbolosMon(el).length
+        ? campo(
+            "En este piso",
+            `<select data-dsp="kmon">${dpSimbolosMon(el)
+              .map(k => `<option value="${k}"${k === el.k ? " selected" : ""}>${esc(DS_CAT[k].n)}</option>`)
+              .join("")}</select>`
+          ) + `<p class="ds-crit">Criterio del proyectista: el montante sigue enlazado igual.</p>`
+        : "") +
       campo("Capa", capas(el.capa)) +
       campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
       (el.cir && dsConEtq(el) ? dsCampoEtq(campo, [el]) : "") +
@@ -664,6 +673,10 @@ function dsPropCambio(e) {
       el.s = v.replace(/[<>]/g, "").slice(0, 200) || el.s;
       // Escrito a mano: deja de ser rótulo automático
       delete el.aut;
+    } else if (k === "kmon" && dpSimbolosMon(el).includes(v)) {
+      el.k = v;
+      // Una caja toma su número (CP-n) al guardar el cambio; otro símbolo no lo lleva
+      if (!DS_CAJAS.has(v)) delete el.nom;
     } else if (k === "nom" && DS_CAJAS.has(el.k)) {
       const n = v.replace(/[<>]/g, "").slice(0, 20);
       if (n && dsD().els.some(o => o !== el && DS_CAJAS.has(o.k) && o.nom === n)) toast(`Ya hay una caja ${n}`);
@@ -683,7 +696,7 @@ function dsPropCambio(e) {
   });
   edCambio();
   // Otro número de medidores del banco (o de dónde salen): su tabla cambia
-  if (k === "bmn" || k === "mman") edProps();
+  if (k === "bmn" || k === "mman" || k === "kmon") edProps();
 }
 function dsPropClic(e) {
   const b = e.target.closest("[data-dsa]");

@@ -527,6 +527,11 @@ function dsPuntoTub(p, engX) {
       const s = D.els.find(e => e.id === con),
         tb = s && s.tab && D.els.find(e => e.id === s.tab);
       if (s && s.cir) PLH.cirIni = { cir: s.cir, tab: s.tab || "", nom: tb ? tb.nom || "" : "" };
+      // Desde una caja o canalización del montante sin circuito: es el alimentador que sigue hacia su tablero
+      else if (s && DP_MON.has(s.k) && (s.mon || s.mon2)) {
+        PLH.ali = true;
+        toast("Alimentador desde el montante: haga clic en el borde del tablero al que llega");
+      }
     }
     if (PLH.cirIni)
       toast(`Tubería del circuito ${PLH.cirIni.cir}${PLH.cirIni.nom ? " del tablero " + PLH.cirIni.nom : ""}`);
