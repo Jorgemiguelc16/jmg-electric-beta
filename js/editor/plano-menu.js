@@ -863,6 +863,21 @@ $("editor").addEventListener("click", e => {
   if (a === "presentar") return edPresentar(true);
   if (a === "atajos") return atjAbrir();
   if (a === "lamina") return lamAbrir();
+  if (a === "lamplanta") {
+    dsAsegurar();
+    return lamPorPlanta();
+  }
+  if (a === "lamtodas") {
+    dsAsegurar();
+    return lamImprimir(true);
+  }
+  // Expediente con el diseño tal como está en el editor (se guarda solo en el proyecto): el mismo diálogo del cálculo
+  if (a === "expediente") {
+    edGuardarYa();
+    if (PRINT && entregable()) pdfDialogo(true);
+    else if (!LAST) toast("Complete los datos del cálculo para generar el expediente");
+    return;
+  }
   if (a === "dxfdis" || a === "dxftodo") return lamDxf(a === "dxftodo");
   if (a === "biblio") return bibAbrir();
   if (a === "fila" || a === "espejo") return dsIniciarCopia(a);

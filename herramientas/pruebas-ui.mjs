@@ -1463,6 +1463,25 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
     tx[0] > 0 && Math.abs(tx[0] - tx[1]) < 0.05,
     `el rótulo del circuito mide lo mismo a 1:50 y a 1:100 (${tx.join(" y ")})`
   );
+  // Una lámina por planta: la planta con diseño que ninguna muestra recibe la suya (IE-05, automática)
+  const pp = await J(
+    `(() => { EPL.plantas.push({ n: '2do piso', x0: ${OX} + 11.5, y0: ${OY} - 0.5, x1: ${OX} + 22.5, y1: ${OY} + 8.5 });
+      const e = dsAgregar({ t: 'sim', k: 'luz', x: ${OX} + 15, y: ${OY} + 4, r: 0, capa: 'E-ALUMBRADO' });
+      lamPorPlanta(); const r = dsD().lams.map(l => [l.num, l.zona, l.tam]); const n2 = (lamPorPlanta(), dsD().lams.length);
+      dsD().lams.pop(); dsD().els = dsD().els.filter(x => x !== e); EPL.plantas.pop(); dsD().lamI = 0; edCambio(); lamCargar(); return { r, n2 }; })()`
+  );
+  ok(
+    JSON.stringify(pp.r[1]) === JSON.stringify(["IE-05", "planta:1", "auto"]) && pp.r.length === 2 && pp.n2 === 2,
+    `una lámina por planta (${JSON.stringify(pp.r)}), sin repetirla la segunda vez`
+  );
+  // Impresión: la hoja cabe en su papel (medio milímetro menos), así no sale una página en blanco
+  ok(
+    await ev(
+      "(() => { const p = window.print; window.print = () => {}; lamImprimir(false); const h = $('printArea').innerHTML; setTimeout(() => { window.print = p; $('printArea').innerHTML = ''; document.body.classList.remove('printing'); if (typeof printTitulo === 'string' && printTitulo) document.title = printTitulo; }, 400); return /width:\\d+(\\.5)?mm;height:\\d+\\.5mm/.test(h); })()"
+    ),
+    "la lámina impresa cabe en una página"
+  );
+  await esperar(500);
   await clic('[data-la="cerrar"]');
   // DXF: se vuelve a leer con el lector de la plataforma, en las mismas coordenadas
   const r = await J(

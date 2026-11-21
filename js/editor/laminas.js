@@ -373,6 +373,8 @@ const LA_TAM_AUTO = ["A3", "A2", "A1"];
 const LA_LEY_FILA = 7;
 // Tamaño del rótulo y de las notas según el papel (en A3 y A4, más chicos)
 const laK = tam => ({ A4: 0.7, A3: 0.82 })[tam] || 1;
+// Tamaño del rótulo según el papel (en A1 y A2, más grande, como los rótulos de los planos de obra)
+const laKR = tam => ({ A4: 0.7, A3: 0.85, A2: 1.1, A1: 1.3 })[tam] || 1;
 // Notas en líneas de un ancho dado (mm), con su número
 function laNotas(notas, ancho, fs) {
   const max = Math.max(10, Math.floor(ancho / (fs * 0.53))),
@@ -409,8 +411,9 @@ function laDisp(op, tam, escD, z, c) {
     // Leyenda y cuadro: sus medidas en mm (DS_LEY, DS_CUA) por el factor del papel
     CU = { tit: DS_CUA.tit * k, fila: DS_CUA.fila * k, cab: DS_CUA.cab * k },
     cuaW = DS_CUA.w.reduce((a, b) => a + b, 0) * k,
-    RW = Math.max(c.conLey ? c.leyW * k : 0, c.conCua ? cuaW : 0, 150 * k),
-    RH = 72 * k,
+    kr = laKR(tam),
+    RW = Math.max(c.conLey ? c.leyW * k : 0, c.conCua ? cuaW : 0, 150 * kr),
+    RH = 72 * kr,
     nfs = 2.1 * k,
     notas = laNotas(op.notas, RW - 9 * k, nfs),
     NH = notas.length ? 8 * k + notas.length * nfs * 1.55 + 2 : 0,
@@ -455,6 +458,7 @@ function laDisp(op, tam, escD, z, c) {
     W,
     H,
     k,
+    kr,
     mx0,
     my0,
     mx1,
@@ -703,7 +707,7 @@ function laSvg(op = laOp()) {
     esc: `1:${escD}`,
     num: op.num,
     de: op._n > 1 ? `${op._i + 1} de ${op._n}` : "",
-    k
+    k: d.kr
   });
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${q(W)} ${q(H)}" font-family="Arial, Helvetica, sans-serif">` +
@@ -1198,7 +1202,16 @@ function lamVista() {
   // Lo que eligió el ajuste automático, en la misma opción
   $("laTam").querySelector('[value="auto"]').textContent = `Automático: ${r.tam} (recomendado)`;
   $("laEsc").querySelector('[value="auto"]').textContent = `Automática: 1:${r.esc} (recomendada)`;
-  $("laAviso").textContent = r.aviso;
+  // Si la zona no entra: pasar al papel y la escala automáticos o, con varias plantas, una lámina por planta
+  const op = laOp(),
+    noEntra = /no entra|no cabe|no queda sitio/.test(r.aviso),
+    fijo = !!LAMINAS[op.tam] || op.esc > 0,
+    variasPl = /^(todo|vista)$/.test(op.zona || "") && EPL.plantas.length > 1;
+  $("laAviso").innerHTML =
+    esc(r.aviso) +
+    (noEntra && (fijo || variasPl)
+      ? `<span class="la-av-b">${fijo ? '<button type="button" class="vw-btn" data-la="auto">Usar papel y escala automáticos</button>' : ""}${variasPl ? '<button type="button" class="vw-btn" data-la="porplanta">Una lámina por planta</button>' : ""}</span>`
+      : "");
   $("laAviso").hidden = !r.aviso;
 }
 // La zona marcada en el plano (herramienta Zona de la lámina): vuelve a la ventana con esa zona
@@ -1211,6 +1224,53 @@ function lamZonaMarcada(z) {
   edCambio();
   lamAbrir();
   toast("Zona marcada: la lámina muestra ese rectángulo");
+}
+/* Plantas con diseño eléctrico que ninguna de las láminas (ops) muestra, con el número que les toca (después del mayor
+   IE-NN). Las usan «Una lámina por planta» y el expediente, para que vayan todas las plantas. */
+function laPlantasSin(ops) {
+  const D = dsD(),
+    usadas = new Set(ops.map(o => o.zona || (EPL.plantas.length ? "planta:0" : "todo"))),
+    conDis = p =>
+      D.els.some(e => {
+        if (e.t !== "sim" && e.t !== "tub") return false;
+        const b = dsBBox(e);
+        return b[2] >= p.x0 && b[0] <= p.x1 && b[3] >= p.y0 && b[1] <= p.y1;
+      }),
+    n0 = ops.reduce((m, o) => Math.max(m, +(/^IE-(\d+)/.exec(o.num) || [0, 0])[1]), 0);
+  return EPL.plantas
+    .map((p, i) => ({ p, z: "planta:" + i }))
+    .filter(({ p, z }) => !usadas.has(z) && conDis(p))
+    .map((o, j) => ({ ...o, num: "IE-" + String(n0 + j + 1).padStart(2, "0") }));
+}
+/* «Una lámina por planta»: cada planta con diseño queda con su lámina (papel y escala automáticos, las demás opciones
+   de la primera). Una lámina de «todo el diseño» o «lo que se ve en la pantalla» pasa a la primera planta que falta. */
+function lamPorPlanta() {
+  if (!EPL || !EPL.plantas.length) return toast("Primero encuadre las plantas (Inicio › Plantas)");
+  const D = dsD(),
+    L = laLista(),
+    ops = L.map((l, i) => laOp(i)),
+    falta = laPlantasSin(ops.filter(o => !/^(todo|vista)$/.test(o.zona || "")));
+  if (!falta.length) return toast("Cada planta con diseño ya tiene su lámina");
+  const limpia = o => {
+    const c = { ...o, tam: "auto" };
+    ["esc", "rect", "_i", "_n"].forEach(k => delete c[k]);
+    return c;
+  };
+  let n = 0;
+  L.forEach((l, i) => {
+    if (n < falta.length && /^(todo|vista)$/.test(ops[i].zona || "")) {
+      L[i] = { ...limpia(ops[i]), zona: falta[n].z, num: ops[i].num };
+      n++;
+    }
+  });
+  // Los números siguen al mayor de las láminas que quedan
+  const resto = falta.slice(n),
+    n0 = L.reduce((m, o) => Math.max(m, +(/^IE-(\d+)/.exec(o.num || "") || [0, 0])[1]), 0);
+  resto.forEach((f, j) => L.push({ ...limpia(laOp(0)), zona: f.z, num: "IE-" + String(n0 + j + 1).padStart(2, "0") }));
+  D.lamI = Math.min(D.lamI || 0, L.length - 1);
+  edCambio();
+  if (!$("lamDlg").hidden) lamCargar();
+  toast(`${falta.length} lámina${falta.length > 1 ? "s" : ""} por planta: ${L.map(l => l.num).join(", ")}`);
 }
 /* Láminas del diseño para el expediente (js/exportar/descargas.js): las del plano aplicado al proyecto (PLANO), con
    su arquitectura leída del navegador. No necesita el editor abierto: usa una copia y deja todo como estaba. Sin
@@ -1236,27 +1296,9 @@ async function laminasExpediente() {
     dsIdxSucio();
     /* Todas las plantas: las láminas del proyecto y, para cada planta con diseño que ninguna muestra, una más con
        las mismas opciones que la primera (papel y escala automáticos), numerada después de la última */
-    const L = laLista(),
-      D = dsD(),
-      ops = L.map((l, i) => laOp(i)),
-      usadas = new Set(ops.map(o => o.zona || (EPL.plantas.length ? "planta:0" : "todo"))),
-      conDis = p =>
-        D.els.some(e => {
-          if (e.t !== "sim" && e.t !== "tub") return false;
-          const b = dsBBox(e);
-          return b[2] >= p.x0 && b[0] <= p.x1 && b[3] >= p.y0 && b[1] <= p.y1;
-        }),
-      num = ops.reduce((m, o) => Math.max(m, +(/^IE-(\d+)/.exec(o.num) || [0, 0])[1]), 0),
-      extra = EPL.plantas.map((p, i) => ({ p, z: "planta:" + i })).filter(({ p, z }) => !usadas.has(z) && conDis(p));
-    extra.forEach(({ z }, j) =>
-      ops.push({
-        ...ops[0],
-        tam: "auto",
-        esc: undefined,
-        rect: undefined,
-        zona: z,
-        num: "IE-" + String(num + j + 1).padStart(2, "0")
-      })
+    const ops = laLista().map((l, i) => laOp(i));
+    laPlantasSin(ops).forEach(({ z, num }) =>
+      ops.push({ ...ops[0], tam: "auto", esc: undefined, rect: undefined, zona: z, num })
     );
     return ops.map((op, i) => {
       const r = laSvg({ ...op, _i: i, _n: ops.length });
@@ -1289,7 +1331,7 @@ function lamImprimir(todas) {
   }
   // Cada lámina en su página, con el tamaño de su papel
   pa.innerHTML =
-    `<style>${hojas.map((h, j) => `@page la${j}{size:${h.W}mm ${h.H}mm;margin:0}#printArea .la-h${j}{page:la${j};width:${h.W}mm;height:${h.H}mm}`).join("")}#printArea .la-hoja{overflow:hidden;break-after:page}#printArea .la-hoja:last-child{break-after:auto}#printArea .la-hoja svg{display:block;width:100%;height:100%}@page{margin:0}</style>` +
+    `<style>${hojas.map((h, j) => `@page la${j}{size:${h.W}mm ${h.H}mm;margin:0}#printArea .la-h${j}{page:la${j};width:${h.W - 0.5}mm;height:${h.H - 0.5}mm}`).join("")}#printArea{margin:0;padding:0}#printArea .la-hoja{overflow:hidden;break-after:page;break-inside:avoid;margin:0}#printArea .la-hoja:last-child{break-after:auto}#printArea .la-hoja svg{display:block;width:100%;height:100%}@page{margin:0}</style>` +
     hojas.map((h, j) => `<div class="la-hoja la-h${j}">${h.svg}</div>`).join("");
   document.body.classList.add("printing");
   printTitulo = document.title;
@@ -1335,7 +1377,13 @@ $("lamDlg").addEventListener("click", e => {
     lamVista();
   } else if (a === "pdf") lamImprimir(false);
   else if (a === "pdftodas") lamImprimir(true);
-  else if (a === "dxf") lamDxf(false);
+  else if (a === "porplanta") lamPorPlanta();
+  else if (a === "auto") {
+    $("laTam").value = "auto";
+    $("laEsc").value = "auto";
+    lamLeer();
+    lamCargar();
+  } else if (a === "dxf") lamDxf(false);
   else if (a === "nueva") {
     const D = dsD(),
       L = laLista(),

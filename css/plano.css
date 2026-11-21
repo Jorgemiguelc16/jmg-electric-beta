@@ -379,6 +379,15 @@
 .la-lista label {
   margin: 0 !important;
 }
+.la-lista .la-pp {
+  grid-column: 1 / -1;
+}
+.la-av-b {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
 .la-marcar {
   width: 100%;
   margin: -2px 0 8px;
