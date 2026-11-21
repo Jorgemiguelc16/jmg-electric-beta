@@ -14,7 +14,7 @@ servidor propio ni instalación. Se publica en GitHub Pages; el acceso con cuent
 | Apariencia (colores, tamaños, diseño) | `css/` (10 archivos) |
 | Lógica, cálculo y planos | `js/` (87 archivos en 10 carpetas) |
 | Imágenes de la plataforma | `img/`, `logo.png`, `foto.png`, `og.png` |
-| Manual de usuario y referencia técnica | `manual/manual.html` → `manual/JMG-ELECTRIC-Manual-v3.2.pdf` |
+| Manual de usuario y referencia técnica | `manual/manual.html` → `manual/JMG-ELECTRIC-Manual-v3.3.pdf` |
 | Pruebas automáticas: casos, referencia del cálculo y huellas de los planos | `pruebas/` |
 | Herramientas de desarrollo | `herramientas/`, `package.json` |
 
