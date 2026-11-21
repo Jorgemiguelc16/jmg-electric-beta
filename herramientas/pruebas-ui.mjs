@@ -1508,6 +1508,18 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
     !pr.length && /\nCAPA_DEL_ARQUITECTO_NANDU_CON_E\r?\n/.test(dx) && /\$EXTMIN/.test(dx),
     `DXF del diseño con arquitectura válido para AutoCAD (R12) ${pr.join("; ")}`
   );
+  // Con la arquitectura original: el archivo del arquitecto tal cual, con el diseño agregado en sus capas
+  const og = JSON.parse(
+    await ev(
+      `plLeerArchivo(EPL.sha).then(a => { const o = laDxfOriginal(a.buf), d = b => Array.from(b, c => String.fromCharCode(c)).join(''), t0 = d(new Uint8Array(a.buf)), t1 = d(o), m0 = modeloDxf(a.buf), m1 = modeloDxf(o.buffer);
+      const L0 = t0.split(/\\r?\\n/), L1 = t1.split(/\\r?\\n/); let j = 0; L1.forEach(l => { if (l === L0[j]) j++; });
+      return JSON.stringify({ todo: j === L0.length, mas: m1.trazos.length > m0.trazos.length, capas: Object.keys(m1.capas).filter(c => c.startsWith('E-')).length, mismas: Object.keys(m0.capas).every(c => c in m1.capas) }); })`
+    )
+  );
+  ok(
+    og.todo && og.mas && og.capas >= 2 && og.mismas,
+    `DXF con la arquitectura original: el archivo del arquitecto completo y en orden, más el diseño en sus capas (${JSON.stringify(og)})`
+  );
   // Circuito en las salidas
   await ev("(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })($('dsNSal'))");
   ok((await ev("dsD().nsal")) === true, "circuito en las salidas");

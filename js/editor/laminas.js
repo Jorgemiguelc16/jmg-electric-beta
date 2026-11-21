@@ -8,6 +8,7 @@
 const LA_PX = 96 / 25.4; // unidades del SVG por milímetro de papel (como los demás planos)
 const LA_K = 8; // píxeles de grabación por milímetro de papel (para que los textos pequeños se graben)
 let DS_EXPORT = false;
+let LA_CLIP = 0;
 
 /* ---------- Grabador: un contexto 2D que guarda lo que se dibuja ---------- */
 function laGrabador() {
@@ -613,9 +614,12 @@ function laSvg(op = laOp()) {
   const o = [],
     q = n => +(n * LA_PX).toFixed(2),
     INK = "#14212e",
-    NAVY = "#14304f";
+    NAVY = "#14304f",
+    // Recorte propio de cada lámina: con varias en la misma página (PDF de todas, expediente) un id repetido
+    // haría que todas usen el recorte de la primera
+    cid = "laArea" + ++LA_CLIP;
   o.push(
-    `<defs><clipPath id="laArea"><rect x="${q(a.x0)}" y="${q(a.y0)}" width="${q(a.x1 - a.x0)}" height="${q(a.y1 - a.y0)}"/></clipPath></defs>`
+    `<defs><clipPath id="${cid}"><rect x="${q(a.x0)}" y="${q(a.y0)}" width="${q(a.x1 - a.x0)}" height="${q(a.y1 - a.y0)}"/></clipPath></defs>`
   );
   const cuerpo = [],
     leyO = [];
@@ -648,7 +652,7 @@ function laSvg(op = laOp()) {
       );
     }
   });
-  o.push(`<g clip-path="url(#laArea)">${cuerpo.join("")}</g>`, leyO.join(""));
+  o.push(`<g clip-path="url(#${cid})">${cuerpo.join("")}</g>`, leyO.join(""));
   // Separación entre el área de dibujo y la columna
   o.push(
     `<line x1="${q(d.sep)}" y1="${q(my0)}" x2="${q(d.sep)}" y2="${q(my1)}" stroke="${NAVY}" stroke-width="${q(0.35)}"/>`
@@ -741,7 +745,7 @@ function laAci0(hex) {
   }
   return mejor;
 }
-function laDxf(conArq) {
+function laDxf(conArq, partes) {
   const D = dsD(),
     mmU = (EPL.f * 1000) / D.escala,
     s = mmU * LA_K,
@@ -885,6 +889,8 @@ function laDxf(conArq) {
       ]);
     }
   });
+  // Solo las piezas (para agregarlas al DXF original del arquitecto)
+  if (partes) return { E, capas, lts: 1 / mmU };
   // Encabezado y tablas: tipo de línea a trazos (3 mm y 1.5 mm en el papel), estilo de texto Arial y capas
   const lts = 1 / mmU,
     ex = conArq ? plExtUtil() : z,
@@ -1111,6 +1117,253 @@ function laDxf(conArq) {
   return ln.join("\r\n") + "\r\n";
 }
 
+/* ---------- DXF con la arquitectura original ----------
+   El archivo DXF del arquitecto tal cual (sus capas, bloques, sombreados, cotas, textos y presentaciones) con el
+   diseño eléctrico agregado en sus capas: no se vuelve a dibujar la arquitectura. Las entidades del diseño se
+   escriben en la versión del archivo: en R12 como están; desde AutoCAD 2000 (AC1015), con su identificador
+   (handle, desde $HANDSEED), su dueño (el espacio modelo) y sus marcas de clase, como AutoCAD las exige. Las
+   capas, el tipo de línea a trazos y el estilo de texto del diseño se agregan a sus tablas si el archivo no los
+   tiene. Si el archivo es DXF binario o no se reconoce, devuelve null (se usa el DXF dibujado de nuevo). */
+// Entidades R12 (pares código/valor de laDxf) → entidades de AutoCAD 2000 en adelante
+function laDxfModerno(E, h0, ms, ltsE) {
+  const ents = [];
+  let cur = null;
+  for (let i = 0; i < E.length; i += 2) {
+    if (E[i] === 0) ents.push((cur = { t: E[i + 1], g: [] }));
+    else if (cur) cur.g.push([E[i], E[i + 1]]);
+  }
+  const out = [],
+    val = (g, c) => (g.find(p => p[0] === c) || [])[1],
+    pick = (g, cs) =>
+      cs.flatMap(c => {
+        const v = val(g, c);
+        return v === undefined ? [] : [c, v];
+      });
+  let h = h0;
+  const cab = (t, g) => {
+    const lt = val(g, 6);
+    return [
+      0,
+      t,
+      5,
+      (h++).toString(16).toUpperCase(),
+      330,
+      ms,
+      100,
+      "AcDbEntity",
+      8,
+      val(g, 8),
+      ...(lt !== undefined ? [6, lt] : []),
+      ...pick(g, [62]),
+      ...(lt === "JMG_TRAZOS" ? [48, ltsE] : [])
+    ];
+  };
+  for (let k = 0; k < ents.length; k++) {
+    const { t, g } = ents[k];
+    if (t === "LINE")
+      out.push(...cab(t, g), 100, "AcDbLine", ...pick(g, [10, 20]), 30, "0.0", ...pick(g, [11, 21]), 31, "0.0");
+    else if (t === "CIRCLE")
+      out.push(...cab(t, g), 100, "AcDbCircle", ...pick(g, [10, 20]), 30, "0.0", ...pick(g, [40]));
+    else if (t === "SOLID")
+      out.push(
+        ...cab(t, g),
+        100,
+        "AcDbTrace",
+        ...[10, 11, 12, 13].flatMap(c => [c, val(g, c), c + 10, val(g, c + 10), c + 20, "0.0"])
+      );
+    else if (t === "TEXT") {
+      const x2 = val(g, 11);
+      out.push(
+        ...cab(t, g),
+        100,
+        "AcDbText",
+        ...pick(g, [10, 20]),
+        30,
+        "0.0",
+        ...pick(g, [40, 1, 50, 7, 72]),
+        ...(x2 !== undefined ? [11, x2, 21, val(g, 21), 31, "0.0"] : []),
+        100,
+        "AcDbText",
+        ...pick(g, [73])
+      );
+    } else if (t === "POLYLINE") {
+      const vs = [];
+      while (ents[k + 1] && ents[k + 1].t === "VERTEX") vs.push(ents[++k].g);
+      if (ents[k + 1] && ents[k + 1].t === "SEQEND") k++;
+      if (vs.length < 2) continue;
+      const w = val(g, 40);
+      out.push(
+        ...cab("LWPOLYLINE", g),
+        100,
+        "AcDbPolyline",
+        90,
+        vs.length,
+        70,
+        val(g, 70) || 0,
+        ...(w !== undefined ? [43, w] : []),
+        ...vs.flatMap(v => [10, val(v, 10), 20, val(v, 20), ...pick(v, [42])])
+      );
+    }
+  }
+  return { out, h };
+}
+function laDxfOriginal(buf) {
+  const by = new Uint8Array(buf);
+  // Bytes → texto uno a uno (sin decodificar): lo que se agrega es ASCII, así el resto del archivo queda igual
+  let s = "";
+  for (let i = 0; i < by.length; i += 0x8000) s += String.fromCharCode.apply(null, by.subarray(i, i + 0x8000));
+  if (s.startsWith("AutoCAD Binary DXF")) return null;
+  const nl = s.includes("\r\n") ? "\r\n" : "\n",
+    L = s.split(/\r?\n/),
+    c = i => (L[i] || "").trim();
+  // Recorrido por pares: secciones, tablas, registros y el espacio modelo
+  let sec = "",
+    tabla = "",
+    reg = null,
+    ver = "",
+    iSeed = -1,
+    ltsA = 1,
+    iEntFin = -1,
+    ms = "";
+  const T = {},
+    regs = [];
+  for (let i = 0; i + 1 < L.length; i += 2) {
+    const k = c(i),
+      v = c(i + 1);
+    if (k === "0") {
+      if (reg) regs.push(reg);
+      reg = null;
+      if (v === "SECTION") sec = "?";
+      else if (v === "ENDSEC") {
+        if (sec === "ENTITIES") iEntFin = i;
+        sec = "";
+      } else if (v === "TABLE") tabla = "?";
+      else if (v === "ENDTAB") {
+        if (T[tabla]) T[tabla].fin = i;
+        tabla = "";
+      } else if (sec === "TABLES" && tabla) reg = { tabla, t: v, g: {} };
+      continue;
+    }
+    if (sec === "?" && k === "2") sec = v;
+    else if (tabla === "?" && k === "2") {
+      tabla = v;
+      T[v] = { h: "", fin: -1, n: new Set() };
+    } else if (tabla && !reg && k === "5" && T[tabla]) T[tabla].h = v;
+    else if (reg && !(k in reg.g)) reg.g[k] = v;
+    if (sec === "HEADER" && k === "9") {
+      if (v === "$ACADVER") ver = c(i + 3);
+      else if (v === "$HANDSEED") iSeed = i + 3;
+      else if (v === "$LTSCALE") ltsA = +c(i + 3) || 1;
+    }
+  }
+  if (reg) regs.push(reg);
+  regs.forEach(r => {
+    if (T[r.tabla] && r.g[2] !== undefined) T[r.tabla].n.add(r.g[2].toUpperCase());
+    if (r.tabla === "BLOCK_RECORD" && /^\*model_space$/i.test(r.g[2] || "")) ms = r.g[5];
+  });
+  // Sin handles (R12, o un archivo que no los usa): el diseño se agrega igual, sin handles
+  const r12 = ver === "AC1009" || !ver || iSeed < 0 || !ms;
+  if (iEntFin < 0 || !T.LAYER || T.LAYER.fin < 0) return null;
+  // El diseño eléctrico, solo (sin arquitectura), en pares R12
+  const { E, capas, lts } = laDxf(false, true),
+    lay0 = regs.find(r => r.tabla === "LAYER" && r.g[2] === "0"),
+    ins = {};
+  let h = r12 ? 0 : parseInt(c(iSeed), 16);
+  const id = () => (h++).toString(16).toUpperCase(),
+    rec = (tb, tipo, campos) =>
+      r12 ? [0, tipo, ...campos] : [0, tipo, 5, id(), 330, T[tb].h || "0", 100, "AcDbSymbolTableRecord", ...campos];
+  const poner = (i, a) => (ins[i] = (ins[i] || []).concat(a));
+  // Tipo de línea a trazos (tubería en piso) y estilo de texto
+  if (T.LTYPE && T.LTYPE.fin >= 0 && !T.LTYPE.n.has("JMG_TRAZOS"))
+    poner(
+      T.LTYPE.fin,
+      rec("LTYPE", "LTYPE", [
+        ...(r12 ? [] : [100, "AcDbLinetypeTableRecord"]),
+        2,
+        "JMG_TRAZOS",
+        70,
+        0,
+        3,
+        "Trazos (tuberia en piso)",
+        72,
+        65,
+        73,
+        2,
+        40,
+        "4.5",
+        49,
+        "3.0",
+        ...(r12 ? [] : [74, 0]),
+        49,
+        "-1.5",
+        ...(r12 ? [] : [74, 0])
+      ])
+    );
+  if (T.STYLE && T.STYLE.fin >= 0 && !T.STYLE.n.has("JMG_ARIAL"))
+    poner(
+      T.STYLE.fin,
+      rec("STYLE", "STYLE", [
+        ...(r12 ? [] : [100, "AcDbTextStyleTableRecord"]),
+        2,
+        "JMG_ARIAL",
+        70,
+        0,
+        40,
+        "0.0",
+        41,
+        "1.0",
+        50,
+        "0.0",
+        71,
+        0,
+        42,
+        "2.5",
+        3,
+        "arial.ttf",
+        4,
+        ""
+      ])
+    );
+  // Capas del diseño que el archivo no tiene (con el estilo de trazado de la capa 0, si lo tiene)
+  [...capas]
+    .filter(([n]) => !T.LAYER.n.has(n.toUpperCase()))
+    .forEach(([n, col]) =>
+      poner(
+        T.LAYER.fin,
+        rec("LAYER", "LAYER", [
+          ...(r12 ? [] : [100, "AcDbLayerTableRecord"]),
+          2,
+          n,
+          70,
+          0,
+          62,
+          col,
+          6,
+          "CONTINUOUS",
+          ...(!r12 && lay0 && lay0.g[390] ? [390, lay0.g[390]] : [])
+        ])
+      )
+    );
+  // Entidades del diseño al final del espacio modelo
+  const ltsE = (+(lts / ltsA).toFixed(6)).toString();
+  if (r12) poner(iEntFin, E);
+  else {
+    const m = laDxfModerno(E, h, ms, ltsE);
+    poner(iEntFin, m.out);
+    h = m.h;
+  }
+  if (!r12) L[iSeed] = h.toString(16).toUpperCase();
+  // Se arma de atrás hacia adelante para no mover las posiciones
+  const pos = Object.keys(ins)
+    .map(Number)
+    .sort((a, b) => b - a);
+  pos.forEach(i => L.splice(i, 0, ...ins[i].map(String)));
+  const t = L.join(nl),
+    o = new Uint8Array(t.length);
+  for (let i = 0; i < t.length; i++) o[i] = t.charCodeAt(i) & 255;
+  return o;
+}
+
 /* ---------- Ventana Lámina ---------- */
 const LA_VW = ventanaMovil(document.querySelector("#lamDlg .vw"), "jmg-electric-lamina", {
   w: 1040,
@@ -1265,7 +1518,7 @@ function lamPorPlanta() {
   });
   // Los números siguen al mayor de las láminas que quedan
   const resto = falta.slice(n),
-    n0 = L.reduce((m, o) => Math.max(m, +(/^IE-(\d+)/.exec(o.num || "") || [0, 0])[1]), 0);
+    n0 = L.reduce((m, o, i) => Math.max(m, +(/^IE-(\d+)/.exec(laOp(i).num || "") || [0, 0])[1]), 0);
   resto.forEach((f, j) => L.push({ ...limpia(laOp(0)), zona: f.z, num: "IE-" + String(n0 + j + 1).padStart(2, "0") }));
   D.lamI = Math.min(D.lamI || 0, L.length - 1);
   edCambio();
@@ -1331,7 +1584,7 @@ function lamImprimir(todas) {
   }
   // Cada lámina en su página, con el tamaño de su papel
   pa.innerHTML =
-    `<style>${hojas.map((h, j) => `@page la${j}{size:${h.W}mm ${h.H}mm;margin:0}#printArea .la-h${j}{page:la${j};width:${h.W - 0.5}mm;height:${h.H - 0.5}mm}`).join("")}#printArea{margin:0;padding:0}#printArea .la-hoja{overflow:hidden;break-after:page;break-inside:avoid;margin:0}#printArea .la-hoja:last-child{break-after:auto}#printArea .la-hoja svg{display:block;width:100%;height:100%}@page{margin:0}</style>` +
+    `<style>${hojas.map((h, j) => `@page la${j}{size:${h.W}mm ${h.H}mm;margin:0}#printArea .la-h${j}{page:la${j};width:${h.W - 0.5}mm;height:${h.H - 0.5}mm}`).join("")}html,body.printing{margin:0!important;padding:0!important;height:auto!important;min-height:0!important}#printArea{margin:0;padding:0}#printArea .la-hoja{overflow:hidden;break-after:page;break-inside:avoid;margin:0}#printArea .la-hoja:last-of-type{break-after:avoid}#printArea .la-hoja:last-child{break-after:auto}#printArea .la-hoja svg{display:block;width:100%;height:100%}@page{margin:0}</style>` +
     hojas.map((h, j) => `<div class="la-hoja la-h${j}">${h.svg}</div>`).join("");
   document.body.classList.add("printing");
   printTitulo = document.title;
@@ -1339,18 +1592,29 @@ function lamImprimir(todas) {
   document.title = todas ? `Láminas - ${nom}` : `${laOp().num} - ${nom}`;
   setTimeout(() => window.print(), 80);
 }
-function lamDxf(conArq) {
+async function lamDxf(conArq) {
   if (!EPL || !PL_MOD) return toast("Primero abra el plano de arquitectura en DXF");
   dsAsegurar();
   if (!dsD().els.length) return toast("El diseño eléctrico aún no tiene elementos");
   const nom = ($("p_nombre").value.trim() || "Proyecto").replace(/[\\/:*?"<>|]/g, "").slice(0, 60);
+  // Con la arquitectura: el archivo original del arquitecto con el diseño agregado; si no se puede, dibujado de nuevo
+  let datos = null;
+  if (conArq)
+    try {
+      const a = await plLeerArchivo(EPL.sha);
+      if (a && a.buf) datos = laDxfOriginal(a.buf);
+    } catch (e) {
+      datos = null;
+    }
   descargarLocal(
-    new Blob([laDxf(conArq)], { type: "application/dxf" }),
+    new Blob([datos || laDxf(conArq)], { type: "application/dxf" }),
     `${nom} - diseño eléctrico${conArq ? " con arquitectura" : ""}.dxf`
   );
   toast(
     conArq
-      ? "DXF con la arquitectura y el diseño eléctrico, en sus coordenadas reales"
+      ? datos
+        ? "DXF del arquitecto tal cual (capas, bloques y sombreados), con el diseño eléctrico agregado en sus capas"
+        : "DXF con la arquitectura dibujada de nuevo (el archivo original no se pudo usar) y el diseño eléctrico"
       : "DXF del diseño eléctrico en coordenadas reales: insértelo en el plano del arquitecto en 0,0"
   );
 }
