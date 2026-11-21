@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { crearContexto } = require("./contexto.js");
 const { DOMParser } = require("./mini-dom.js");
+const { dxfR12Problemas } = require("./dxf-r12.js");
 
 const { ctx, cargar, run, raiz } = crearContexto([
   "js/base/logo.js",
@@ -121,8 +122,11 @@ for (const cp of run("CASOS_PRUEBA").slice(0, 3)) {
     for (const u of planos[k]("A3")) {
       nDxf++;
       try {
-        const d = modeloDxf(svgDxf(u.svg, { lamina: "A3", colores: "jmg" }));
+        const txt = svgDxf(u.svg, { lamina: "A3", colores: "jmg" }),
+          d = modeloDxf(txt),
+          pr = dxfR12Problemas(typeof txt === "string" ? txt : new TextDecoder("latin1").decode(txt));
         ok(d.trazos.length > 20 && d.textos.length > 5, `${cp.id} · ${u.corto}: se lee con trazos y textos`);
+        ok(!pr.length, `${cp.id} · ${u.corto}: cumple las reglas de R12 que exige AutoCAD (${pr.join("; ")})`);
       } catch (e) {
         ok(false, `${cp.id} · ${u.corto}: ${e.message}`);
       }

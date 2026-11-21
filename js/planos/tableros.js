@@ -24,7 +24,7 @@ function tableros(r, op = {}) {
   // Conductores en sus colores (js/planos/dibujo.js)
   const colTxt = colTxtCond,
     cable = conductorSvg(o);
-  T(20, 28, op.cont ? `DETALLE DE TABLEROS (continuación de la lámina ${op.cont})` : "DETALLE DE TABLEROS", {
+  T(20, 28, op.cont ? `DETALLE DE TABLEROS (continuación de la lámina ${ieNum(op.cont)})` : "DETALLE DE TABLEROS", {
     s: 13,
     b: 1,
     f: NAVY
@@ -461,7 +461,7 @@ function tableros(r, op = {}) {
     yb = Math.max(yd + 24, ys + 10 + hT + 24, ys + 26 + esp.length * 22) + 8;
   }
   if (op.sigue) {
-    T(20, yb + 4, `Continúa en la lámina ${op.sigue}`, { s: 8, b: 1, f: CU });
+    T(20, yb + 4, `Continúa en la lámina ${ieNum(op.sigue)}`, { s: 8, b: 1, f: CU });
     yb += 14;
   }
 
@@ -473,7 +473,7 @@ function tableros(r, op = {}) {
     "Vistas esquemáticas generadas del cálculo: dispositivos y orden según el cuadro de cargas, cada diferencial con sus circuitos. Medida del gabinete referencial, de catálogo según sus polos (criterio): la define el fabricante.",
     "Espacio de trabajo libre de 1 m frente al tablero, con piso no deslizante, que permita abrir la puerta al menos 90° (Regla 020-308).",
     "Capacidad mínima de cada tablero en polos: circuitos, diferenciales, reservas y equipos, la misma del metrado (partidas OE.5.2.6 y OE.5.2.7).",
-    `El interruptor del alimentador de cada tablero está aguas arriba (lámina IE-01). Reservas equipadas: ITM 2×16 A, curva C${c.reserva ? "" : " (este proyecto no tiene reservas)"}.`,
+    `El interruptor del alimentador de cada tablero está aguas arriba (lámina ${ieNum("IE-01")}). Reservas equipadas: ITM 2×16 A, curva C${c.reserva ? "" : " (este proyecto no tiene reservas)"}.`,
     "Los equipos adicionales (DPS, relé de tensión, medidor, contactor) son criterio del proyectista y no cambian el cálculo.",
     PEIN
       ? "Cableado esquemático (peinado): alimentación por la canaleta superior y salidas por la inferior. Colores: fases rojo (R o F), negro (S) y azul (T), neutro blanco y tierra verde con amarillo; el orden de las fases es criterio de diseño."

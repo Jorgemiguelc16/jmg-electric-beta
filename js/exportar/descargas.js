@@ -126,6 +126,8 @@ addEventListener("keydown", e => {
 });
 async function imprimirExpediente(estilo) {
   if (!LAST || LAST.prelim) return;
+  // Láminas de planta del diseño (si el proyecto tiene plano con diseño): van primero en el capítulo de planos
+  const lamsDis = typeof laminasExpediente === "function" ? await laminasExpediente() : [];
   let pa = $("printArea");
   if (!pa) {
     pa = document.createElement("div");
@@ -149,7 +151,7 @@ async function imprimirExpediente(estilo) {
   pa.innerHTML =
     `<style>@page{margin:20mm 16mm 17mm 22mm;${mb("top-left", cab[0])}${mb("top-right", cab[1])}${mb("bottom-left", cab[2])}${mb("bottom-right", `"Página " counter(page) " de " counter(pages)`)}}
     @page:first{@top-left{content:none}@top-right{content:none}@bottom-left{content:none}@bottom-right{content:none}} @page ancho{size:A4 landscape;page-orientation:rotate-left}</style>` +
-    expediente(LAST, estilo);
+    expediente(LAST, estilo, lamsDis);
   pa.querySelectorAll("button,select").forEach(x => {
     if (x.tagName === "SELECT") {
       const sp = document.createElement("span");

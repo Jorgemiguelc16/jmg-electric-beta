@@ -8,7 +8,11 @@
    más frecuentes en el circuito) y una fila de totales. Medidas en el papel (mm), como la leyenda. */
 const DS_CUA = { w: [14, 44, 30, 28, 24, 12], tit: 7, cab: 5, fila: 5.5, txt: 2 };
 const dpCond = c =>
-  c ? `${c.f || 0}F${c.r ? "+" + c.r + "R" : ""}${dsNeutros(c) ? "+" + dsNeutros(c) + "N" : ""}${c.t ? "+T" : ""}` : "";
+  c
+    ? [c.f ? c.f + "F" : "", c.r ? c.r + "R" : "", dsNeutros(c) ? dsNeutros(c) + "N" : "", c.t ? "T" : ""]
+        .filter(Boolean)
+        .join("+")
+    : "";
 const dpModa = a => {
   const m = new Map();
   a.filter(Boolean).forEach(v => m.set(v, (m.get(v) || 0) + 1));
@@ -74,19 +78,19 @@ function dsFilasCua0() {
     });
   return out;
 }
-function dsTamCua() {
+// Tamaño del cuadro en el dibujo; con filas, el de esa parte (la lámina lo reparte en columnas por tablero)
+function dsTamCua(filas = dsFilasCua()) {
   const m = dsMm(1),
-    C = DS_CUA,
-    n = dsFilasCua().length;
+    C = DS_CUA;
   return [
     C.w.reduce((a, b) => a + b, 0) * m,
-    (C.tit + n * C.fila + C.cab * Math.max(1, dsFilasCua().filter(f => f.tit).length)) * m
+    (C.tit + filas.length * C.fila + C.cab * Math.max(1, filas.filter(f => f.tit).length)) * m
   ];
 }
 function dsDibCuadro(g, el, col, s, lw) {
   const m = dsMm(1),
     C = DS_CUA,
-    filas = dsFilasCua(),
+    filas = el.filas || dsFilasCua(),
     W = C.w.reduce((a, b) => a + b, 0),
     P = (a, b) => plAPant(el.x + a * m, el.y - b * m),
     hp = C.txt * m * s,

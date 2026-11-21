@@ -418,7 +418,7 @@ function bancoMedidores(r) {
   const notas = [
     `Medidas del banco según la concesionaria (${bm.conc}), editables en Parámetros › Banco de medidores; no las fija el CNE.`,
     `La cajuela respeta ${fmt(bm.dist, 2)} m respecto a las instalaciones de gas, agua y desagüe; su fondo es de material noble; se respetan las distancias mínimas de seguridad del CNE.`,
-    "Cada suministro se conecta a la fase que le asigna el balance de cargas (departamentos completos a una fase); el interruptor general y su alimentador son los del cálculo (lámina IE-01).",
+    `Cada suministro se conecta a la fase que le asigna el balance de cargas (departamentos completos a una fase); el interruptor general y su alimentador son los del cálculo (lámina ${ieNum("IE-01")}).`,
     "Tabla de calibres transcrita de Luz del Sur: se verifica el mínimo del rango cuando la tabla indica uno solo y el máximo cuando lo indica. «Hasta 10 kW» monofásico solo da un máximo y «hasta 20 kW» trifásico da dos mínimos: confirmar con la concesionaria.",
     "Se deja una reserva de conductor no menor de 450 mm en los puntos de conexión de cada medidor (Regla 040-402(1)(c)).",
     bm.conc !== "Luz del Sur" ? `La tabla de calibres es la de Luz del Sur: verifíquela con la de ${bm.conc}.` : ""

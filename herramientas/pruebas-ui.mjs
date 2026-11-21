@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { abrirApp, esperar, raiz } from "./chrome.mjs";
+import { createRequire } from "node:module";
+const { dxfR12Problemas } = createRequire(import.meta.url)("./dxf-r12.js");
 
 const { cdp, ev, J, cerrar } = await abrirApp();
 const poner = (sel, v) =>
@@ -1437,6 +1439,30 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
     (await ev("dsD().lams[0].num")) === "IE-04" && /IE-04/.test(await ev("$('laPrev').innerHTML")),
     "número de lámina"
   );
+  // Papel y escala automáticos: 1:50 en el papel más chico donde entra; rótulo con firma, especialidad y escala
+  await poner("#laTam", "auto");
+  await poner("#laEsc", "auto");
+  const au = await J("(r => ({ tam: r.tam, esc: r.esc, svg: r.svg }))(laSvg())");
+  ok(
+    au.esc === 50 &&
+      ["A3", "A2", "A1"].includes(au.tam) &&
+      (await ev("$('laTam').selectedOptions[0].textContent")).includes(`Automático: ${au.tam}`) &&
+      (await ev("$('laEsc').selectedOptions[0].textContent")).includes("1:50") &&
+      (await ev("dsD().lams[0].tam === 'auto' && dsD().lams[0].esc === undefined")),
+    `papel y escala automáticos (${au.tam} a 1:${au.esc})`
+  );
+  ok(
+    /FIRMA Y SELLO/.test(au.svg) && /ESPECIALIDAD/.test(au.svg) && /PLANTA 1ER PISO/.test(au.svg),
+    "rótulo con firma y sello, especialidad, y el nombre de la planta bajo el dibujo"
+  );
+  // Los símbolos miden lo mismo en el papel a otra escala (la leyenda también)
+  const tx = await J(
+    "(dsD().nsal = true, [50, 100].map(e => Math.max(0, ...[...new DOMParser().parseFromString(laSvg({ ...laOp(), esc: e }).svg, 'image/svg+xml').querySelectorAll('text')].filter(t => t.textContent === 'C-1').map(t => +t.getAttribute('font-size')))).concat(dsD().nsal = false).slice(0, 2))"
+  );
+  ok(
+    tx[0] > 0 && Math.abs(tx[0] - tx[1]) < 0.05,
+    `el rótulo del circuito mide lo mismo a 1:50 y a 1:100 (${tx.join(" y ")})`
+  );
   await clic('[data-la="cerrar"]');
   // DXF: se vuelve a leer con el lector de la plataforma, en las mismas coordenadas
   const r = await J(
@@ -1452,6 +1478,17 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
     `(() => { const m = modeloDxf(new TextEncoder().encode(laDxf(true)).buffer); return m.trazos.length; })()`
   );
   ok(r2 > r.n, "DXF con la arquitectura: más trazos");
+  // Reglas de R12 que exige AutoCAD, también con una capa de nombre largo, con espacios y tildes, y un texto con salto
+  const dx = await ev(
+    `(() => { const D = dsD(); D.capas.push({ n: 'Capa del arquitecto ñandú con espacios y más de 31', col: '#336699', lt: 'cont', vis: true, bloq: false });
+      const e = dsAgregar({ t: 'txt', x: ${OX} + 2, y: ${OY} + 2, ht: 0.2, s: 'Línea 1\\nLínea 2', capa: 'Capa del arquitecto ñandú con espacios y más de 31' });
+      const t = laDxf(true); D.els = D.els.filter(x => x !== e); D.capas.pop(); dsIdxSucio(); return t; })()`
+  );
+  const pr = dxfR12Problemas(dx);
+  ok(
+    !pr.length && /\nCAPA_DEL_ARQUITECTO_NANDU_CON_E\r?\n/.test(dx) && /\$EXTMIN/.test(dx),
+    `DXF del diseño con arquitectura válido para AutoCAD (R12) ${pr.join("; ")}`
+  );
   // Circuito en las salidas
   await ev("(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })($('dsNSal'))");
   ok((await ev("dsD().nsal")) === true, "circuito en las salidas");
@@ -1460,6 +1497,42 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
   ok(
     await ev("PLANO.dis.lams[0].num === 'IE-04' && PLANO.dis.nsal === true"),
     "la lámina y la opción se guardan con el proyecto"
+  );
+  // Expediente: la lámina de planta va primero y las de la plataforma se numeran después de ella
+  const ex = JSON.parse(
+    await ev(
+      "laminasExpediente().then(L => JSON.stringify({ n: L.length, h: L.map(x => x.hoja), ex: expediente(LAST, 'formal', L), d: ROT_DESP, e: EPL }))"
+    )
+  );
+  ok(
+    ex.n === 1 &&
+      ex.h[0] === "IE-04" &&
+      /Lámina IE-04 · Escala 1:\d+ en A\d/.test(ex.ex) &&
+      /Lámina IE-05 · Escala S\/E/.test(ex.ex) &&
+      !/Los adjunta el proyectista/.test(ex.ex) &&
+      ex.d === 0,
+    "el expediente lleva la lámina de planta (IE-04) y el unifilar pasa a IE-05"
+  );
+  ok(
+    /Metrado y presupuesto/.test(ex.ex) &&
+      /Presupuesto referencial/.test(ex.ex) &&
+      /Anexo A · Desarrollo del cálculo de cada circuito/.test(ex.ex) &&
+      /Factores de corrección/.test(ex.ex) &&
+      /Anexo C · Protocolo de pruebas/.test(ex.ex) &&
+      /Anexo D · Documentos complementarios/.test(ex.ex),
+    "el expediente lleva metrado y presupuesto, y los anexos (cálculo de cada circuito, protocolo y documentos)"
+  );
+  // Una planta con diseño que ninguna lámina muestra: el expediente le pone su lámina (IE-05) y el unifilar pasa a IE-06
+  const ex2 = JSON.parse(
+    await ev(
+      `(() => { PLANO.plantas.push({ n: '2do piso', x0: ${OX} + 11.5, y0: ${OY} - 0.5, x1: ${OX} + 22.5, y1: ${OY} + 8.5 }); PLANO.dis.els.push({ id: 'dzz', t: 'sim', k: 'luz', x: ${OX} + 15, y: ${OY} + 4, r: 0, capa: 'E-ALUMBRADO' });
+        return laminasExpediente().then(L => { const ex = expediente(LAST, 'formal', L); PLANO.plantas.pop(); PLANO.dis.els.pop(); return JSON.stringify({ h: L.map(x => x.hoja + ' ' + x.vista), ex }); }); })()`
+    )
+  );
+  ok(
+    JSON.stringify(ex2.h) === JSON.stringify(["IE-04 PLANTA 1ER PISO", "IE-05 PLANTA 2DO PISO"]) &&
+      /Lámina IE-06 · Escala S\/E/.test(ex2.ex),
+    `todas las plantas en el expediente: ${ex2.h.join(", ")}`
   );
 });
 
@@ -2815,6 +2888,21 @@ prueba("Edificio: banco de medidores junto o lejos del TG, TSG, medidor trifási
   );
   await poner('#edPropC [data-dsp="num"]', "1");
   ok((await J(`dsD().els.find(e => e.id === "${bm}").num`)) === true, "se puede escribir también la lista en el plano");
+  // Datos para el cálculo en el edificio: áreas por tipo, un área dentro de otra del mismo tipo y un área sin tipo
+  await ev(
+    `(() => { const X = ${OX}, Y = ${OY}, ar = (x0, y0, x1, y1, n, dep) => dsAgregar({ t: "lin", c: true, capa: "E-AREAS", pts: [X + x0, Y + y0, X + x1, Y + y0, X + x1, Y + y1, X + x0, Y + y1], ar: { tp: "tech", n, ...(dep !== undefined ? { dep } : {}) } });
+      ar(0, 0, 8, 6, "DEPARTAMENTO", 0); ar(1, 1, 3, 3, "SALA", 0); ar(9, 0, 10, 2, "PASADIZO"); edCambio(); dcAbrir(); })()`
+  );
+  const dct = await ev("$('dcC').textContent");
+  ok(
+    /Áreas por tipo/.test(dct) &&
+      /«SALA»[\s\S]*?dentro de «DEPARTAMENTO»[\s\S]*?se suman dos veces/.test(dct) &&
+      /«PASADIZO»[\s\S]*?no es de ningún tipo/.test(dct) &&
+      !/TG → TD-/.test(dct) &&
+      !/falta el contorno exterior/.test(dct),
+    `ventana de datos del edificio: áreas por tipo, área contada dos veces y área sin tipo (${dct.slice(dct.indexOf("Áreas por tipo"), dct.indexOf("Áreas por tipo") + 400)})`
+  );
+  await ev("dcCerrar(); 1");
   await clic('[data-ed="cancelar"]');
   await ev(
     "document.querySelector('.welcome:not([hidden]) .vw-btn.def, .welcome:not([hidden]) .btn:not(.sec)')?.click(); 1"

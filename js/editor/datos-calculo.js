@@ -64,6 +64,8 @@ function dcCruce(R, noms) {
     m2 = v => `${fmt(v, 2)} m²`,
     m = v => `${fmt(v, 2)} m`,
     con = new Map(R.tabs.filter(t => t.circs.length).map(t => [t.nom, t]));
+  let mat = "",
+    matN = [0, 0];
   if (MODE === "multi") {
     f(
       "Alimentador general (medidor de la concesionaria → TG)",
@@ -89,31 +91,35 @@ function dcCruce(R, noms) {
         con.has("TSG"),
         con.has("TSG") ? `${con.get("TSG").circs.length} circuitos del plano` : "servicios escritos"
       );
-    tipos.forEach((t, i) => {
-      const tb = R.tabs.filter(x => x.dep === i && x.circs.length),
-        a = R.areaDep[i],
-        dm = tb.map(x => R.desdeMed[x.id]).filter(Boolean);
-      f(
-        `${t.nombre || "Tipo"}: número de unidades`,
-        !(t.cant > 0) && tb.length > 0,
-        t.cant > 0
-          ? `escrito: ${t.cant}`
-          : tb.length
-            ? `${tb.length} tablero${tb.length > 1 ? "s" : ""} en el plano`
-            : "—"
-      );
-      f(`${t.nombre || "Tipo"}: área`, !!(a && a.m2), a && a.m2 ? m2(a.m2) : `escrita: ${t.area || "—"} m²`);
-      f(
-        `${t.nombre || "Tipo"}: circuitos`,
-        tb.length > 0,
-        tb.length ? `del tablero ${tb[0].nom}${tb.length > 1 ? ` (${tb.length} tableros)` : ""}` : "escritos"
-      );
-      f(
-        `${t.nombre || "Tipo"}: alimentador desde el banco`,
-        dm.length > 0,
-        dm.length ? m(Math.max(...dm.map(r => r.L))) : `escrito: ${t.Ld || "—"} m`
-      );
-    });
+    // Cada tipo en una fila: unidades, área, circuitos y alimentador desde el banco (del plano o escritos)
+    const cuenta = [],
+      cel = (pl, v) => {
+        cuenta.push(pl);
+        return `<td class="n">${esc(v)}<small class="dc-o${pl ? " ok" : ""}">${pl ? "del plano" : "escrito"}</small></td>`;
+      };
+    mat =
+      `<table class="dc-t dc-mat"><thead><tr><th>Tipo</th><th>Uso</th><th class="n">Unidades</th><th class="n">Área</th><th class="n">Circuitos</th><th class="n">Alimentador desde el banco</th></tr></thead><tbody>` +
+      tipos
+        .map((t, i) => {
+          const tb = R.tabs.filter(x => x.dep === i && x.circs.length),
+            a = R.areaDep[i],
+            dm = tb.map(x => R.desdeMed[x.id]).filter(Boolean),
+            uso = t.uso && USOS[t.uso] ? t.uso : "viv";
+          return (
+            `<tr><td><b>${esc(t.nombre || "Tipo " + (i + 1))}</b>${tb.length ? `<small>${tb.map(x => esc(x.nom)).join(", ")}</small>` : ""}</td><td>${esc(uso === "viv" ? "Vivienda" : USOS[uso].n)}</td>` +
+            cel(
+              !(t.cant > 0) && tb.length > 0,
+              t.cant > 0 ? String(t.cant) : tb.length ? `${tb.length} tablero${tb.length > 1 ? "s" : ""}` : "—"
+            ) +
+            cel(!!(a && a.m2), a && a.m2 ? m2(a.m2) : t.area ? `${t.area} m²` : "—") +
+            cel(tb.length > 0, tb.length ? String(tb.reduce((s, x) => s + x.circs.length, 0)) : "—") +
+            cel(dm.length > 0, dm.length ? m(Math.max(...dm.map(r => r.L))) : t.Ld ? `${t.Ld} m` : "—") +
+            "</tr>"
+          );
+        })
+        .join("") +
+      "</tbody></table>";
+    matN = [cuenta.filter(Boolean).length, cuenta.length];
   } else {
     const viv = usoAct() === "viv";
     [1, ...pisos.map((p, i) => i + 2)].forEach(n => {
@@ -145,17 +151,90 @@ function dcCruce(R, noms) {
     !!R.rutas.PAT,
     R.rutas.PAT ? m(R.rutas.PAT.L) : `escrito: ${PROY.pzCond || "—"} m`
   );
-  const np = filas.filter(x => x[1]).length;
-  return (
-    `<h4>Qué toma el cálculo del plano<small>${np} de ${filas.length} datos del plano · los grises se dibujan o se escriben</small></h4><table class="dc-t dc-cruce"><tbody>` +
-    filas
-      .map(
-        ([d, pl, t]) =>
-          `<tr><td><i class="dc-dot${pl ? " ok" : ""}"></i>${esc(d)}</td><td>${pl ? "del plano" : "escrito"}</td><td class="n">${esc(t)}</td></tr>`
-      )
+  const np = filas.filter(x => x[1]).length + matN[0],
+    nt = filas.length + matN[1];
+  return {
+    np,
+    nt,
+    html:
+      `<h4>Qué toma el cálculo del plano<small>${np} de ${nt} datos salen del plano · los demás se dibujan o se escriben</small></h4>` +
+      mat +
+      `<table class="dc-t dc-cruce"><thead><tr><th>Dato general</th><th>Origen</th><th class="n">Valor</th></tr></thead><tbody>` +
+      filas
+        .map(
+          ([d, pl, t]) =>
+            `<tr><td><i class="dc-dot${pl ? " ok" : ""}"></i>${esc(d)}</td><td><small class="dc-o${pl ? " ok" : ""}">${pl ? "del plano" : "escrito"}</small></td><td class="n">${esc(String(t).replace(/^escrit[oa]s?: /, ""))}</td></tr>`
+        )
+        .join("") +
+      "</tbody></table>"
+  };
+}
+/* Áreas del edificio, por tipo: las que cuentan, el criterio de su uso (vivienda: techada interior, Regla 050-110;
+   otros usos: contorno exterior, Regla 050-210) y lo que se sumaría dos veces o no entra al cálculo. Solo revisa:
+   el área del cálculo es la de calculo-plano.js */
+function dcAreasEdificio(R) {
+  const D = dsD(),
+    pol = new Map(D.els.filter(e => e.ar && Array.isArray(e.pts)).map(e => [e.id, e.pts])),
+    cen = p => {
+      let x = 0,
+        y = 0;
+      for (let i = 0; i < p.length; i += 2) {
+        x += p[i];
+        y += p[i + 1];
+      }
+      return [x / (p.length / 2), y / (p.length / 2)];
+    },
+    m2 = v => `${fmt(v, 2)} m²`,
+    cuenta = a => a.tp === "tech" || a.tp === "ext",
+    avisos = [];
+  let h =
+    `<table class="dc-t"><thead><tr><th>Tipo</th><th>Criterio de su uso</th><th>Áreas marcadas que cuentan</th><th class="n">Para el cálculo</th></tr></thead><tbody>` +
+    tipos
+      .map((t, i) => {
+        const viv = !(t.uso && USOS[t.uso]) || t.uso === "viv",
+          as = R.areas.filter(a => a.dep === i && cuenta(a)),
+          o = R.areaDep[i],
+          mal = as.filter(a => a.tp !== (viv ? "tech" : "ext"));
+        // Un área dentro de otra del mismo tipo: las dos se suman
+        as.forEach(a =>
+          as.forEach(b => {
+            if (a === b || a.m2 >= b.m2 || !pol.get(a.id) || !pol.get(b.id)) return;
+            const [x, y] = cen(pol.get(a.id));
+            if (plDentro(x, y, pol.get(b.id)))
+              avisos.push({
+                m: `«${a.n || "Área"}» (${m2(a.m2)}) está dentro de «${b.n || "Área"}» (${m2(b.m2)}), las dos del tipo ${t.nombre || i + 1}: se suman dos veces. Si es un ambiente, márquelo como «No se cuenta».`,
+                ids: [a.id, b.id]
+              });
+          })
+        );
+        mal.forEach(a =>
+          avisos.push({
+            m: `«${a.n || "Área"}» del tipo ${t.nombre || i + 1} está marcada como ${PL_TAREA[a.tp].toLowerCase()}; en ${viv ? "vivienda se usa el área techada por dimensiones interiores (Regla 050-110)" : "otros usos se usa el contorno exterior (Regla 050-210)"}.`,
+            ids: [a.id]
+          })
+        );
+        if (o && o.junto)
+          avisos.push({
+            m: `Las áreas del tipo ${t.nombre || i + 1} quedan junto a ${o.junto.length} de sus tableros: el área de un tipo es la de un solo departamento.`,
+            ids: o.junto.flatMap(j => j.ids)
+          });
+        return `<tr><td><b>${esc(t.nombre || "Tipo " + (i + 1))}</b></td><td>${viv ? "Vivienda: techada, dimensiones interiores (050-110)" : `${esc(USOS[t.uso].n)}: contorno exterior (050-210)`}</td><td>${as.length ? as.map(a => `${esc(a.n || "Área")} <span class="dc-m">${m2(a.m2)}</span>`).join(" + ") : '<span class="dc-m">ninguna: se usa el área escrita</span>'}</td><td class="n"><b>${o && o.m2 ? m2(o.m2) : t.area ? `${t.area} m²` : "—"}</b><small class="dc-o${o && o.m2 ? " ok" : ""}">${o && o.m2 ? "del plano" : "escrita"}</small></td></tr>`;
+      })
       .join("") +
-    "</tbody></table>"
-  );
+    "</tbody></table>";
+  const sin = R.areas.filter(a => !Number.isInteger(a.dep) && cuenta(a));
+  if (sin.length)
+    avisos.push({
+      m: `${sin.map(a => `«${a.n || "Área"}» (${m2(a.m2)})`).join(", ")} no ${sin.length > 1 ? "son" : "es"} de ningún tipo y no entra${sin.length > 1 ? "n" : ""} al cálculo. Elija su tipo con doble clic o márquel${sin.length > 1 ? "as" : "a"} como «No se cuenta».`,
+      ids: sin.map(a => a.id)
+    });
+  h += avisos
+    .map(
+      a =>
+        `<div class="rev-it aviso"><i>⚠</i><span>${esc(a.m)}</span><span class="pla-b"><button type="button" class="vw-btn" data-dcv="${a.ids.join(",")}">Ver</button></span></div>`
+    )
+    .join("");
+  return { h, n: avisos.length };
 }
 // Avisos para la revisión del diseño (solo si el diseño tiene tableros con circuitos)
 function dcAvisos() {
@@ -192,8 +271,28 @@ function dcRender() {
       ? `El cálculo usa el diseño aplicado: <button type="button" class="linkbtn" data-dc="aplicar">aplique los cambios</button> para actualizarlo.`
       : "El cálculo usa este diseño.";
   let h = "";
-  const tabs = R ? R.tabs : [];
-  if (R) h += dcCruce(R, noms);
+  const tabs = R ? R.tabs : [],
+    cr = R ? dcCruce(R, noms) : null,
+    ar = R && MODE === "multi" ? dcAreasEdificio(R) : null;
+  // Resumen: lo dibujado y lo que falta revisar
+  if (R) {
+    const conC = tabs.filter(t => t.circs.length),
+      nc = conC.reduce((s, t) => s + t.circs.length, 0),
+      ns = conC.reduce((s, t) => s + t.circs.reduce((a, q) => a + q.n, 0), 0),
+      nav = R.avisos.length + (ar ? ar.n : 0),
+      dvMax = L ? Math.max(0, ...L.circ.filter(x => x.src && x.src.t === "plano").map(x => x.dVt)) : null,
+      k = (v, t, cls = "") => `<div class="dc-k${cls}"><b>${v}</b><span>${t}</span></div>`;
+    h +=
+      `<div class="dc-res">` +
+      k(conC.length, conC.length === 1 ? "tablero con circuitos" : "tableros con circuitos") +
+      k(nc, "circuitos") +
+      k(ns, "salidas conectadas") +
+      k(`${cr.np}/${cr.nt}`, "datos del plano") +
+      (dvMax !== null ? k(`${m(dvMax)} %`, "ΔV máxima de circuito", dvMax > DV_TOT ? " bad" : " ok") : "") +
+      k(nav, nav === 1 ? "aviso por revisar" : "avisos por revisar", nav ? " bad" : " ok") +
+      `</div>`;
+    h += cr.html;
+  }
   if (!tabs.length)
     h +=
       '<p class="rev-ok">El diseño aún no tiene tableros. Ponga el tablero (Biblioteca › Tableros y medición), defina sus circuitos con doble clic y saque las tuberías desde sus salidas.</p>';
@@ -203,7 +302,10 @@ function dcRender() {
       dm = R.desdeMed[tb.id];
     h += `<h4>${esc(tb.nom)}${tb.fs ? ` <small>${tb.fs === 3 ? "trifásico" : "monofásico"}</small>` : ""}<small class="${en ? "" : "bad"}">${dep ? `departamento ${esc(dep.nombre || "")}${tb.depAuto ? " (el único tipo)" : ""}` : en ? "en el cálculo" : MODE === "multi" ? "elija su tipo de departamento con doble clic" : `no está en el cálculo (${noms.join(", ")})`}</small>${dm && tb.nom !== "TG" ? `<small>desde el medidor: ${m(dm.L)} m</small>` : ""} ${ver([tb.id])}</h4>`;
     if (!tb.circs.length) {
-      h += '<p class="dc-nota">Sin circuitos con carga: defina sus circuitos con doble clic y conecte las salidas.</p>';
+      h +=
+        MODE === "multi" && tb.nom === "TG"
+          ? '<p class="dc-nota">Tablero general del edificio: alimenta el banco de medidores y los servicios generales; sus circuitos propios son opcionales.</p>'
+          : '<p class="dc-nota">Sin circuitos con carga: defina sus circuitos con doble clic y conecte las salidas.</p>';
       return;
     }
     h +=
@@ -226,18 +328,43 @@ function dcRender() {
     h +=
       `<h4>Alimentadores<small>tuberías marcadas como alimentador, por los montantes</small></h4><table class="dc-t"><thead><tr><th>Tramo</th><th>Longitud</th><th>Origen</th></tr></thead><tbody>` +
       fila(
-        MODE === "multi" ? "Medidor o banco → TG (general)" : "Medidor → TG",
+        MODE === "multi" ? "Medidor de la concesionaria → TG (general)" : "Medidor → TG",
         ali.TG,
         `sin tubería del medidor al TG: se usa la escrita (${(MODE === "multi" ? PROY.Lgen : PROY.Lalim) || "—"} m)`
       ) +
-      noms
-        .filter(n => n !== "TG")
-        .map(n => fila(`TG → ${n}`, ali[n], "sin recorrido en el plano: se usa la escrita en Pisos y tableros"))
-        .join("") +
+      (MODE === "multi"
+        ? // Edificio: cada departamento se alimenta desde su medidor en el banco (el TG solo alimenta el banco y el TSG)
+          (PROY.bmJunto === "0"
+            ? fila(
+                "TG → banco de medidores",
+                ali.BM,
+                `sin recorrido en el plano: se usa la escrita (${PROY.Lbm || "—"} m)`
+              )
+            : "") +
+          tabs
+            .filter(t => t.circs.length && Number.isInteger(t.dep))
+            .map(t =>
+              fila(
+                `Banco → ${esc(t.nom)} (${esc((tipos[t.dep] || {}).nombre || "")})`,
+                R.desdeMed[t.id],
+                `sin recorrido en el plano: se usa la escrita (${(tipos[t.dep] || {}).Ld || "—"} m)`
+              )
+            )
+            .join("") +
+          (con =>
+            con ? fila("TG → TSG (servicios generales)", ali.TSG, "sin recorrido en el plano: se usa la escrita") : "")(
+            tabs.some(t => t.nom === "TSG" && t.circs.length)
+          )
+        : noms
+            .filter(n => n !== "TG")
+            .map(n => fila(`TG → ${n}`, ali[n], "sin recorrido en el plano: se usa la escrita en Pisos y tableros"))
+            .join("")) +
       "</tbody></table>";
   }
-  // Áreas por piso
-  if (R && R.areas.length) {
+  // Áreas del edificio: por tipo
+  if (ar) h += `<h4>Áreas por tipo<small>las que entran a la máxima demanda de cada tipo</small></h4>` + ar.h;
+  // Áreas por piso (vivienda y otros usos)
+  else if (R && R.areas.length) {
     const viv = usoAct() === "viv",
       P = Object.keys(R.pisos)
         .map(Number)
@@ -280,7 +407,7 @@ function dcRender() {
         (a, i) =>
           `<div class="rev-it ${a.t === "error" ? "aviso" : "info"}"><i>${a.t === "info" ? "ℹ" : "⚠"}</i><span>${esc(a.m)}<small>${esc(DC_AYUDA[a.k] || "")}</small></span><span class="pla-b"><button type="button" class="vw-btn" data-dca="${i}">Ver</button></span></div>`
       ).join("");
-  h += `<p class="dc-nota"><b>Cómo se mide (criterio de la plataforma):</b> el recorrido es el camino más corto por las tuberías del circuito, desde el tablero hasta cada salida, con las derivaciones. Se suman los tramos verticales: la tubería por el techo va a la altura del techo (${m(+PROY.hTecho || 2.9)} m) y la del piso a 0 m; en cada artefacto se sube o se baja hasta su altura de montaje (la suya o la de Parámetros › Alturas) y en el tablero desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza. Cada montante suma la altura de entrepiso (${m(+PROY.hEnt || 3.1)} m) por piso. La potencia de cada salida es la suya o, si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). La caída de tensión se calcula con la carga conectada del circuito hasta la salida más alejada (Regla 050-102); la sección es la menor que cumple la capacidad y esa caída. Agrupamiento: cada circuito usa el factor de la Tabla 5C (ítem 1) según el mayor número de circuitos que van juntos en alguna de sus tuberías (entre dos columnas de la tabla, la del número mayor). Áreas: en vivienda se suman las techadas por dimensiones interiores (Regla 050-110) y el sótano al 75 %; en otros usos, el contorno exterior (Regla 050-210); el piso de cada área es el de su planta. Los tableros y pisos que no están dibujados se calculan con los datos escritos.</p>`;
+  h += `<details class="dc-como"><summary>Cómo se mide · criterio de la plataforma</summary><p class="dc-nota">El recorrido es el camino más corto por las tuberías del circuito, desde el tablero hasta cada salida, con las derivaciones. Se suman los tramos verticales: la tubería por el techo va a la altura del techo (${m(+PROY.hTecho || 2.9)} m) y la del piso a 0 m; en cada artefacto se sube o se baja hasta su altura de montaje (la suya o la de Parámetros › Alturas) y en el tablero desde su borde superior; la tubería por la pared va a la altura del artefacto donde empieza. Cada montante suma la altura de entrepiso (${m(+PROY.hEnt || 3.1)} m) por piso. La potencia de cada salida es la suya o, si no tiene, la de su tipo de luminaria o la de Parámetros (W por salida). La caída de tensión se calcula con la carga conectada del circuito hasta la salida más alejada (Regla 050-102); la sección es la menor que cumple la capacidad y esa caída. Agrupamiento: cada circuito usa el factor de la Tabla 5C (ítem 1) según el mayor número de circuitos que van juntos en alguna de sus tuberías (entre dos columnas de la tabla, la del número mayor). Áreas: en vivienda se suman las techadas por dimensiones interiores (Regla 050-110) y el sótano al 75 %; en otros usos, el contorno exterior (Regla 050-210); el piso de cada área es el de su planta. Los tableros y pisos que no están dibujados se calculan con los datos escritos.</p></details>`;
   if (L)
     h += `<p class="dc-nota"><button type="button" class="vw-btn" data-dc="escribir">Escribir en el plano los conductores y diámetros del cálculo</button> Pone en cada tubería sus conductores (fases, neutros y tierra), sus secciones y el diámetro de la tubería según todos los circuitos que lleva (40 % de ocupación). En el tramo que comparten varios alimentadores (del banco a una caja de paso, un montante), los de todos ellos, cada uno con su conductor de protección (criterio del proyectista). En las tuberías de los interruptores, sus retornos (criterio: unipolar 2, doble o de tres vías 3, de cuatro vías 4 conductores, sin tierra).</p>`;
   $("dcC").innerHTML = h;

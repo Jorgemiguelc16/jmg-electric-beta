@@ -2,7 +2,7 @@
    Arma el documento para imprimir: portada, memoria descriptiva y de cálculo, tablas, unifilar y anexos,
    en estilo formal o a color. */
 // Estilos: "formal" (blanco y negro, para presentar a la entidad) o "jmg" (con los colores de la plataforma)
-function expediente(r, estilo = "formal") {
+function expediente(r, estilo = "formal", lamsDis = []) {
   const c = r.c,
     P = c.proj,
     multi = r.mode === "multi",
@@ -111,7 +111,7 @@ function expediente(r, estilo = "formal") {
   B += `<p>La presente memoria corresponde al proyecto de instalaciones eléctricas interiores de ${objeto}, denominado <b>«${esc(nom)}»</b>${P.ubic ? `, ubicado en ${esc(P.ubic)}` : ""}${P.prop ? `, de propiedad de ${esc(P.prop)}` : ""}.</p>
     <p>El proyecto comprende el diseño de las instalaciones desde el punto de entrega de la empresa concesionaria hasta los puntos de utilización: alimentadores, tableros, circuitos derivados, sistemas de protección y sistema de puesta a tierra, conforme al Código Nacional de Electricidad – Utilización, al Reglamento Nacional de Edificaciones (Norma EM.010) y a la Norma DGE de conexiones en baja tensión.</p>`;
   B += sub("Alcance del proyecto");
-  B += `<ul class="ex-list">${[...ALCANCE, "Especificaciones técnicas de materiales y equipos", "Metrado referencial de materiales", "Diagrama unifilar con cuadro de cargas (EM.010, Art. 8)"].map(t => `<li>${t}</li>`).join("")}</ul>`;
+  B += `<ul class="ex-list">${[...ALCANCE, "Especificaciones técnicas de materiales y equipos", "Metrado y presupuesto referencial", "Diagrama unifilar con cuadro de cargas (EM.010, Art. 8)", ...(lamsDis.length ? ["Planos de planta con la distribución de salidas, tuberías y circuitos"] : []), "Anexos: cálculo de cada circuito derivado, niveles de iluminación, protocolo de pruebas y documentos complementarios"].map(t => `<li>${t}</li>`).join("")}</ul>`;
   B += sub(multi ? "Descripción del edificio" : "Descripción de la vivienda");
   if (!multi) {
     B += kv(
@@ -430,20 +430,76 @@ function expediente(r, estilo = "formal") {
   B += fin;
 
   /* ---------- 4. METRADO ---------- */
-  B += cap("Metrado de materiales") + deCard(cardMetrado(r)) + fin;
+  B += cap("Metrado y presupuesto");
+  B += sub("Metrado de materiales") + deCard(cardMetrado(r));
+  B += sub("Presupuesto referencial");
+  {
+    const C = preCalc(r);
+    if (!C.nP)
+      B += `<p>El presupuesto se obtiene del metrado anterior con los precios unitarios del proyectista (Resultados › Presupuesto › Precios unitarios). Este proyecto aún no tiene precios: las partidas y cantidades son las del metrado${C.d ? `, más ${fmt(C.d * 100, 0)} % de desperdicio en conductores y tuberías` : ""}.</p>`;
+    else {
+      const so = v => (v === null ? "—" : soles(v));
+      B += tbl(
+        ["Ítem", "Descripción", "Und.", "Cantidad", "P. unitario (S/)", "Parcial (S/)"],
+        C.filas.map(x =>
+          x.sec
+            ? [`<b>${x.cod}</b>`, `<b>${esc(x.sec)}</b>`, "", "", "", `<b>${x.sub ? soles(r2(x.sub)) : ""}</b>`]
+            : [x.cod, esc(x.desc), x.und, fmt(x.q, x.q % 1 ? 2 : 0), so(x.pu), so(x.par)]
+        ),
+        "",
+        "Presupuesto referencial de las instalaciones eléctricas",
+        `Fuente: metrado del proyecto${C.d ? ` (conductores y tuberías con ${fmt(C.d * 100, 0)} % de desperdicio)` : ""} y precios unitarios del proyectista${C.nP < C.nT ? `; ${C.nT - C.nP} partidas sin precio no suman al costo directo` : ""}.`
+      );
+      B += kv(
+        [
+          ["Costo directo", `S/ ${soles(C.cd)}`],
+          [`Gastos generales (${fmt(C.P.gg, 1)} %)`, `S/ ${soles(C.gg)}`],
+          [`Utilidad (${fmt(C.P.ut, 1)} %)`, `S/ ${soles(C.ut)}`],
+          ["Subtotal", `S/ ${soles(C.sub)}`],
+          [`IGV (${fmt(C.P.igv, 1)} %)`, `S/ ${soles(C.igv)}`],
+          ["<b>Total presupuesto</b>", `<b>S/ ${soles(C.tot)}</b>`]
+        ],
+        "Resumen del presupuesto",
+        "Gastos generales y utilidad: criterio del proyectista; IGV de 16 % más 2 % de IPM."
+      );
+      B += `<p><b>Son:</b> ${esc(solesLetras(C.tot))}.</p><p class="ex-nota">Presupuesto referencial a la fecha del documento; no incluye obras civiles, trámites ante la concesionaria ni el costo de la conexión.</p>`;
+    }
+  }
+  B += fin;
 
   /* ---------- 5. PLANOS ---------- */
   // Las mismas láminas que se descargan en DXF (la lámina elegida en Planos), cada una reducida a una página A4;
   // horizontal o vertical: la que imprime el dibujo más grande (área útil A4 ≈ 269 × 163 mm o 182 × 245 mm)
-  const lam = laminaPlano(),
+  // Con láminas de planta del diseño, esas van primero y las que genera la plataforma se numeran después de ellas
+  const nDis = lamsDis.reduce(
+    (m, h) => Math.max(m, +(/^IE-(\d+)/.exec(h.hoja) || [0, 0])[1]),
+    lamsDis.length ? lamsDis.length : 0
+  );
+  const lam = laminaPlano();
+  let LAMS;
+  ROT_DESP = nDis;
+  try {
     LAMS = [
-      ...unifilarHojas(r, lam).map(h => ({ ...h, tit: "Diagrama unifilar" })),
-      { ...alturas(r), hoja: "IE-02", tit: "Diagrama de alturas de montaje" },
-      { ...detalles(r), hoja: "IE-03", tit: "Leyenda de símbolos y detalle del pozo de puesta a tierra" },
-      ...tablerosHojas(r, lam).map(h => ({ ...h, tit: "Detalle de tableros y señal de seguridad" })),
-      ...(b => (b ? [{ ...b, hoja: "IE-05", tit: "Tablero general del edificio" }] : []))(tableroGeneral(r)),
-      ...(b => (b ? [{ ...b, hoja: "IE-06", tit: "Banco de medidores y balance de fases" }] : []))(bancoMedidores(r))
+      ...lamsDis.map(h => ({
+        ...h,
+        dis: true,
+        tit:
+          h.vista && !h.tit.toUpperCase().includes(h.vista)
+            ? `${h.tit} · ${h.vista[0] + h.vista.slice(1).toLowerCase()}`
+            : h.tit
+      })),
+      ...[
+        ...unifilarHojas(r, lam).map(h => ({ ...h, tit: "Diagrama unifilar" })),
+        { ...alturas(r), hoja: "IE-02", tit: "Diagrama de alturas de montaje" },
+        { ...detalles(r), hoja: "IE-03", tit: "Leyenda de símbolos y detalle del pozo de puesta a tierra" },
+        ...tablerosHojas(r, lam).map(h => ({ ...h, tit: "Detalle de tableros y señal de seguridad" })),
+        ...(b => (b ? [{ ...b, hoja: "IE-05", tit: "Tablero general del edificio" }] : []))(tableroGeneral(r)),
+        ...(b => (b ? [{ ...b, hoja: "IE-06", tit: "Banco de medidores y balance de fases" }] : []))(bancoMedidores(r))
+      ].map(h => ({ ...h, hoja: ieNum(h.hoja) }))
     ];
+  } finally {
+    ROT_DESP = 0;
+  }
   // Continuaciones: «(continuación)» en el título cuando el plano sigue de la lámina anterior
   LAMS.forEach((h, k) => (h.cont = k > 0 && LAMS[k - 1].tit === h.tit));
   B += cap("Planos");
@@ -451,22 +507,34 @@ function expediente(r, estilo = "formal") {
   B += tbl(
     ["Lámina", "Contenido", "Formato"],
     [
-      ...LAMS.map(h => [`<b>${h.hoja}</b>`, h.tit + (h.cont ? " (continuación)" : ""), lam]),
-      ["—", "Planos de planta: distribución de alumbrado, tomacorrientes y fuerza", "Los adjunta el proyectista"]
+      ...LAMS.map(h => [
+        `<b>${esc(h.hoja)}</b>`,
+        esc(h.tit) + (h.cont ? " (continuación)" : ""),
+        h.dis ? `${h.tam} · escala 1:${h.esc}` : lam
+      ]),
+      ...(lamsDis.length
+        ? []
+        : [["—", "Planos de planta: distribución de alumbrado, tomacorrientes y fuerza", "Los adjunta el proyectista"]])
     ],
     "",
     "Lista de láminas"
   );
-  B += `<p>Las láminas se generan a partir de los resultados del cálculo, con los símbolos de la Norma DGE «Símbolos gráficos en electricidad» (R.M. N.° 091-2002-EM/VME). En este expediente se presentan reducidas a A4; los planos se imprimen en ${lam} desde los archivos DXF. Los planos de planta, con la distribución de las salidas sobre la arquitectura, no los genera la plataforma y los adjunta el proyectista.</p>`;
+  B += `<p>Las láminas se generan a partir de los resultados del cálculo, con los símbolos de la Norma DGE «Símbolos gráficos en electricidad» (R.M. N.° 091-2002-EM/VME). En este expediente se presentan reducidas a A4; los planos se imprimen en ${lam} desde los archivos DXF. ${lamsDis.length ? `Los planos de planta (${lamsDis.map(h => esc(h.hoja)).join(", ")}) muestran la distribución de las salidas, tuberías y circuitos sobre la arquitectura, con su leyenda y su cuadro de circuitos; se imprimen en su papel y a su escala desde la ventana Lámina del editor de diseño.` : "Los planos de planta, con la distribución de las salidas sobre la arquitectura, los adjunta el proyectista (o se dibujan en el editor de diseño de la plataforma)."}</p>`;
   B += fin;
   LAMS.forEach(h => {
-    const horiz = Math.min(269 / h.W, 163 / h.H) >= Math.min(182 / h.W, 245 / h.H);
+    const horiz = Math.min(259 / h.W, 156 / h.H) >= Math.min(172 / h.W, 238 / h.H),
+      // Área útil de la página (A4 con sus márgenes, menos el título): la lámina tan grande como entre, centrada
+      e = horiz ? Math.min(259 / h.W, 156 / h.H) : Math.min(172 / h.W, 238 / h.H),
+      svg = h.svg.replace(
+        /^<svg\b/,
+        `<svg style="width:${(h.W * e).toFixed(1)}mm;height:${(h.H * e).toFixed(1)}mm;max-height:none"`
+      );
     n2++;
-    TOC.push([`${n1}.${n2}`, `Lámina ${h.hoja} · ${h.tit}${h.cont ? " (continuación)" : ""}`, 1]);
+    TOC.push([`${n1}.${n2}`, `Lámina ${esc(h.hoja)} · ${esc(h.tit)}${h.cont ? " (continuación)" : ""}`, 1]);
     B +=
       `<section class="ex-sec ex-plano ${horiz ? "ex-ancho" : "ex-alto"}">` +
-      `<h2 class="ex-h2" id="${tid(`${n1}.${n2}`)}"><span>${n1}.${n2}</span>${h.tit}${h.cont ? " (continuación)" : ""} <small>Lámina ${h.hoja} · Escala S/E · reducida de ${lam} a A4</small></h2>` +
-      `<div class="ex-unif">${h.svg}</div>` +
+      `<h2 class="ex-h2" id="${tid(`${n1}.${n2}`)}"><span>${n1}.${n2}</span>${esc(h.tit)}${h.cont ? " (continuación)" : ""} <small>Lámina ${esc(h.hoja)} · ${h.dis ? `Escala 1:${h.esc} en ${h.tam}` : `Escala S/E`} · reducida de ${h.dis ? h.tam : lam} a A4</small></h2>` +
+      `<div class="ex-unif">${svg}</div>` +
       fin;
   });
 
@@ -509,6 +577,85 @@ function expediente(r, estilo = "formal") {
           `<div class="ex-firma"><div class="ex-firma-t">${t}</div><div class="ex-firma-l"></div><dl><dt>Nombre</dt><dd>${esc(n)}</dd><dt>CIP N.°</dt><dd>${esc(cip)}</dd><dt>Fecha</dt><dd></dd></dl></div>`
       )
       .join("")}</div>`;
+  B += fin;
+
+  /* ---------- 8. ANEXOS ---------- */
+  B += cap("Anexos");
+  // A. Cálculo de cada circuito derivado, por tablero (las mismas fórmulas del capítulo 2)
+  B += sub("Anexo A · Desarrollo del cálculo de cada circuito derivado");
+  B += `<p>Cálculo paso a paso de cada circuito derivado con las fórmulas de la memoria de cálculo: corriente nominal, corriente de diseño, interruptor, conductor por capacidad de corriente con sus factores de corrección y caída de tensión hasta la salida más alejada.</p>`;
+  [...new Set(r.circ.map(q => q.tab))].forEach(t => {
+    B +=
+      `<h3 class="ex-h3">Tablero ${esc(t)}</h3>` +
+      r.circ
+        .filter(q => q.tab === t)
+        .map(q => detalleCalc(q, false))
+        .join("");
+  });
+  // B. Niveles de iluminación de los ambientes del diseño (EM.010, Anexo)
+  const ambs =
+    typeof PLANO !== "undefined" && PLANO && PLANO.dis && typeof ambTipo === "function"
+      ? PLANO.dis.els.filter(e => e.ar && e.ar.amb && Array.isArray(e.pts) && ambTipo(e.ar.amb))
+      : [];
+  B += sub("Anexo B · Niveles de iluminación");
+  if (ambs.length) {
+    const f2 = (PLANO.f || 1) ** 2;
+    B += tbl(
+      ["Ambiente", "Tipo de ambiente", "Área (m²)", "Iluminancia (lx)", "Referencia", "Origen"],
+      ambs.map(e => {
+        const t = ambTipo(e.ar.amb);
+        return [
+          esc(e.ar.n || t.n),
+          esc(t.n),
+          fmt(plAreaPol(e.pts) * f2, 1),
+          t.lux == null ? "—" : fmt(t.lux, 0),
+          t.em ? `EM.010, Anexo ${esc(t.em)}` : "—",
+          LUX_EST[t.est]
+        ];
+      }),
+      "",
+      "Iluminancia mantenida de diseño por ambiente",
+      "Fuente: RNE EM.010, Anexo «Requisitos mínimos de iluminación»; los valores marcados «Criterio» los fija el proyectista."
+    );
+    B += `<p class="ex-nota">La iluminancia indicada es el valor mínimo que debe alcanzar el alumbrado de cada ambiente; la verificación con las luminarias elegidas se hace con su fotometría (cálculo de iluminación del fabricante).</p>`;
+  } else
+    B += `<p>Los niveles de iluminación por ambiente se toman del Anexo de la Norma EM.010 («Requisitos mínimos de iluminación»). Para listarlos aquí, marque los ambientes en el diseño sobre el plano (ventana Ambientes e iluminación).</p>`;
+  // C. Protocolo de pruebas para llenar en obra
+  B += sub("Anexo C · Protocolo de pruebas");
+  B += `<p>Formato para registrar en obra las pruebas del capítulo 6. Se llena con los valores medidos y lo firman el ingeniero responsable y el propietario.</p>`;
+  B += tbl(
+    ["Tablero", "Circuito", "Descripción", "Aislamiento (MΩ)", "Continuidad PE", "Diferencial (ms)", "Conforme"],
+    r.circ.map(q => [`<b>${esc(q.tab)}</b>`, q.id, esc(q.desc), "", "", "", ""]),
+    "ex-prot",
+    "Registro de pruebas por circuito"
+  );
+  B += kv(
+    [
+      ["Resistencia de puesta a tierra medida", "__________ Ω (máximo 25 Ω, Regla 060-712)"],
+      ["Tensión en el tablero general", "__________ V"],
+      ["Tensión en la salida más alejada", "__________ V"],
+      ["Instrumentos (marca, modelo, calibración)", ""],
+      ["Fecha de las pruebas", ""],
+      ["Ingeniero responsable (nombre, CIP y firma)", ""],
+      ["Propietario (nombre y firma)", ""]
+    ],
+    "Mediciones generales y conformidad"
+  );
+  // D. Documentos que completan el expediente (los adjunta el proyectista)
+  B += sub("Anexo D · Documentos complementarios");
+  B += `<p>Documentos que el proyectista adjunta al expediente para su presentación:</p>`;
+  B += tbl(
+    ["", "Documento", "Emite"],
+    [
+      ["☐", "Factibilidad de suministro y fijación del punto de diseño", "Empresa concesionaria"],
+      ["☐", "Certificado de habilidad del ingeniero proyectista", "Colegio de Ingenieros del Perú"],
+      ["☐", "Plano de ubicación y planos de arquitectura de referencia", "Proyectista de arquitectura"],
+      ["☐", "Fichas técnicas de conductores, tableros, interruptores y luminarias", "Fabricantes"],
+      ["☐", "Archivos DXF de las láminas", "Proyectista (JMG - ELECTRIC)"]
+    ],
+    "",
+    "Documentos complementarios"
+  );
   B += fin;
 
   /* ---------- PORTADA, CONTROL DEL DOCUMENTO E ÍNDICES ---------- */
@@ -569,7 +716,7 @@ function expediente(r, estilo = "formal") {
       return li(e ? tid(e[0]) : "", h.hoja, h.tit + (h.cont ? " (continuación)" : ""));
     }).join(
       ""
-    )}</ol><p class="ex-nota">Los planos de planta (distribución de alumbrado, tomacorrientes y fuerza) los adjunta el proyectista.</p></section>`;
+    )}</ol>${lamsDis.length ? "" : '<p class="ex-nota">Los planos de planta (distribución de alumbrado, tomacorrientes y fuerza) los adjunta el proyectista.</p>'}</section>`;
   return `<div class="ex ex-${estilo === "formal" ? "formal" : "jmg"}">${portada}${control}${indice}${B}</div>`;
 
   // Desarrollo paso a paso del cálculo de un alimentador o circuito
@@ -581,13 +728,17 @@ function expediente(r, estilo = "formal") {
       lim = alim ? DV_ALIM : DV_DER,
       acum = alim ? x.dvAc : x.dVt,
       limT = alim ? DV_ALIM : DV_TOT;
+    // Factor total del conductor (el que usó el cálculo: Izc / Iz) y su parte de agrupamiento
+    const fcx = x.Iz > 0 && x.Izc > 0 ? x.Izc / x.Iz : fc,
+      fa = c.ft > 0 ? fcx / c.ft : 1;
     const tit = alim ? esc(x.desc) : `${x.tab} · ${x.id} · ${esc(x.desc)}`,
       Imin = x.Imin && x.Id === x.Imin;
     return `<div class="ex-calc"><h4>${tit} <span>${fmt(x.P, 0)} W · ${s.txt} · L = ${fmt(x.L, 1)} m</span></h4><dl>
       <dt>Corriente nominal</dt><dd>${mx(`${mi("I")} = ${fr(fmt(x.P, 0), `${k} × ${s.V} × ${fmt(c.fp, 2)}`)} = <b>${fmt(x.I, 2)} A</b>`)}</dd>
       <dt>Corriente de diseño</dt><dd>${mx(`${sb("I", "d")} = ${fmt(x.fd ?? FD, 2)} × ${fmt(x.I, 2)} = ${fmt((x.fd ?? FD) * x.I, 2)} A`)}${x.viv && c.resAl > 0 ? ` <span class="ex-dn">reserva del ${c.resAl} % para ampliaciones</span>` : ""}${Imin ? ` → se adopta la mínima del código: <b>${fmt(x.Imin, 0)} A</b>` : ""}</dd>
       <dt>Interruptor</dt><dd>${mx(`${sb("I", "n")} = <b>${x.itm ?? "—"} A</b> ≥ ${sb("I", "d")} = ${fmt(x.Id, 2)} A`)} · ${s.tri || x.f3 ? 3 : 2} polos${alim ? "" : " · curva " + x.curva}</dd>
-      <dt>Conductor</dt><dd>${mi("S")} = <b>${x.S} mm²</b> · ${mx(`${sb("I", "z")} · ${sb("F", "c")} = ${fmt(x.Iz, 1)} × ${fmt(fc, 2)} = ${fmt(x.Izc, 1)} A ≥ ${sb("I", "n")} = ${x.itm ?? "—"} A`)} <span class="ex-dn">Tabla 2, método ${c.met}</span></dd>
+      <dt>Factores de corrección</dt><dd>${mx(`${sb("F", "c")} = ${sb("F", "t")} × ${sb("F", "a")} = ${fmt(c.ft, 2)} × ${fmt(fa, 2)} = ${fmt(fcx, 2)}`)} <span class="ex-dn">${sb("F", "t")}: temperatura ${c.temp} °C, Tabla 5A · ${sb("F", "a")}: ${alim ? "un circuito en su tubería" : "circuitos agrupados en la tubería, Tabla 5C"}</span></dd>
+      <dt>Conductor</dt><dd>${mi("S")} = <b>${x.S} mm²</b> · ${mx(`${sb("I", "z")} · ${sb("F", "c")} = ${fmt(x.Iz, 1)} × ${fmt(fcx, 2)} = ${fmt(x.Izc, 1)} A ≥ ${sb("I", "n")} = ${x.itm ?? "—"} A`)} <span class="ex-dn">${sb("I", "z")}: Tabla 2, método ${c.met}, ${c.aisl === "pvc" ? "PVC 70 °C" : "XLPE 90 °C"}</span></dd>
       <dt>Caída de tensión</dt><dd>${mx(`Δ${mi("V")} = ${fr(`${K} × ${c.rho} × ${fmt(x.L, 1)} × ${fmt(x.I, 2)}`, x.S)} = ${fmt(x.dV, 2)} V`)} → <b>${fmt(x.dVp, 2)} %</b> ≤ ${lim} % · acumulada <b>${fmt(acum, 2)} %</b> ≤ ${limT} %</dd>
       <dt>Protección y tubo</dt><dd>Conductor de protección ${x.St} mm² (Tabla 16) · tubería ${tub(x.tubo)}</dd>
       <dt>Resultado</dt><dd>${pill(x.ok, "Cumple", "Revisar")}</dd></dl></div>`;

@@ -553,7 +553,11 @@ function unifilar(r, op = {}) {
   }
   // Acometida y alimentador principal (primera lámina); en las demás, el título de continuación
   if (!CAB) {
-    T(X, 26, `DIAGRAMA UNIFILAR · DETALLE DE TABLEROS (continuación de la lámina IE-01)`, { s: 11, b: 1, f: NAVY });
+    T(X, 26, `DIAGRAMA UNIFILAR · DETALLE DE TABLEROS (continuación de la lámina ${ieNum("IE-01")})`, {
+      s: 11,
+      b: 1,
+      f: NAVY
+    });
   } else {
     L(x - 12, 14, x + 12, 14, 3);
     L(x, 14, x, 64);
@@ -735,7 +739,7 @@ function unifilar(r, op = {}) {
     `Unifilar ${multi ? "multifamiliar" : "unifamiliar"} · Escala S/E`,
     HOJA + (op.parte ? " · " + op.parte : "")
   );
-  if (op.sigue) T(X, yr - 6, `Continúa en la lámina ${op.sigue}`, { s: 8, b: 1, f: CU });
+  if (op.sigue) T(X, yr - 6, `Continúa en la lámina ${ieNum(op.sigue)}`, { s: 8, b: 1, f: CU });
   const H = yr + hr + 16;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Arial, Helvetica, sans-serif"><rect width="${W}" height="${H}" fill="#fff"/><rect x="6" y="4" width="${W - 12}" height="${H - 10}" fill="none" stroke="${NAVY}" stroke-width="1.5"/>${o.join("")}</svg>`;
   return { svg, W, H };

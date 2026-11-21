@@ -20,17 +20,17 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,500&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script>/* Tema antes de dibujar la página: claro o gris (se elige en la pestaña Ajustes) */(function(){var t="claro";try{t=localStorage.getItem("jmg-electric-tema")||"claro"}catch(e){}if(t==="oscuro")t="gris";if(t!=="gris")t="claro";var h=document.documentElement;h.setAttribute("data-theme",t==="gris"?"dark":"light");h.setAttribute("data-tema",t);h.setAttribute("data-paleta","grafito")})();</script>
-<link rel="stylesheet" href="css/sitio.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/aplicacion.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/expediente.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/temas.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/paletas.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/barra-centro.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/acceso.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/admin.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/ventanas.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/fichas.css?v=3.3.0-b3">
-<link rel="stylesheet" href="css/plano.css?v=3.3.0-b3">
+<link rel="stylesheet" href="css/sitio.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/aplicacion.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/expediente.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/temas.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/paletas.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/barra-centro.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/acceso.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/admin.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/ventanas.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/fichas.css?v=3.3.0-b4">
+<link rel="stylesheet" href="css/plano.css?v=3.3.0-b4">
 </head>
 <body class="sin-acceso">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="jmg-letras" fill="#ffc800"><path d="M159 623H307V733H445V285H594V872H159Z"/><path d="M650 285H824L903 438L826 575L798 521V872H650Z"/><path d="M1020 287L826 631H920L860 870L1054 551H955Z"/><path d="M1048 285H1223V872H1075V521H993Z"/><path d="M1280 285H1761V423H1429V733H1611V656H1508V519H1761V872H1280Z"/></g><g id="jmg-logo"><use href="#jmg-letras"/><text x="159" y="1050" font-family="'Chakra Petch','Arial Black',sans-serif" font-weight="700" font-size="172" fill="#ffc800" textLength="1602" lengthAdjust="spacing">PROJECTS &amp; ENERGY</text></g></defs></svg>
@@ -874,7 +874,7 @@
     <div class="la-cuerpo">
       <div class="la-op">
         <div class="la-lista"><label>Lámina<select id="laSel"></select></label><button type="button" class="vw-btn" data-la="nueva" title="Otra lámina del proyecto (por ejemplo, IE-02 tomacorrientes)">+ Nueva</button><button type="button" class="vw-btn" data-la="quitar" title="Elimina esta lámina">Eliminar</button></div>
-        <label>Papel<select id="laTam"><option value="A4">A4 (297 × 210 mm)</option><option value="A3">A3 (420 × 297 mm)</option><option value="A2">A2 (594 × 420 mm)</option><option value="A1">A1 (841 × 594 mm)</option></select></label>
+        <label>Papel<select id="laTam"><option value="auto">Automático (recomendado)</option><option value="A4">A4 (297 × 210 mm)</option><option value="A3">A3 (420 × 297 mm)</option><option value="A2">A2 (594 × 420 mm)</option><option value="A1">A1 (841 × 594 mm)</option></select></label>
         <label>Escala de la lámina<select id="laEsc"></select></label>
         <label>Qué va en la lámina<select id="laZona"></select></label>
         <button type="button" class="vw-btn la-marcar" data-la="marcar" title="Designe en el plano las dos esquinas de lo que va en la lámina">Marcar la zona en el plano</button>
@@ -1026,73 +1026,73 @@
     <p class="acc-pie">JMG Projects &amp; Energy · Los resultados son de referencia; la responsabilidad del diseño recae en el ingeniero colegiado que suscribe el expediente.</p>
   </div></div>
 </div>
-<script src="js/base/logo.js?v=3.3.0-b3"></script>
-<script src="js/base/tablas-cne.js?v=3.3.0-b3"></script>
-<script src="js/base/textos.js?v=3.3.0-b3"></script>
-<script src="js/base/datos.js?v=3.3.0-b3"></script>
-<script src="js/calculo/calculo.js?v=3.3.0-b3"></script>
-<script src="js/calculo/calculo-conductores.js?v=3.3.0-b3"></script>
-<script src="js/calculo/calculo-demanda.js?v=3.3.0-b3"></script>
-<script src="js/calculo/calculo-tierra-fases.js?v=3.3.0-b3"></script>
-<script src="js/calculo/calculo-plano.js?v=3.3.0-b3"></script>
-<script src="js/calculo/iluminacion.js?v=3.3.0-b3"></script>
-<script src="js/calculo/calculo-vivienda.js?v=3.3.0-b3"></script>
-<script src="js/calculo/calculo-edificio.js?v=3.3.0-b3"></script>
-<script src="js/calculo/verificaciones.js?v=3.3.0-b3"></script>
-<script src="js/resultados/resultados.js?v=3.3.0-b3"></script>
-<script src="js/resultados/metrado.js?v=3.3.0-b3"></script>
-<script src="js/resultados/presupuesto.js?v=3.3.0-b3"></script>
-<script src="js/planos/dibujo.js?v=3.3.0-b3"></script>
-<script src="js/planos/unifilar.js?v=3.3.0-b3"></script>
-<script src="js/planos/rotulo.js?v=3.3.0-b3"></script>
-<script src="js/planos/exportar-planos.js?v=3.3.0-b3"></script>
-<script src="js/planos/simbolos.js?v=3.3.0-b3"></script>
-<script src="js/planos/alturas.js?v=3.3.0-b3"></script>
-<script src="js/planos/detalles.js?v=3.3.0-b3"></script>
-<script src="js/planos/tableros.js?v=3.3.0-b3"></script>
-<script src="js/planos/medidores.js?v=3.3.0-b3"></script>
-<script src="js/planos/tablerogeneral.js?v=3.3.0-b3"></script>
-<script src="js/exportar/expediente.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/interfaz.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel-anexos.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel-memoria.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel-calculos.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel-resumen.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel-planos.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel-metrado.js?v=3.3.0-b3"></script>
-<script src="js/exportar/excel-presupuesto.js?v=3.3.0-b3"></script>
-<script src="js/exportar/descargas.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/sitio.js?v=3.3.0-b3"></script>
-<script src="js/proyectos/proyectos.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/herramientas.js?v=3.3.0-b3"></script>
-<script src="js/proyectos/archivo.js?v=3.3.0-b3"></script>
-<script src="js/proyectos/respaldo.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/app.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/ventana.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/conductores.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/ficha.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/longitudes.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/precios.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/ficha-tablero.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/tabla-cargas.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/parametros.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/departamentos.js?v=3.3.0-b3"></script>
-<script src="js/ventanas/datos-proyecto.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/panel.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/menus-cinta.js?v=3.3.0-b3"></script>
-<script src="js/editor/dxf.js?v=3.3.0-b3"></script>
-<script src="js/editor/plano-archivo.js?v=3.3.0-b3"></script><script src="js/editor/plano-vista.js?v=3.3.0-b3"></script><script src="js/editor/plano-herramientas.js?v=3.3.0-b3"></script><script src="js/editor/plano-comandos.js?v=3.3.0-b3"></script><script src="js/editor/plano-menu.js?v=3.3.0-b3"></script>
-<script src="js/editor/diseno-catalogo.js?v=3.3.0-b3"></script><script src="js/editor/diseno-geometria.js?v=3.3.0-b3"></script><script src="js/editor/diseno-conexiones.js?v=3.3.0-b3"></script><script src="js/editor/diseno-dibujo.js?v=3.3.0-b3"></script><script src="js/editor/diseno-herramientas.js?v=3.3.0-b3"></script><script src="js/editor/diseno-edicion.js?v=3.3.0-b3"></script><script src="js/editor/diseno-propiedades.js?v=3.3.0-b3"></script><script src="js/editor/diseno-cinta.js?v=3.3.0-b3"></script><script src="js/editor/diseno-revision.js?v=3.3.0-b3"></script><script src="js/editor/laminas.js?v=3.3.0-b3"></script><script src="js/editor/plantas-areas.js?v=3.3.0-b3"></script><script src="js/editor/ambientes.js?v=3.3.0-b3"></script><script src="js/editor/arquitectura.js?v=3.3.0-b3"></script><script src="js/editor/luminarias.js?v=3.3.0-b3"></script><script src="js/editor/datos-calculo.js?v=3.3.0-b3"></script><script src="js/editor/bloques-plantillas.js?v=3.3.0-b3"></script><script src="js/editor/cuadro-metrado.js?v=3.3.0-b3"></script><script src="js/editor/repartir-pasos.js?v=3.3.0-b3"></script><script src="js/editor/iluminacion-ventana.js?v=3.3.0-b3"></script>
-<script src="js/editor/capas.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/centro.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/inicio.js?v=3.3.0-b3"></script>
-<script src="js/interfaz/tema.js?v=3.3.0-b3"></script>
+<script src="js/base/logo.js?v=3.3.0-b4"></script>
+<script src="js/base/tablas-cne.js?v=3.3.0-b4"></script>
+<script src="js/base/textos.js?v=3.3.0-b4"></script>
+<script src="js/base/datos.js?v=3.3.0-b4"></script>
+<script src="js/calculo/calculo.js?v=3.3.0-b4"></script>
+<script src="js/calculo/calculo-conductores.js?v=3.3.0-b4"></script>
+<script src="js/calculo/calculo-demanda.js?v=3.3.0-b4"></script>
+<script src="js/calculo/calculo-tierra-fases.js?v=3.3.0-b4"></script>
+<script src="js/calculo/calculo-plano.js?v=3.3.0-b4"></script>
+<script src="js/calculo/iluminacion.js?v=3.3.0-b4"></script>
+<script src="js/calculo/calculo-vivienda.js?v=3.3.0-b4"></script>
+<script src="js/calculo/calculo-edificio.js?v=3.3.0-b4"></script>
+<script src="js/calculo/verificaciones.js?v=3.3.0-b4"></script>
+<script src="js/resultados/resultados.js?v=3.3.0-b4"></script>
+<script src="js/resultados/metrado.js?v=3.3.0-b4"></script>
+<script src="js/resultados/presupuesto.js?v=3.3.0-b4"></script>
+<script src="js/planos/dibujo.js?v=3.3.0-b4"></script>
+<script src="js/planos/unifilar.js?v=3.3.0-b4"></script>
+<script src="js/planos/rotulo.js?v=3.3.0-b4"></script>
+<script src="js/planos/exportar-planos.js?v=3.3.0-b4"></script>
+<script src="js/planos/simbolos.js?v=3.3.0-b4"></script>
+<script src="js/planos/alturas.js?v=3.3.0-b4"></script>
+<script src="js/planos/detalles.js?v=3.3.0-b4"></script>
+<script src="js/planos/tableros.js?v=3.3.0-b4"></script>
+<script src="js/planos/medidores.js?v=3.3.0-b4"></script>
+<script src="js/planos/tablerogeneral.js?v=3.3.0-b4"></script>
+<script src="js/exportar/expediente.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/interfaz.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel-anexos.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel-memoria.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel-calculos.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel-resumen.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel-planos.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel-metrado.js?v=3.3.0-b4"></script>
+<script src="js/exportar/excel-presupuesto.js?v=3.3.0-b4"></script>
+<script src="js/exportar/descargas.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/sitio.js?v=3.3.0-b4"></script>
+<script src="js/proyectos/proyectos.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/herramientas.js?v=3.3.0-b4"></script>
+<script src="js/proyectos/archivo.js?v=3.3.0-b4"></script>
+<script src="js/proyectos/respaldo.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/app.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/ventana.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/conductores.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/ficha.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/longitudes.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/precios.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/ficha-tablero.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/tabla-cargas.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/parametros.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/departamentos.js?v=3.3.0-b4"></script>
+<script src="js/ventanas/datos-proyecto.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/panel.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/menus-cinta.js?v=3.3.0-b4"></script>
+<script src="js/editor/dxf.js?v=3.3.0-b4"></script>
+<script src="js/editor/plano-archivo.js?v=3.3.0-b4"></script><script src="js/editor/plano-vista.js?v=3.3.0-b4"></script><script src="js/editor/plano-herramientas.js?v=3.3.0-b4"></script><script src="js/editor/plano-comandos.js?v=3.3.0-b4"></script><script src="js/editor/plano-menu.js?v=3.3.0-b4"></script>
+<script src="js/editor/diseno-catalogo.js?v=3.3.0-b4"></script><script src="js/editor/diseno-geometria.js?v=3.3.0-b4"></script><script src="js/editor/diseno-conexiones.js?v=3.3.0-b4"></script><script src="js/editor/diseno-dibujo.js?v=3.3.0-b4"></script><script src="js/editor/diseno-herramientas.js?v=3.3.0-b4"></script><script src="js/editor/diseno-edicion.js?v=3.3.0-b4"></script><script src="js/editor/diseno-propiedades.js?v=3.3.0-b4"></script><script src="js/editor/diseno-cinta.js?v=3.3.0-b4"></script><script src="js/editor/diseno-revision.js?v=3.3.0-b4"></script><script src="js/editor/laminas.js?v=3.3.0-b4"></script><script src="js/editor/plantas-areas.js?v=3.3.0-b4"></script><script src="js/editor/ambientes.js?v=3.3.0-b4"></script><script src="js/editor/arquitectura.js?v=3.3.0-b4"></script><script src="js/editor/luminarias.js?v=3.3.0-b4"></script><script src="js/editor/datos-calculo.js?v=3.3.0-b4"></script><script src="js/editor/bloques-plantillas.js?v=3.3.0-b4"></script><script src="js/editor/cuadro-metrado.js?v=3.3.0-b4"></script><script src="js/editor/repartir-pasos.js?v=3.3.0-b4"></script><script src="js/editor/iluminacion-ventana.js?v=3.3.0-b4"></script>
+<script src="js/editor/capas.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/centro.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/inicio.js?v=3.3.0-b4"></script>
+<script src="js/interfaz/tema.js?v=3.3.0-b4"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="js/cuenta/nube.js?v=3.3.0-b3"></script>
-<script src="js/cuenta/acceso.js?v=3.3.0-b3"></script>
-<script src="js/cuenta/admin.js?v=3.3.0-b3"></script>
+<script src="js/cuenta/nube.js?v=3.3.0-b4"></script>
+<script src="js/cuenta/acceso.js?v=3.3.0-b4"></script>
+<script src="js/cuenta/admin.js?v=3.3.0-b4"></script>
 </body>
 </html>

@@ -215,7 +215,7 @@ function laHex(c) {
 
 /* ---------- Grabar el plano: arquitectura de la zona y diseño eléctrico ---------- */
 // Dibuja con el grabador y devuelve sus elementos. cx, cy: centro de la zona; s: píxeles por unidad del dibujo
-function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda, cuadro, ocl }) {
+function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda, cuadro, cuadros, ocl, sinDis }) {
   // Capas del diseño que esta lámina no muestra
   const vis = dsD().capas.map(c => [c, c.vis]);
   (ocl || []).forEach(n => {
@@ -236,15 +236,15 @@ function laGrabar({ cx, cy, s, zona, arq, colorArq, leyenda, cuadro, ocl }) {
   DS_EXPORT = true;
   try {
     if (arq) laArq(g, zona, colorArq);
-    dsPintar(g);
+    if (!sinDis) dsPintar(g);
     if (leyenda) {
       g.capa = "E-LEYENDA";
       dsDibLeyenda(g, leyenda, "#14212e", s, 1.2);
     }
-    if (cuadro) {
+    [...(cuadro ? [cuadro] : []), ...(cuadros || [])].forEach(cu => {
       g.capa = "E-LEYENDA";
-      dsDibCuadro(g, cuadro, "#14212e", s, 1.2);
-    }
+      dsDibCuadro(g, cu, "#14212e", s, 1.2);
+    });
   } finally {
     Object.assign(PLV, vPLV);
     DSU.sueltos = vSuel;
@@ -319,7 +319,7 @@ function laArq(g, z, modo) {
 /* ---------- Lámina en SVG ---------- */
 // Opciones de la lámina (con el proyecto: título, número y notas; en el navegador: papel, zona y colores)
 const LA_DEF = {
-  tam: "A3",
+  tam: "auto",
   zona: "",
   arq: "gris",
   color: "color",
@@ -338,7 +338,7 @@ function laLista() {
   if (!(D.lamI >= 0 && D.lamI < D.lams.length)) D.lamI = 0;
   return D.lams;
 }
-const laOp = (i = dsD().lamI || 0) => ({ ...LA_DEF, ...(laLista()[i] || {}) });
+const laOp = (i = dsD().lamI || 0) => ({ ...LA_DEF, ...(laLista()[i] || {}), _i: i, _n: laLista().length });
 // Zona del dibujo que va en la lámina: una planta encuadrada, lo que se ve en pantalla o todo el diseño
 function laZona(op) {
   // Sin zona elegida: la primera planta encuadrada
@@ -364,12 +364,158 @@ function laZona(op) {
     Math.max(...bb.map(b => b[3])) + m
   ];
 }
-// Arma la lámina: devuelve { svg, aviso } (aviso si la zona no entra en el papel a esa escala)
-function laSvg(op = laOp()) {
-  const [W, H] = LAMINAS[op.tam] || LAMINAS.A3,
-    D = dsD(),
-    escD = op.esc || D.escala,
+/* Papel y escala automáticos (criterio de la plataforma): las plantas de instalaciones se presentan a 1:50; se elige
+   el papel más chico donde entra la zona con su columna de leyenda, cuadro, notas y rótulo. Si no entra en A1, la
+   escala siguiente. Con el papel o la escala elegidos a mano, solo se ajusta lo otro. */
+const LA_ESC_AUTO = [50, 75, 100, 125, 150, 200, 250, 500];
+const LA_TAM_AUTO = ["A3", "A2", "A1"];
+// Alto de cada fila de la leyenda en la lámina (mm; criterio: más compacta que la del editor)
+const LA_LEY_FILA = 7;
+// Tamaño del rótulo y de las notas según el papel (en A3 y A4, más chicos)
+const laK = tam => ({ A4: 0.7, A3: 0.82 })[tam] || 1;
+// Notas en líneas de un ancho dado (mm), con su número
+function laNotas(notas, ancho, fs) {
+  const max = Math.max(10, Math.floor(ancho / (fs * 0.53))),
+    out = [];
+  String(notas || "")
+    .split("\n")
+    .map(t => t.trim())
+    .filter(Boolean)
+    .forEach((t, i) => {
+      let u = "";
+      const ls = [];
+      t.split(" ").forEach(p => {
+        if ((u + " " + p).trim().length > max && u) {
+          ls.push(u);
+          u = p;
+        } else u = (u + " " + p).trim();
+      });
+      ls.push(u);
+      ls.forEach((l, j) => out.push([j ? "" : `${i + 1}.`, l]));
+    });
+  return out;
+}
+/* Disposición de la lámina en un papel y una escala (mm de papel): marco (25 mm a la izquierda para anillar, 10 mm en
+   los demás lados), columna a la derecha con la leyenda, el cuadro de circuitos, las notas y el rótulo al pie; si el
+   cuadro no cabe, sigue en otra columna a su izquierda, por tableros. El resto es el área de dibujo. */
+function laDisp(op, tam, escD, z, c) {
+  const [W, H] = LAMINAS[tam],
+    k = laK(tam),
+    g = 4,
+    mx0 = 25,
+    my0 = 10,
+    mx1 = W - 10,
+    my1 = H - 10,
+    // Leyenda y cuadro: sus medidas en mm (DS_LEY, DS_CUA) por el factor del papel
+    CU = { tit: DS_CUA.tit * k, fila: DS_CUA.fila * k, cab: DS_CUA.cab * k },
+    cuaW = DS_CUA.w.reduce((a, b) => a + b, 0) * k,
+    RW = Math.max(c.conLey ? c.leyW * k : 0, c.conCua ? cuaW : 0, 150 * k),
+    RH = 72 * k,
+    nfs = 2.1 * k,
+    notas = laNotas(op.notas, RW - 9 * k, nfs),
+    NH = notas.length ? 8 * k + notas.length * nfs * 1.55 + 2 : 0,
+    x1 = mx1 - g,
+    x0 = x1 - RW;
+  let y = my0 + g;
+  const ley = c.conLey ? { x: x0, y } : null;
+  if (ley) y += c.leyH * k + g;
+  // Cuadro: bloques por tablero (nombre, encabezado, circuitos y total), en la columna y luego en columnas a la izquierda
+  const cuas = [];
+  let col = { x: x0, y, fin: my1 - g - RH - (NH ? NH + g : 0) },
+    act = null,
+    sobra = false;
+  if (c.conCua)
+    c.bloques.forEach(b => {
+      const bh = b.length * CU.fila + CU.cab;
+      if (act && act.y + act.h + bh > col.fin) act = null;
+      if (!act) {
+        // Una columna más como máximo (en papel chico el cuadro no debe quitarle el sitio al dibujo)
+        if (col.y + CU.tit + bh > col.fin) {
+          if (col.x < x0) sobra = true;
+          else {
+            col = { x: x0 - g - cuaW, y: my0 + g, fin: my1 - g };
+            if (col.y + CU.tit + bh > col.fin) sobra = true;
+          }
+        }
+        act = { x: col.x, y: col.y, h: CU.tit, filas: [], cont: cuas.length > 0 };
+        cuas.push(act);
+      }
+      act.filas.push(...b);
+      act.h += bh;
+      col.y = act.y + act.h + g;
+    });
+  const izq = Math.min(x0, ...cuas.map(u => u.x)),
+    a = { x0: mx0 + g, y0: my0 + g, x1: izq - 2 * g, y1: my1 - g },
     mmU = (EPL.f * 1000) / escD,
+    zw = (z[2] - z[0]) * mmU,
+    zh = (z[3] - z[1]) * mmU;
+  return {
+    tam,
+    escD,
+    W,
+    H,
+    k,
+    mx0,
+    my0,
+    mx1,
+    my1,
+    g,
+    RW,
+    RH,
+    NH,
+    nfs,
+    notas,
+    x0,
+    ley,
+    cuas,
+    sobra,
+    a,
+    sep: izq - g,
+    mmU,
+    zw,
+    zh,
+    entra: zw <= a.x1 - a.x0 + 0.5 && zh <= a.y1 - a.y0 + 0.5 && !sobra
+  };
+}
+// Elige papel y escala (los que son automáticos) para la zona; si nada entra, el papel y la escala mayores
+function laElegir(op, z, c) {
+  const tams = LAMINAS[op.tam] ? [op.tam] : LA_TAM_AUTO,
+    escs = op.esc > 0 ? [op.esc] : LA_ESC_AUTO;
+  for (const e of escs)
+    for (const t of tams) {
+      const d = laDisp(op, t, e, z, c);
+      if (d.entra) return d;
+    }
+  return laDisp(op, tams[tams.length - 1], op.esc > 0 ? op.esc : 50, z, c);
+}
+// Con la escala de la lámina y sus capas: los símbolos, textos, leyenda y cuadro miden lo mismo en el papel a
+// cualquier escala (como los objetos anotativos de AutoCAD); la arquitectura sí cambia con la escala
+function laCon(esc, ocl, fn) {
+  const D = dsD(),
+    e0 = D.escala,
+    vis = D.capas.map(c => [c, c.vis]);
+  D.escala = esc;
+  (ocl || []).forEach(n => {
+    const c = D.capas.find(x => x.n === n);
+    if (c) c.vis = false;
+  });
+  try {
+    return fn();
+  } finally {
+    D.escala = e0;
+    vis.forEach(([c, v]) => (c.vis = v));
+  }
+}
+// Nombre de la vista bajo el dibujo
+function laVistaTit(op) {
+  const z = op.zona || (EPL.plantas.length ? "planta:0" : "todo");
+  if (z.startsWith("planta:") && EPL.plantas[+z.slice(7)]) return "PLANTA " + EPL.plantas[+z.slice(7)].n.toUpperCase();
+  return (op.tit || "Instalaciones eléctricas").toUpperCase();
+}
+// Arma la lámina: devuelve { svg, aviso, W, H, tam, esc } (aviso si la zona no entra en el papel a esa escala)
+function laSvg(op = laOp()) {
+  const D = dsD(),
+    z = laZona(op),
     P = {
       nombre: $("p_nombre").value,
       prop: $("p_prop").value,
@@ -377,88 +523,108 @@ function laSvg(op = laOp()) {
       proy: $("p_proy").value,
       cip: $("p_cip").value
     },
-    hr = 124 / LA_PX,
-    rw = 460 / LA_PX,
-    // Marco: 25 mm a la izquierda (para anillar), 10 mm en los demás lados
-    mx0 = 25,
-    my0 = 10,
-    mx1 = W - 10,
-    my1 = H - 10,
-    banda = my1 - hr,
-    z = laZona(op),
-    hayLey = D.els.some(
-      e => e.t === "ley" && dsBBox(e)[0] < z[2] && dsBBox(e)[2] > z[0] && dsBBox(e)[1] < z[3] && dsBBox(e)[3] > z[1]
-    ),
-    conLey = op.ley && !hayLey && D.els.some(e => e.t !== "ley"),
-    // Cuadro de circuitos debajo de la leyenda (si la zona no tiene uno y hay tableros con circuitos)
-    hayCua = D.els.some(
-      e => e.t === "cua" && dsBBox(e)[0] < z[2] && dsBBox(e)[2] > z[0] && dsBBox(e)[1] < z[3] && dsBBox(e)[3] > z[1]
-    ),
-    conCua = op.cua !== false && !hayCua && D.els.some(e => e.k === "tab" && e.nc),
-    lw = Math.max(conLey ? dsTamLey()[0] * mmU : 0, conCua ? dsTamCua()[0] * mmU : 0),
-    // Zona de dibujo (sobre la banda del rótulo y, con leyenda o cuadro, a su izquierda)
-    ax0 = mx0 + 4,
-    ay0 = my0 + 4,
-    ax1 = mx1 - 4 - (lw ? lw + 6 : 0),
-    ay1 = banda - 4,
-    acx = (ax0 + ax1) / 2,
-    acy = (ay0 + ay1) / 2,
-    zw = (z[2] - z[0]) * mmU,
-    zh = (z[3] - z[1]) * mmU,
+    dentro = t =>
+      D.els.some(
+        e => e.t === t && dsBBox(e)[0] < z[2] && dsBBox(e)[2] > z[0] && dsBBox(e)[1] < z[3] && dsBBox(e)[3] > z[1]
+      ),
+    conLey = op.ley && !dentro("ley") && D.els.some(e => e.t !== "ley"),
+    conCua = op.cua !== false && !dentro("cua") && D.els.some(e => e.k === "tab" && e.nc),
+    filasLey = conLey ? laCon(D.escala, op.ocl, () => dsFilasLey().length) : 0,
+    // Bloques del cuadro: cada tablero con sus circuitos y su total
+    bloques = [];
+  if (conCua) {
+    dsFilasCua().forEach(f => {
+      if (f.tit || !bloques.length) bloques.push([]);
+      bloques[bloques.length - 1].push(f);
+    });
+    // Solo los tableros que están en la zona (si alguno lo está): cada planta con los suyos
+    const enZ = new Set(
+      D.els
+        .filter(e => e.k === "tab" && e.nc && e.x >= z[0] && e.x <= z[2] && e.y >= z[1] && e.y <= z[3])
+        .map(e => e.nom || "Tablero")
+    );
+    if (enZ.size) {
+      const sel = bloques.filter(b => b[0].tit && enZ.has(b[0].tit));
+      bloques.splice(0, bloques.length, ...sel);
+    }
+  }
+  const c = {
+      conLey,
+      conCua,
+      leyW: DS_LEY.w.reduce((a, b) => a + b, 0),
+      leyH: DS_LEY.tit + DS_LEY.cab + Math.max(1, filasLey) * LA_LEY_FILA,
+      bloques
+    },
+    d = laElegir(op, z, c),
+    { W, H, k, escD, mmU, a, mx0, my0, mx1, my1 } = d,
+    acx = (a.x0 + a.x1) / 2,
+    acy = (a.y0 + a.y1) / 2,
     cx = (z[0] + z[2]) / 2,
     cy = (z[1] + z[3]) / 2,
-    s = mmU * LA_K;
-  const avEsc =
-    escD !== D.escala
-      ? ` Los símbolos y textos se ven al ${Math.round((D.escala / escD) * 100)} % de su tamaño: el diseño está dibujado para 1:${D.escala}.`
-      : "";
-  const aviso =
-    (zw > ax1 - ax0 + 0.5 || zh > ay1 - ay0 + 0.5
-      ? `La zona (${fmt(zw, 0)} × ${fmt(zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${op.tam} (${fmt(ax1 - ax0, 0)} × ${fmt(ay1 - ay0, 0)} mm): elija un papel más grande, otra escala o marque una zona menor.`
-      : "") + avEsc;
-  // Leyenda arriba a la derecha (en coordenadas del dibujo, para dibujarla con el mismo código)
-  const ley = conLey
-      ? { t: "ley", tit: "LEYENDA", x: cx + (mx1 - 4 - lw - acx) / mmU, y: cy - (ay0 - acy) / mmU }
-      : null,
-    yCua = ay0 + (conLey ? dsTamLey()[1] * mmU + 6 : 0),
-    cua = conCua
-      ? { t: "cua", tit: "CUADRO DE CIRCUITOS", x: cx + (mx1 - 4 - lw - acx) / mmU, y: cy - (yCua - acy) / mmU }
-      : null;
-  const items = laGrabar({
-    cx,
-    cy,
-    s,
-    zona: [z[0], z[1], z[2], z[3]],
-    arq: true,
-    colorArq: op.arq,
-    leyenda: ley,
-    cuadro: cua,
-    ocl: op.ocl
-  });
+    s = mmU * LA_K,
+    aDib = (px, py) => [cx + (px - acx) / mmU, cy - (py - acy) / mmU];
+  const aviso = d.entra
+    ? escD > 75 && String(op.zona || "planta:").startsWith("planta:")
+      ? `A 1:${escD} los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala): para las plantas se recomienda 1:50, con el papel automático.`
+      : ""
+    : a.x1 - a.x0 < 60
+      ? `En ${d.tam} no queda sitio para el dibujo junto a la leyenda, el cuadro y el rótulo: elija un papel más grande o el automático.`
+      : d.sobra
+        ? `El cuadro de circuitos no cabe en ${d.tam}: elija un papel más grande o quite el cuadro de esta lámina.`
+        : `La zona (${fmt(d.zw, 0)} × ${fmt(d.zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${d.tam} (${fmt(a.x1 - a.x0, 0)} × ${fmt(a.y1 - a.y0, 0)} mm): elija un papel más grande, otra escala o marque una zona menor.`;
+  const ley = d.ley ? (([x, y]) => ({ t: "ley", tit: "LEYENDA", x, y }))(aDib(d.ley.x, d.ley.y)) : null,
+    cuadros = d.cuas.map(u =>
+      (([x, y]) => ({
+        t: "cua",
+        tit: u.cont ? "CUADRO DE CIRCUITOS (continuación)" : "CUADRO DE CIRCUITOS",
+        x,
+        y,
+        filas: u.filas
+      }))(aDib(u.x, u.y))
+    );
+  /* El plano a la escala de la lámina; la leyenda y el cuadro, aparte, con el factor del papel (la escala del dibujo
+     dividida por él) y la leyenda con el ancho de la columna (más ancha la descripción) */
+  const lw0 = DS_LEY.w[1],
+    lf0 = DS_LEY.fila,
+    base = { cx, cy, s, zona: [z[0], z[1], z[2], z[3]], ocl: op.ocl };
+  let items;
+  try {
+    DS_LEY.w[1] += Math.max(0, d.RW / k - c.leyW);
+    DS_LEY.fila = LA_LEY_FILA;
+    items = [
+      ...laCon(escD, op.ocl, () => laGrabar({ ...base, arq: true, colorArq: op.arq })),
+      ...laCon(escD * k, op.ocl, () => laGrabar({ ...base, sinDis: true, leyenda: ley, cuadros }))
+    ];
+  } finally {
+    DS_LEY.w[1] = lw0;
+    DS_LEY.fila = lf0;
+  }
   // Del lienzo de grabación al papel (mm), con el centro de la zona en el centro del área
   const Wc = plW() / 2,
     Hc = plH() / 2,
     X = v => +((acx + (v - Wc) / LA_K) * LA_PX).toFixed(2),
     Y = v => +((acy + (v - Hc) / LA_K) * LA_PX).toFixed(2),
     bn = op.color === "bn",
-    C = c => (bn ? (laHex(c) === "#ffffff" ? "#ffffff" : "#000000") : laHex(c));
+    C = col => (bn ? (laHex(col) === "#ffffff" ? "#ffffff" : "#000000") : laHex(col));
   const o = [],
-    q = n => +(n * LA_PX).toFixed(2);
+    q = n => +(n * LA_PX).toFixed(2),
+    INK = "#14212e",
+    NAVY = "#14304f";
   o.push(
-    `<defs><clipPath id="laArea"><rect x="${q(ax0)}" y="${q(ay0)}" width="${q(ax1 - ax0)}" height="${q(ay1 - ay0)}"/></clipPath></defs>`
+    `<defs><clipPath id="laArea"><rect x="${q(a.x0)}" y="${q(a.y0)}" width="${q(a.x1 - a.x0)}" height="${q(a.y1 - a.y0)}"/></clipPath></defs>`
   );
   const cuerpo = [],
     leyO = [];
   items.forEach(it => {
     const dst = it.capa === "E-LEYENDA" ? leyO : cuerpo;
     if (it.t === "l") {
-      const d = it.p.map((p, i) => `${i ? "L" : "M"}${X(p[0])} ${Y(p[1])}`).join("") + (it.c ? "Z" : "");
+      const p = it.p.map((pp, i) => `${i ? "L" : "M"}${X(pp[0])} ${Y(pp[1])}`).join("") + (it.c ? "Z" : "");
       dst.push(
-        `<path d="${d}" fill="none" stroke="${C(it.col)}" stroke-width="${Math.max(0.1, it.w / LA_K) * LA_PX}"${it.dash ? ` stroke-dasharray="${it.dash.map(v => +((v / LA_K) * LA_PX).toFixed(2)).join(" ")}"` : ""} stroke-linecap="round" stroke-linejoin="round"/>`
+        `<path d="${p}" fill="none" stroke="${C(it.col)}" stroke-width="${Math.max(0.1, it.w / LA_K) * LA_PX}"${it.dash ? ` stroke-dasharray="${it.dash.map(v => +((v / LA_K) * LA_PX).toFixed(2)).join(" ")}"` : ""} stroke-linecap="round" stroke-linejoin="round"/>`
       );
     } else if (it.t === "f") {
-      const d = it.pol.map(s => s.p.map((p, i) => `${i ? "L" : "M"}${X(p[0])} ${Y(p[1])}`).join("") + "Z").join("");
-      dst.push(`<path d="${d}" fill="${C(it.col)}" stroke="none" fill-rule="evenodd"/>`);
+      const p = it.pol.map(u => u.p.map((pp, i) => `${i ? "L" : "M"}${X(pp[0])} ${Y(pp[1])}`).join("") + "Z").join("");
+      dst.push(`<path d="${p}" fill="${C(it.col)}" stroke="none" fill-rule="evenodd"/>`);
     } else if (it.t === "t") {
       const fs = +((it.h / LA_K) * LA_PX).toFixed(2),
         an = it.al === "center" ? "middle" : it.al === "right" || it.al === "end" ? "end" : "start",
@@ -479,60 +645,72 @@ function laSvg(op = laOp()) {
     }
   });
   o.push(`<g clip-path="url(#laArea)">${cuerpo.join("")}</g>`, leyO.join(""));
-  // Escala gráfica abajo a la izquierda del área: 0 a 5 m (o lo que entre)
-  const paso = [0.5, 1, 2, 5, 10].find(v => v * (1000 / escD) * 5 <= 90) || 0.5,
+  // Separación entre el área de dibujo y la columna
+  o.push(
+    `<line x1="${q(d.sep)}" y1="${q(my0)}" x2="${q(d.sep)}" y2="${q(my1)}" stroke="${NAVY}" stroke-width="${q(0.35)}"/>`
+  );
+  // Título de la vista, su escala y la escala gráfica: debajo del dibujo si hay sitio; si no, abajo a la izquierda
+  const paso = [0.5, 1, 2, 5, 10].find(v => v * (1000 / escD) * 5 <= 70 * k) || 0.5,
     lm = paso * (1000 / escD),
-    ex = ax0 + 2,
-    ey = ay1 - 6;
+    tit = laVistaTit(op),
+    tfs = 4.2 * k,
+    tw = Math.max(tit.length * tfs * 0.62, 5 * lm + 30 * k),
+    abajo = a.y1 - (acy + d.zh / 2) >= 17 * k,
+    tx = abajo ? acx - tw / 2 : a.x0 + 3,
+    ty = abajo ? acy + d.zh / 2 + 4 * k : a.y1 - 15 * k;
+  if (!abajo)
+    o.push(
+      `<rect x="${q(tx - 2)}" y="${q(ty - 2)}" width="${q(tw + 4)}" height="${q(15 * k)}" fill="#fff" fill-opacity="0.92"/>`
+    );
+  o.push(
+    `<text x="${q(tx)}" y="${q(ty + tfs * 0.85)}" font-size="${q(tfs)}" font-weight="700" fill="${NAVY}">${esc(tit)}</text>`,
+    `<line x1="${q(tx)}" y1="${q(ty + tfs * 1.25)}" x2="${q(tx + tw)}" y2="${q(ty + tfs * 1.25)}" stroke="${NAVY}" stroke-width="${q(0.5)}"/>`
+  );
+  const ex = tx,
+    ey = ty + tfs * 1.25 + 4.2 * k;
   for (let i = 0; i < 5; i++)
     o.push(
-      `<rect x="${q(ex + i * lm)}" y="${q(ey)}" width="${q(lm)}" height="${q(1.6)}" fill="${i % 2 ? "#ffffff" : "#14212e"}" stroke="#14212e" stroke-width="0.6"/>`
+      `<rect x="${q(ex + i * lm)}" y="${q(ey)}" width="${q(lm)}" height="${q(1.4 * k)}" fill="${i % 2 ? "#ffffff" : INK}" stroke="${INK}" stroke-width="${q(0.15)}"/>`
     );
   for (let i = 0; i <= 5; i++)
     o.push(
-      `<text x="${q(ex + i * lm)}" y="${q(ey - 1)}" font-size="${q(2)}" text-anchor="middle" fill="#14212e">${fmt(i * paso, paso < 1 ? 1 : 0)}</text>`
+      `<text x="${q(ex + i * lm)}" y="${q(ey - 0.9 * k)}" font-size="${q(1.8 * k)}" text-anchor="middle" fill="${INK}">${fmt(i * paso, paso < 1 ? 1 : 0)}</text>`
     );
   o.push(
-    `<text x="${q(ex + 5 * lm + 2)}" y="${q(ey + 1.6)}" font-size="${q(2.2)}" fill="#14212e">m · ESCALA 1:${escD}</text>`
+    `<text x="${q(ex + 5 * lm + 3 * k)}" y="${q(ey + 1.4 * k)}" font-size="${q(2.4 * k)}" font-weight="700" fill="${INK}">m · ESCALA 1:${escD}</text>`
   );
-  // Notas a la izquierda del rótulo
-  const nx = mx0,
-    nw = mx1 - rw - mx0,
-    lineas = [];
-  String(op.notas || "")
-    .split("\n")
-    .map(t => t.trim())
-    .filter(Boolean)
-    .forEach((t, i) => {
-      const max = Math.floor((nw - 10) / 1.45);
-      let u = "";
-      const ls = [];
-      t.split(" ").forEach(p => {
-        if ((u + " " + p).trim().length > max && u) {
-          ls.push(u);
-          u = p;
-        } else u = (u + " " + p).trim();
-      });
-      ls.push(u);
-      ls.forEach((l, j) => lineas.push([j ? "" : `${i + 1}.`, l]));
+  // Notas sobre el rótulo
+  const ry = my1 - d.g - d.RH;
+  if (d.NH) {
+    const ny = ry - d.g - d.NH,
+      nfs = d.nfs;
+    o.push(
+      `<rect x="${q(d.x0)}" y="${q(ny)}" width="${q(d.RW)}" height="${q(d.NH)}" fill="none" stroke="${NAVY}" stroke-width="${q(0.3)}"/>`,
+      `<text x="${q(d.x0 + 2.5 * k)}" y="${q(ny + 5 * k)}" font-size="${q(2.6 * k)}" font-weight="700" fill="${NAVY}">NOTAS</text>`
+    );
+    d.notas.forEach(([n, l], i) => {
+      const yy = ny + 8 * k + nfs + i * nfs * 1.55;
+      if (n)
+        o.push(
+          `<text x="${q(d.x0 + 2.5 * k)}" y="${q(yy)}" font-size="${q(nfs)}" font-weight="700" fill="${NAVY}">${n}</text>`
+        );
+      o.push(`<text x="${q(d.x0 + 7 * k)}" y="${q(yy)}" font-size="${q(nfs)}" fill="${INK}">${esc(l)}</text>`);
     });
-  o.push(
-    `<rect x="${q(nx)}" y="${q(banda)}" width="${q(nw)}" height="${q(hr)}" fill="none" stroke="#14304f" stroke-width="1"/>`
-  );
-  o.push(`<text x="${q(nx + 3)}" y="${q(banda + 5)}" font-size="9" font-weight="700" fill="#14304f">NOTAS</text>`);
-  lineas.slice(0, Math.floor((hr - 8) / 3.4)).forEach(([n, l], i) => {
-    const y = banda + 9.5 + i * 3.4;
-    if (n) o.push(`<text x="${q(nx + 3)}" y="${q(y)}" font-size="7.6" font-weight="700" fill="#14304f">${n}</text>`);
-    o.push(`<text x="${q(nx + 7)}" y="${q(y)}" font-size="7.6" fill="#14212e">${esc(l)}</text>`);
+  }
+  // Rótulo al pie de la columna
+  rotuloLamina(o, q, d.x0, ry, d.RW, d.RH, P, {
+    plano: op.tit,
+    esc: `1:${escD}`,
+    num: op.num,
+    de: op._n > 1 ? `${op._i + 1} de ${op._n}` : "",
+    k
   });
-  // Rótulo de la plataforma
-  rotuloSvg(o, q(mx1 - rw), q(banda), q(rw), 124, P, `${op.tit} · Escala 1:${escD}`, op.num);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${q(W)} ${q(H)}" font-family="Arial, Helvetica, sans-serif">` +
-    `<rect width="${q(W)}" height="${q(H)}" fill="#fff"/><rect x="${q(mx0)}" y="${q(my0)}" width="${q(mx1 - mx0)}" height="${q(my1 - my0)}" fill="none" stroke="#14304f" stroke-width="1.5"/>` +
+    `<rect width="${q(W)}" height="${q(H)}" fill="#fff"/><rect x="${q(mx0)}" y="${q(my0)}" width="${q(mx1 - mx0)}" height="${q(my1 - my0)}" fill="none" stroke="${NAVY}" stroke-width="${q(0.7)}"/>` +
     o.join("") +
     `</svg>`;
-  return { svg, aviso, W, H };
+  return { svg, aviso, W, H, tam: d.tam, esc: escD };
 }
 
 /* ---------- DXF del diseño en coordenadas reales (R12) ---------- */
@@ -572,26 +750,42 @@ function laDxf(conArq) {
     // Del lienzo de grabación a las coordenadas del dibujo
     X = v => cx + (v - Wc) / s,
     Y = v => cy - (v - Hc) / s,
-    f = v => (+v).toFixed(4),
+    // Número con 4 decimales; null si no es un número (la entidad no se escribe: AutoCAD no abriría el archivo)
+    f = v => (Number.isFinite(+v) ? (+v).toFixed(4) : null),
     E = [],
-    add = (...a) => E.push(...a),
+    ent = a => {
+      if (!a.includes(null)) E.push(...a);
+    },
     capas = new Map(),
-    enc = t =>
-      Array.from(String(t))
-        .map(ch => {
-          const c = ch.codePointAt(0);
-          return c < 128 ? ch : "\\U+" + c.toString(16).toUpperCase().padStart(4, "0");
-        })
-        .join(""),
-    capa = c => {
-      const n =
-        String(c || "0")
-          .replace(/[<>/\\":;?*|=,]/g, "_")
-          .slice(0, 60) || "0";
-      if (!capas.has(n)) {
-        const dc = D.capas.find(x => x.n === c);
-        capas.set(n, dc ? laAci(dc.col) : 8);
+    nomCapa = new Map(),
+    // Texto para R12: sin caracteres de control y a lo más 250 caracteres ya codificados; fuera del ASCII, \U+XXXX
+    enc = t => {
+      let o = "";
+      for (const ch of String(t).replace(/[\u0000-\u001f\u007f]/g, " ")) {
+        const c = ch.codePointAt(0),
+          u = c < 128 ? ch : "\\U+" + c.toString(16).toUpperCase().padStart(4, "0");
+        if (o.length + u.length > 250) break;
+        o += u;
       }
+      return o.trim();
+    },
+    /* Nombre de capa válido en R12 (AutoCAD no abre el archivo si no): solo A-Z, 0-9, $, - y _, hasta 31 caracteres.
+       Las capas del arquitecto con espacios, tildes o nombres largos se adaptan; si dos quedan iguales, se numeran */
+    capa = c => {
+      const k = String(c || "0");
+      if (nomCapa.has(k)) return nomCapa.get(k);
+      const b =
+        k
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9_$-]/g, "_")
+          .slice(0, 31) || "0";
+      let n = b;
+      for (let i = 2; capas.has(n); i++) n = b.slice(0, 31 - String(i).length - 1) + "_" + i;
+      const dc = D.capas.find(x => x.n === k);
+      capas.set(n, dc ? laAci(dc.col) : 8);
+      nomCapa.set(k, n);
       return n;
     };
   items.forEach(it => {
@@ -600,17 +794,19 @@ function laDxf(conArq) {
       const lt = it.dash ? "JMG_TRAZOS" : "CONTINUOUS",
         col = laAci(it.col);
       if (it.circ && it.p.length > 20) {
-        add(0, "CIRCLE", 8, ly, 6, lt, 62, col, 10, f(X(it.circ[0])), 20, f(Y(it.circ[1])), 40, f(it.circ[2] / s));
+        const r = f(it.circ[2] / s);
+        if (+r > 0) ent([0, "CIRCLE", 8, ly, 6, lt, 62, col, 10, f(X(it.circ[0])), 20, f(Y(it.circ[1])), 40, r]);
         return;
       }
-      if (it.p.length === 2 && !it.c) {
-        const [a, b] = it.p;
-        add(0, "LINE", 8, ly, 6, lt, 62, col, 10, f(X(a[0])), 20, f(Y(a[1])), 11, f(X(b[0])), 21, f(Y(b[1])));
+      const P = it.p.map(p => [f(X(p[0])), f(Y(p[1]))]).filter(p => p[0] !== null && p[1] !== null);
+      if (P.length < 2) return;
+      if (P.length === 2 && !it.c) {
+        ent([0, "LINE", 8, ly, 6, lt, 62, col, 10, P[0][0], 20, P[0][1], 11, P[1][0], 21, P[1][1]]);
         return;
       }
-      add(0, "POLYLINE", 8, ly, 6, lt, 62, col, 66, 1, 10, "0.0", 20, "0.0", 70, it.c ? 1 : 0);
-      it.p.forEach(p => add(0, "VERTEX", 8, ly, 10, f(X(p[0])), 20, f(Y(p[1]))));
-      add(0, "SEQEND", 8, ly);
+      E.push(0, "POLYLINE", 8, ly, 6, lt, 62, col, 66, 1, 10, "0.0", 20, "0.0", 70, it.c ? 1 : 0);
+      P.forEach(p => E.push(0, "VERTEX", 8, ly, 10, p[0], 20, p[1]));
+      E.push(0, "SEQEND", 8, ly);
     } else if (it.t === "f") {
       const col = laAci(it.col);
       if (laHex(it.col) === "#ffffff") return;
@@ -620,15 +816,38 @@ function laDxf(conArq) {
           const r = pp.circ[2] / s,
             x = X(pp.circ[0]),
             y = Y(pp.circ[1]);
-          add(0, "POLYLINE", 8, ly, 62, col, 66, 1, 10, "0.0", 20, "0.0", 70, 1, 40, f(r), 41, f(r));
-          add(0, "VERTEX", 8, ly, 10, f(x - r / 2), 20, f(y), 42, "1.0");
-          add(0, "VERTEX", 8, ly, 10, f(x + r / 2), 20, f(y), 42, "1.0");
-          add(0, "SEQEND", 8, ly);
-        } else if (pp.p.length <= 5) {
+          if (!(r > 0) || f(x) === null || f(y) === null) return;
+          E.push(0, "POLYLINE", 8, ly, 62, col, 66, 1, 10, "0.0", 20, "0.0", 70, 1, 40, f(r), 41, f(r));
+          E.push(0, "VERTEX", 8, ly, 10, f(x - r / 2), 20, f(y), 42, "1.0");
+          E.push(0, "VERTEX", 8, ly, 10, f(x + r / 2), 20, f(y), 42, "1.0");
+          E.push(0, "SEQEND", 8, ly);
+        } else if (pp.p.length >= 3 && pp.p.length <= 5) {
           const p = pp.p.slice(0, 4),
             q = p.length === 4 ? p[3] : p[2];
-          add(0, "SOLID", 8, ly, 62, col, 10, f(X(p[0][0])), 20, f(Y(p[0][1])), 11, f(X(p[1][0])), 21, f(Y(p[1][1])));
-          add(12, f(X(q[0])), 22, f(Y(q[1])), 13, f(X(p[2][0])), 23, f(Y(p[2][1])));
+          ent([
+            0,
+            "SOLID",
+            8,
+            ly,
+            62,
+            col,
+            10,
+            f(X(p[0][0])),
+            20,
+            f(Y(p[0][1])),
+            11,
+            f(X(p[1][0])),
+            21,
+            f(Y(p[1][1])),
+            12,
+            f(X(q[0])),
+            22,
+            f(Y(q[1])),
+            13,
+            f(X(p[2][0])),
+            23,
+            f(Y(p[2][1]))
+          ]);
         }
       });
     } else if (it.t === "t") {
@@ -637,14 +856,36 @@ function laDxf(conArq) {
         j = it.al === "center" ? 1 : it.al === "right" || it.al === "end" ? 2 : 0,
         v = it.bl === "middle" ? 2 : it.bl === "top" || it.bl === "hanging" ? 3 : it.bl === "bottom" ? 1 : 0,
         x = f(X(it.p[0])),
-        y = f(Y(it.p[1]));
-      add(0, "TEXT", 8, ly, 62, laAci(it.col), 7, "JMG_ARIAL", 10, x, 20, y, 40, f(h), 1, enc(it.s));
-      if (Math.abs(rot) > 0.01) add(50, rot.toFixed(2));
-      if (j || v) add(72, j, 73, v, 11, x, 21, y);
+        y = f(Y(it.p[1])),
+        t = enc(it.s);
+      if (!t || !(h > 0) || f(h) === null) return;
+      ent([
+        0,
+        "TEXT",
+        8,
+        ly,
+        62,
+        laAci(it.col),
+        7,
+        "JMG_ARIAL",
+        10,
+        x,
+        20,
+        y,
+        40,
+        f(h),
+        1,
+        t,
+        ...(Number.isFinite(rot) && Math.abs(rot) > 0.01 ? [50, rot.toFixed(2)] : []),
+        ...(j || v ? [72, j, 73, v, 11, x, 21, y] : [])
+      ]);
     }
   });
   // Encabezado y tablas: tipo de línea a trazos (3 mm y 1.5 mm en el papel), estilo de texto Arial y capas
   const lts = 1 / mmU,
+    ex = conArq ? plExtUtil() : z,
+    vc = [(ex[0] + ex[2]) / 2, (ex[1] + ex[3]) / 2],
+    vh = Math.max(1e-6, (ex[3] - ex[1]) * 1.05),
     tablas = [
       0,
       "SECTION",
@@ -662,16 +903,119 @@ function laDxf(conArq) {
       "$LTSCALE",
       40,
       f(lts),
+      // Extensión del dibujo y vista al abrir centrada en él (las coordenadas son las reales del plano, lejos del 0,0)
       9,
-      "$INSUNITS",
-      70,
-      EPL.f === 1 ? 6 : EPL.f === 0.01 ? 5 : 4,
+      "$EXTMIN",
+      10,
+      f(ex[0]),
+      20,
+      f(ex[1]),
+      30,
+      "0.0",
+      9,
+      "$EXTMAX",
+      10,
+      f(ex[2]),
+      20,
+      f(ex[3]),
+      30,
+      "0.0",
+      9,
+      "$VIEWCTR",
+      10,
+      f(vc[0]),
+      20,
+      f(vc[1]),
+      9,
+      "$VIEWSIZE",
+      40,
+      f(vh),
       0,
       "ENDSEC",
       0,
       "SECTION",
       2,
       "TABLES",
+      0,
+      "TABLE",
+      2,
+      "VPORT",
+      70,
+      1,
+      0,
+      "VPORT",
+      2,
+      "*ACTIVE",
+      70,
+      0,
+      10,
+      "0.0",
+      20,
+      "0.0",
+      11,
+      "1.0",
+      21,
+      "1.0",
+      12,
+      f(vc[0]),
+      22,
+      f(vc[1]),
+      13,
+      "0.0",
+      23,
+      "0.0",
+      14,
+      "1.0",
+      24,
+      "1.0",
+      15,
+      "1.0",
+      25,
+      "1.0",
+      16,
+      "0.0",
+      26,
+      "0.0",
+      36,
+      "1.0",
+      17,
+      "0.0",
+      27,
+      "0.0",
+      37,
+      "0.0",
+      40,
+      f(vh),
+      41,
+      f(Math.max(0.2, Math.min(5, (ex[2] - ex[0]) / Math.max(1e-9, ex[3] - ex[1])))),
+      42,
+      "50.0",
+      43,
+      "0.0",
+      44,
+      "0.0",
+      50,
+      "0.0",
+      51,
+      "0.0",
+      71,
+      0,
+      72,
+      100,
+      73,
+      1,
+      74,
+      3,
+      75,
+      0,
+      76,
+      0,
+      77,
+      0,
+      78,
+      0,
+      0,
+      "ENDTAB",
       0,
       "TABLE",
       2,
@@ -802,8 +1146,8 @@ function lamCargar() {
   if (!z || (z.startsWith("planta:") && !EPL.plantas[+z.slice(7)]) || (z === "rect" && !op.rect))
     z = EPL.plantas.length ? "planta:0" : "todo";
   $("laZona").value = z;
-  $("laTam").value = op.tam;
-  $("laEsc").value = String(op.esc || D.escala);
+  $("laTam").value = LAMINAS[op.tam] ? op.tam : "auto";
+  $("laEsc").value = op.esc > 0 ? String(op.esc) : "auto";
   $("laArq").value = op.arq;
   $("laColor").value = op.color;
   $("laLey").checked = op.ley;
@@ -830,7 +1174,7 @@ function lamLeer() {
     ocl = [...$("laCapas").querySelectorAll("[data-lac]")].filter(c => !c.checked).map(c => c.dataset.lac);
   L[i] = {
     ...L[i],
-    tam: LAMINAS[$("laTam").value] ? $("laTam").value : "A3",
+    tam: LAMINAS[$("laTam").value] ? $("laTam").value : "auto",
     zona: $("laZona").value || "",
     arq: ["gris", "negro", "color"].includes($("laArq").value) ? $("laArq").value : "gris",
     color: $("laColor").value === "bn" ? "bn" : "color",
@@ -840,8 +1184,8 @@ function lamLeer() {
     num: $("laNum").value.replace(/[<>]/g, "").slice(0, 20) || "IE-0" + (i + 1),
     notas: $("laNotas").value.replace(/[<>]/g, "").slice(0, 2000)
   };
-  // La escala de la lámina es suya: no cambia la del diseño
-  if (DS_ESCALAS.includes(e) && e !== D.escala) L[i].esc = e;
+  // La escala de la lámina es suya (no cambia la del diseño); sin elegir, la automática
+  if (DS_ESCALAS.includes(e)) L[i].esc = e;
   else delete L[i].esc;
   if (ocl.length) L[i].ocl = ocl;
   else delete L[i].ocl;
@@ -851,6 +1195,9 @@ function lamVista() {
   if ($("lamDlg").hidden) return;
   const r = laSvg();
   $("laPrev").innerHTML = r.svg;
+  // Lo que eligió el ajuste automático, en la misma opción
+  $("laTam").querySelector('[value="auto"]').textContent = `Automático: ${r.tam} (recomendado)`;
+  $("laEsc").querySelector('[value="auto"]').textContent = `Automática: 1:${r.esc} (recomendada)`;
   $("laAviso").textContent = r.aviso;
   $("laAviso").hidden = !r.aviso;
 }
@@ -864,6 +1211,71 @@ function lamZonaMarcada(z) {
   edCambio();
   lamAbrir();
   toast("Zona marcada: la lámina muestra ese rectángulo");
+}
+/* Láminas del diseño para el expediente (js/exportar/descargas.js): las del plano aplicado al proyecto (PLANO), con
+   su arquitectura leída del navegador. No necesita el editor abierto: usa una copia y deja todo como estaba. Sin
+   diseño o sin su archivo DXF, ninguna. */
+async function laminasExpediente() {
+  if (typeof PLANO === "undefined" || !PLANO || !PLANO.sha || !PLANO.dis) return [];
+  if (!(PLANO.dis.els || []).some(e => e.t === "sim")) return [];
+  const vE = EPL,
+    vM = PL_MOD,
+    vS = PL_SHA,
+    vB = [...PL_BORR];
+  try {
+    EPL = clon(PLANO);
+    dsAsegurar();
+    if (!PL_MOD || PL_SHA !== EPL.sha) {
+      const o = await plLeerArchivo(EPL.sha);
+      if (!o || !o.buf) return [];
+      PL_MOD = modeloDxf(o.buf);
+      PL_SHA = EPL.sha;
+    }
+    PL_BORR.clear();
+    (EPL.borr || []).forEach(n => PL_BORR.add(n));
+    dsIdxSucio();
+    /* Todas las plantas: las láminas del proyecto y, para cada planta con diseño que ninguna muestra, una más con
+       las mismas opciones que la primera (papel y escala automáticos), numerada después de la última */
+    const L = laLista(),
+      D = dsD(),
+      ops = L.map((l, i) => laOp(i)),
+      usadas = new Set(ops.map(o => o.zona || (EPL.plantas.length ? "planta:0" : "todo"))),
+      conDis = p =>
+        D.els.some(e => {
+          if (e.t !== "sim" && e.t !== "tub") return false;
+          const b = dsBBox(e);
+          return b[2] >= p.x0 && b[0] <= p.x1 && b[3] >= p.y0 && b[1] <= p.y1;
+        }),
+      num = ops.reduce((m, o) => Math.max(m, +(/^IE-(\d+)/.exec(o.num) || [0, 0])[1]), 0),
+      extra = EPL.plantas.map((p, i) => ({ p, z: "planta:" + i })).filter(({ p, z }) => !usadas.has(z) && conDis(p));
+    extra.forEach(({ z }, j) =>
+      ops.push({
+        ...ops[0],
+        tam: "auto",
+        esc: undefined,
+        rect: undefined,
+        zona: z,
+        num: "IE-" + String(num + j + 1).padStart(2, "0")
+      })
+    );
+    return ops.map((op, i) => {
+      const r = laSvg({ ...op, _i: i, _n: ops.length });
+      return { svg: r.svg, W: r.W, H: r.H, hoja: op.num, tit: op.tit, tam: r.tam, esc: r.esc, vista: laVistaTit(op) };
+    });
+  } catch (e) {
+    toast("Las láminas del diseño no se pudieron preparar: " + e.message);
+    return [];
+  } finally {
+    EPL = vE;
+    // Con el editor cerrado, el plano leído queda para la próxima vez (el editor lo reconoce por su huella)
+    if (vE) {
+      PL_MOD = vM;
+      PL_SHA = vS;
+    }
+    PL_BORR.clear();
+    vB.forEach(n => PL_BORR.add(n));
+    dsIdxSucio();
+  }
 }
 function lamImprimir(todas) {
   const L = laLista(),
@@ -900,7 +1312,9 @@ function lamDxf(conArq) {
       : "DXF del diseño eléctrico en coordenadas reales: insértelo en el plano del arquitecto en 0,0"
   );
 }
-$("laEsc").innerHTML = DS_ESCALAS.map(e => `<option value="${e}">1:${e}</option>`).join("");
+$("laEsc").innerHTML =
+  '<option value="auto">Automática (recomendada)</option>' +
+  DS_ESCALAS.map(e => `<option value="${e}">1:${e}</option>`).join("");
 $("lamDlg").addEventListener("change", e => {
   if (e.target.id === "laSel") {
     dsD().lamI = +e.target.value || 0;

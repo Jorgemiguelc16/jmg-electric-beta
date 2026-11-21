@@ -302,8 +302,8 @@ function tableroGeneral(r) {
     rx = W - 480,
     rw = W - 20 - rx;
   const notas = [
-    "Caja toma F1 (concesionaria) → tablero general → banco de medidores (lámina IE-06) → tablero de cada suministro (lámina IE-04). Los medidores quedan en el lado de carga del interruptor general (Regla 040-402(2)).",
-    "Interruptor general y alimentador del cálculo (lámina IE-01). Tipo de interruptor y sección de las barras según el fabricante; la medida del gabinete es referencial, de catálogo (criterio).",
+    `Caja toma F1 (concesionaria) → tablero general → banco de medidores (lámina ${ieNum("IE-06")}) → tablero de cada suministro (lámina ${ieNum("IE-04")}). Los medidores quedan en el lado de carga del interruptor general (Regla 040-402(2)).`,
+    `Interruptor general y alimentador del cálculo (lámina ${ieNum("IE-01")}). Tipo de interruptor y sección de las barras según el fabricante; la medida del gabinete es referencial, de catálogo (criterio).`,
     "Espacio de trabajo libre de 1 m frente al tablero, con piso no deslizante, que permita abrir la puerta al menos 90° (Regla 020-308).",
     "Cada salida toma con perno la fase del balance y su neutro; las pletinas pasan por delante de las otras barras (en otro plano, sobre aisladores) con manga aislante. El interruptor de cada suministro va después de su medidor.",
     "Conductores: R rojo, S negro, T azul (orden de fases: criterio), N blanco, tierra verde-amarillo. Barra de tierra unida a la puerta y al pozo."
