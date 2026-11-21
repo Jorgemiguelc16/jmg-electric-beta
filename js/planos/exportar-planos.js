@@ -1,624 +1,827 @@
 /* EXPORTAR LOS PLANOS
-   Tamaños de lámina (LAMINAS), svgDxf(): el SVG de cualquier plano a DXF para AutoCAD, con sus capas y colores, y
+   Tamaños de lámina (LAMINAS), svgDxf(): el SVG de cualquier plano a DXF de AutoCAD 2013, como se ve en la plataforma, y
    svgPng(): el SVG a imagen PNG. Los usan la cinta Planos, la ventana DXF, el Excel y el expediente. */
-/* SVG del unifilar → DXF para AutoCAD (formato R12, en mm sobre la lámina elegida) */
+/* SVG de cualquier plano → DXF de AutoCAD 2013 (AC1027), en milímetros. Se ve como en la plataforma:
+   - colores exactos (color verdadero, código 420) en «Como en la plataforma», con el papel blanco debajo (capa
+     E-PAPEL); en negro (7) en «Monocromático»; por capa (256) en «Por capas»;
+   - letras Arial (normal, negrita, cursiva) con la altura de las mayúsculas de Arial (0.716 del tamaño de la letra) y
+     la alineación del SVG (izquierda, centro o derecha; línea base, centro, arriba o abajo); tildes y eñes tal cual;
+   - rellenos como sombreado sólido (HATCH) y en el mismo orden de dibujo, esquinas redondeadas, elipses, el grosor de
+     cada línea (370; desde 0.5 mm, polilínea con ancho) y un tipo de línea por cada patrón de guiones;
+   - lo recortado (clip-path de un rectángulo, como el área de dibujo de las láminas) queda recortado.
+   Capas: la del grupo (data-capa) o la de su tipo (E-UNIFILAR, E-CUADROS, E-TEXTOS…). Un plano con medidas en
+   milímetros (width="841mm", las láminas del diseño) va a su tamaño real; los demás se centran en la lámina elegida.
+   op = { lamina, colores: "jmg" (como en la plataforma) | "mono" | "capas" } */
 const LAMINAS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594] };
 function svgDxf(svgTxt, op = {}) {
-  const lam = LAMINAS[op.lamina] || LAMINAS.A3,
-    esq = op.colores || "jmg";
-  const doc = new DOMParser().parseFromString(svgTxt, "image/svg+xml"),
-    root = doc.documentElement;
-  const W = parseFloat(root.getAttribute("width")) || 1,
-    H = parseFloat(root.getAttribute("height")) || 1;
-  const k = Math.min((lam[0] - 20) / W, (lam[1] - 20) / H),
-    ox = (lam[0] - W * k) / 2,
-    oy = (lam[1] - H * k) / 2;
-  const n = v => parseFloat(v) || 0,
-    f = v => (+v).toFixed(3),
-    X = x => f(ox + x * k),
-    Y = y => f(oy + (H - y) * k);
+  const esq = op.colores || "jmg",
+    doc = new DOMParser().parseFromString(svgTxt, "image/svg+xml"),
+    root = doc.documentElement,
+    n = v => parseFloat(v) || 0,
+    vb = String(root.getAttribute("viewBox") || "")
+      .split(/[\s,]+/)
+      .map(Number),
+    W = vb.length === 4 && vb[2] ? vb[2] : n(root.getAttribute("width")) || 1,
+    H = vb.length === 4 && vb[3] ? vb[3] : n(root.getAttribute("height")) || 1,
+    real = /mm$/.test(root.getAttribute("width") || ""),
+    lam = real ? [n(root.getAttribute("width")), n(root.getAttribute("height"))] : LAMINAS[op.lamina] || LAMINAS.A3,
+    k = real ? lam[0] / W : Math.min((lam[0] - 20) / W, (lam[1] - 20) / H),
+    ox = real ? 0 : (lam[0] - W * k) / 2,
+    oy = real ? 0 : (lam[1] - H * k) / 2,
+    f = v => (Number.isFinite(+v) ? (+v).toFixed(4) : "0.0"),
+    X = x => ox + x * k,
+    Y = y => oy + (H - y) * k;
   const hex = c => {
-    c = (c || "").toLowerCase();
-    return c === "#fff" ? "#ffffff" : c;
+    c = String(c || "")
+      .trim()
+      .toLowerCase();
+    if (!c || c === "none" || c.startsWith("url")) return "";
+    if (/^#[0-9a-f]{3}$/.test(c)) return "#" + [...c.slice(1)].map(x => x + x).join("");
+    const m = /rgba?\(([^)]+)\)/.exec(c);
+    if (m)
+      return (
+        "#" +
+        m[1]
+          .split(",")
+          .slice(0, 3)
+          .map(v => Math.round(+v).toString(16).padStart(2, "0"))
+          .join("")
+      );
+    return /^#[0-9a-f]{6}$/.test(c) ? c : c === "white" ? "#ffffff" : c === "black" ? "#000000" : "";
   };
-  // Colores: JMG (azul y cobre) · monocromo (impresión) · por capa (estilo AutoCAD)
-  // Esquema JMG en colores vivos: azul, naranja cobre, cian, verde, rojo y amarillo
-  const ACI = {
-    "#14212e": 7,
-    "#000000": 7,
-    "#14304f": 150,
-    "#9a5a23": 30,
-    "#5a6775": 8,
-    "#2f7a4b": 3,
-    "#bfc8d2": 8,
-    "#ffffff": 255,
-    "#ffd200": 2,
-    "#1f2328": 250,
-    "#b42318": 1,
-    "#c62828": 1,
-    "#1565c0": 150,
-    "#8a9199": 8,
-    "#c98a4b": 32
+  const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  // Color de AutoCAD más cercano (para los programas que no leen el color verdadero)
+  const aciDe = h => {
+    if (typeof ACI === "undefined") return 7;
+    const v = rgb(h);
+    if (v.every(x => x < 40) || v.every(x => x > 235)) return 7;
+    let mejor = 7,
+      md = Infinity;
+    for (let i = 1; i < 256; i++) {
+      const c = rgb(ACI[i] || "#000000"),
+        d = (c[0] - v[0]) ** 2 + (c[1] - v[1]) ** 2 + (c[2] - v[2]) ** 2;
+      if (d < md) {
+        md = d;
+        mejor = i;
+      }
+    }
+    return mejor;
   };
-  // Rellenos sólidos: los oscuros de las láminas y los colores de las fases (barras del balance, LED)
-  const OSCURO = [
-    "#14304f",
-    "#9a5a23",
-    "#1f2328",
-    "#000000",
-    "#c62828",
-    "#1565c0",
-    "#b42318",
-    "#2f7a4b",
-    "#c98a4b",
-    "#ffd200",
-    "#5a6775"
-  ];
-  // Rellenos claros del dibujo de los tableros (gabinete, módulos, riel, canaletas), en grises de AutoCAD para que se
-  // vean con volumen como en pantalla; lo que va encima se dibuja en tonos oscuros (esquema JMG)
-  const CLARO = {
-    "#ffffff": 254,
-    "#f3f6f9": 255,
-    "#eaf2fb": 255,
-    "#e3e9f0": 254,
-    "#d9eedf": 254,
-    "#e6e9ed": 253,
-    "#d5dae0": 253,
-    "#c9ced5": 252,
-    // Tapa ahumada del tablero de PVC y su brillo
-    "#8f98a3": 8,
-    "#a9b1ba": 9,
-    // Barra de tierra, en verde como en pantalla
-    "#2f7a4b": 3
+  // Color de la entidad: [62, aci, 420, verdadero] según el esquema
+  const color = h => {
+    if (esq === "capas") return [62, 256];
+    if (esq === "mono") return [62, 7];
+    const v = rgb(h);
+    return [62, aciDe(h), 420, (v[0] << 16) | (v[1] << 8) | v[2]];
   };
-  const SOBRE_CLARO = { "#14212e": 250, "#000000": 250, "#1f2328": 250, "#5a6775": 8, "#bfc8d2": 8, "#8a9199": 8 };
-  const claros = [],
-    sobreClaro = (x, y) => claros.some(([a, b, w, h]) => x >= a && x <= a + w && y >= b && y <= b + h);
-  const col = (c, esTexto, claro) => {
-    c = hex(c);
-    if (esq === "capas") return 256;
-    if (esq === "mono") return 7;
-    if (claro && SOBRE_CLARO[c] !== undefined) return SOBRE_CLARO[c];
-    // Los textos secundarios (gris en pantalla) van en cian para que se lean bien
-    if (esTexto && c === "#5a6775") return 4;
-    // El azul de los textos, más claro para que se lea sobre el fondo oscuro de AutoCAD
-    if (esTexto && c === "#14304f") return 140;
-    return ACI[c] ?? 7;
-  };
-  const E = [],
-    add = (...kv) => {
-      for (let i = 0; i < kv.length; i += 2) E.push(kv[i], kv[i + 1]);
-    };
-  const linea = (x1, y1, x2, y2, ly, c) => add(0, "LINE", 8, ly, 62, c, 10, X(x1), 20, Y(y1), 11, X(x2), 21, Y(y2));
-  const pline = (pts, ly, c, w, cerrada) => {
-    add(0, "POLYLINE", 8, ly, 62, c, 66, 1, 10, "0.0", 20, "0.0", 70, cerrada ? 1 : 0, 40, f(w), 41, f(w));
-    pts.forEach(([x, y]) => add(0, "VERTEX", 8, ly, 10, X(x), 20, Y(y)));
-    add(0, "SEQEND", 8, ly);
-  };
-  const solido = (x, y, w, h, ly, c) =>
-    add(
-      0,
-      "SOLID",
-      8,
-      ly,
-      62,
-      c,
-      10,
-      X(x),
-      20,
-      Y(y),
-      11,
-      X(x + w),
-      21,
-      Y(y),
-      12,
-      X(x),
-      22,
-      Y(y + h),
-      13,
-      X(x + w),
-      23,
-      Y(y + h)
-    );
-  const enc = t =>
-    Array.from(String(t))
-      .map(ch => {
-        const c = ch.codePointAt(0);
-        return c < 128 ? ch : "\\U+" + c.toString(16).toUpperCase().padStart(4, "0");
-      })
-      .join("");
-  const fondos = [];
-  // Capa: la del propio elemento o la de su grupo (data-capa), o la que corresponde a su tipo
-  const capaDe = (el, d) => {
-    const g = el.closest ? el.closest("[data-capa]") : null;
-    return (g && g.getAttribute("data-capa")) || d;
-  };
+  // Grosor: el estándar de AutoCAD más cercano (centésimas de mm)
+  const GROS = [0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211];
+  const grosor = mm => GROS.reduce((a, b) => (Math.abs(b - mm * 100) < Math.abs(a - mm * 100) ? b : a));
+  // Recortes (clipPath con un rectángulo), por su id
+  const clips = {};
   root.querySelectorAll("*").forEach(el => {
-    const t = el.tagName.toLowerCase(),
-      st = hex(el.getAttribute("stroke")),
-      fi = hex(el.getAttribute("fill")),
-      sw = n(el.getAttribute("stroke-width")) || 1;
+    if (el.tagName.toLowerCase() !== "clippath") return;
+    const r = [...el.querySelectorAll("*")].find(e => e.tagName.toLowerCase() === "rect");
+    if (r)
+      clips[el.getAttribute("id")] = [
+        n(r.getAttribute("x")),
+        n(r.getAttribute("y")),
+        n(r.getAttribute("x")) + n(r.getAttribute("width")),
+        n(r.getAttribute("y")) + n(r.getAttribute("height"))
+      ];
+  });
+  // Atributos heredados de los grupos: capa, recorte, fuera de la vista (display none, salvo el logo para el DXF)
+  const subir = el => {
+    const o = { capa: "", clip: null, oculto: false, dxf: false };
+    for (let e = el; e && e.getAttribute; e = e.parentNode) {
+      if (!o.capa && e.getAttribute("data-capa")) o.capa = e.getAttribute("data-capa");
+      const cp = /url\(#([^)]+)\)/.exec(e.getAttribute("clip-path") || "");
+      if (cp && !o.clip && clips[cp[1]]) o.clip = clips[cp[1]];
+      if (e.getAttribute("display") === "none") o.oculto = true;
+      if (e.getAttribute("data-dxf")) o.dxf = true;
+    }
+    return o;
+  };
+  // Recorte de polilíneas (Liang–Barsky por tramo) y de polígonos (Sutherland–Hodgman)
+  const cortarLinea = (P, c) => {
+    if (!c) return [P];
+    const out = [];
+    let act = [];
+    for (let i = 0; i + 1 < P.length; i++) {
+      const [x0, y0] = P[i],
+        [x1, y1] = P[i + 1],
+        dx = x1 - x0,
+        dy = y1 - y0;
+      let t0 = 0,
+        t1 = 1,
+        ok = true;
+      [
+        [-dx, x0 - c[0]],
+        [dx, c[2] - x0],
+        [-dy, y0 - c[1]],
+        [dy, c[3] - y0]
+      ].forEach(([p, q]) => {
+        if (!ok) return;
+        if (p === 0) {
+          if (q < 0) ok = false;
+        } else {
+          const t = q / p;
+          if (p < 0) t0 = Math.max(t0, t);
+          else t1 = Math.min(t1, t);
+          if (t0 > t1) ok = false;
+        }
+      });
+      if (!ok) {
+        if (act.length > 1) out.push(act);
+        act = [];
+        continue;
+      }
+      const a = [x0 + t0 * dx, y0 + t0 * dy],
+        b = [x0 + t1 * dx, y0 + t1 * dy];
+      if (!act.length || t0 > 0) {
+        if (act.length > 1) out.push(act);
+        act = [a];
+      }
+      act.push(b);
+      if (t1 < 1) {
+        out.push(act);
+        act = [];
+      }
+    }
+    if (act.length > 1) out.push(act);
+    return out;
+  };
+  const cortarPoligono = (P, c) => {
+    if (!c) return P;
+    let out = P;
+    [
+      [p => p[0] >= c[0], (a, b) => [c[0], a[1] + ((b[1] - a[1]) * (c[0] - a[0])) / (b[0] - a[0])]],
+      [p => p[0] <= c[2], (a, b) => [c[2], a[1] + ((b[1] - a[1]) * (c[2] - a[0])) / (b[0] - a[0])]],
+      [p => p[1] >= c[1], (a, b) => [a[0] + ((b[0] - a[0]) * (c[1] - a[1])) / (b[1] - a[1]), c[1]]],
+      [p => p[1] <= c[3], (a, b) => [a[0] + ((b[0] - a[0]) * (c[3] - a[1])) / (b[1] - a[1]), c[3]]]
+    ].forEach(([dentro, corte]) => {
+      const inp = out;
+      out = [];
+      inp.forEach((b, i) => {
+        const a = inp[(i + inp.length - 1) % inp.length];
+        if (dentro(b)) {
+          if (!dentro(a)) out.push(corte(a, b));
+          out.push(b);
+        } else if (dentro(a)) out.push(corte(a, b));
+      });
+    });
+    return out;
+  };
+  const dentro = (x, y, c) => !c || (x >= c[0] && x <= c[2] && y >= c[1] && y <= c[3]);
+  // Entidades (sin identificador: se pone al escribir), capas y tipos de línea usados
+  const ents = [],
+    usadas = new Map(),
+    tipos = new Map();
+  const capaDe = (o, d) => {
+    const c =
+      String(o.capa || d)
+        .replace(/[<>/\\":;?*|=`,]/g, "_")
+        .slice(0, 200) || "0";
+    if (!usadas.has(c)) usadas.set(c, true);
+    return c;
+  };
+  const tipoDe = dash => {
+    if (!dash) return null;
+    const v = String(dash)
+      .split(/[\s,]+/)
+      .map(n)
+      .filter(x => x > 0)
+      .map(x => +(x * k).toFixed(3));
+    if (!v.length) return null;
+    const nom = "JMG_T" + v.map(x => String(x).replace(".", "_")).join("-");
+    if (!tipos.has(nom)) tipos.set(nom, v.length % 2 ? [...v, ...v] : v);
+    return nom;
+  };
+  const comun = (ly, col, lt, lw) => [8, ly, ...(lt ? [6, lt] : []), ...col, ...(lw !== undefined ? [370, lw] : [])];
+  // Trazo de una polilínea (abierta o cerrada) en coordenadas del SVG
+  const trazo = (P, cerrada, st, sw, dash, o, d) => {
+    if (!st || P.length < 2) return;
+    const ly = capaDe(o, d),
+      col = color(st),
+      lt = tipoDe(dash),
+      mm = sw * k,
+      partes = o.clip && cerrada ? cortarLinea([...P, P[0]], o.clip) : cortarLinea(P, o.clip),
+      cerr = cerrada && !o.clip;
+    partes.forEach(Q => {
+      if (Q.length === 2 && mm < 0.5)
+        return ents.push([
+          "LINE",
+          ...comun(ly, col, lt, grosor(mm)),
+          100,
+          "AcDbLine",
+          10,
+          f(X(Q[0][0])),
+          20,
+          f(Y(Q[0][1])),
+          30,
+          "0.0",
+          11,
+          f(X(Q[1][0])),
+          21,
+          f(Y(Q[1][1])),
+          31,
+          "0.0"
+        ]);
+      ents.push([
+        "LWPOLYLINE",
+        ...comun(ly, col, lt, mm >= 0.5 ? undefined : grosor(mm)),
+        100,
+        "AcDbPolyline",
+        90,
+        Q.length,
+        70,
+        cerr ? 1 : 0,
+        43,
+        mm >= 0.5 ? f(mm) : "0.0",
+        ...Q.flatMap(([x, y]) => [10, f(X(x)), 20, f(Y(y))])
+      ]);
+    });
+  };
+  // Relleno sólido: uno o varios contornos (huecos por paridad, como fill-rule evenodd)
+  const relleno = (lazos, fi, o, d, circ) => {
+    if (!fi) return;
+    if (fi === "#ffffff" && esq !== "jmg") return;
+    const L = circ ? lazos : lazos.map(P => cortarPoligono(P, o.clip)).filter(P => P.length >= 3);
+    if (!L.length) return;
+    ents.push([
+      "HATCH",
+      ...comun(capaDe(o, d), esq === "mono" ? [62, fi === "#ffffff" ? 7 : 7] : color(fi)),
+      100,
+      "AcDbHatch",
+      10,
+      "0.0",
+      20,
+      "0.0",
+      30,
+      "0.0",
+      210,
+      "0.0",
+      220,
+      "0.0",
+      230,
+      "1.0",
+      2,
+      "SOLID",
+      70,
+      1,
+      71,
+      0,
+      91,
+      L.length,
+      ...L.flatMap((P, i) => [
+        92,
+        i ? 2 : 3,
+        72,
+        circ ? 1 : 0,
+        73,
+        1,
+        93,
+        P.length,
+        ...P.flatMap(p => [10, f(X(p[0])), 20, f(Y(p[1])), ...(circ ? [42, "1.0"] : [])]),
+        97,
+        0
+      ]),
+      75,
+      0,
+      76,
+      1,
+      98,
+      0
+    ]);
+  };
+  // Contorno de un rectángulo, con sus esquinas redondeadas si las tiene
+  const rectPts = (x, y, w, h, rx, ry) => {
+    rx = Math.min(rx, w / 2);
+    ry = Math.min(ry || rx, h / 2);
+    if (!(rx > 0))
+      return [
+        [x, y],
+        [x + w, y],
+        [x + w, y + h],
+        [x, y + h]
+      ];
+    const P = [],
+      arco = (cx, cy, a0) => {
+        for (let i = 0; i <= 6; i++) {
+          const a = ((a0 + i * 15) * Math.PI) / 180;
+          P.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+        }
+      };
+    arco(x + w - rx, y + ry, 270);
+    arco(x + w - rx, y + h - ry, 0);
+    arco(x + rx, y + h - ry, 90);
+    arco(x + rx, y + ry, 180);
+    return P;
+  };
+  // Trazados: M, L, H, V y Z (absolutos y relativos) en contornos
+  const lazosDe = d => {
+    const L = [];
+    let P = null,
+      x = 0,
+      y = 0,
+      x0 = 0,
+      y0 = 0,
+      cmd = "M";
+    const toks = String(d || "").match(/[MLHVZmlhvz]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) || [];
+    for (let i = 0; i < toks.length; ) {
+      if (/[A-Za-z]/.test(toks[i])) cmd = toks[i++];
+      const rel = cmd === cmd.toLowerCase(),
+        C = cmd.toUpperCase();
+      if (C === "Z") {
+        if (P) {
+          P.c = true;
+          x = x0;
+          y = y0;
+        }
+        P = null;
+        continue;
+      }
+      const a = +toks[i++];
+      if (C === "H") x = rel ? x + a : a;
+      else if (C === "V") y = rel ? y + a : a;
+      else {
+        const b = +toks[i++];
+        x = rel ? x + a : a;
+        y = rel ? y + b : b;
+      }
+      if (C === "M") {
+        P = [[x, y]];
+        L.push(P);
+        x0 = x;
+        y0 = y;
+        cmd = rel ? "l" : "L";
+      } else (P || (L.push((P = [[x0, y0]])), P)).push([x, y]);
+    }
+    return L;
+  };
+  const sw0 = el => (el.getAttribute("stroke-width") === null ? 1 : n(el.getAttribute("stroke-width")));
+  // Papel blanco debajo de todo (como la lámina en pantalla), en su capa
+  if (esq === "jmg")
+    ents.push([
+      "HATCH",
+      8,
+      capaDe({}, "E-PAPEL"),
+      62,
+      7,
+      420,
+      0xffffff,
+      100,
+      "AcDbHatch",
+      10,
+      "0.0",
+      20,
+      "0.0",
+      30,
+      "0.0",
+      210,
+      "0.0",
+      220,
+      "0.0",
+      230,
+      "1.0",
+      2,
+      "SOLID",
+      70,
+      1,
+      71,
+      0,
+      91,
+      1,
+      92,
+      3,
+      72,
+      0,
+      73,
+      1,
+      93,
+      4,
+      ...[
+        [0, 0],
+        [lam[0], 0],
+        [lam[0], lam[1]],
+        [0, lam[1]]
+      ].flatMap(([a, b]) => [10, f(a), 20, f(b)]),
+      97,
+      0,
+      75,
+      0,
+      76,
+      1,
+      98,
+      0
+    ]);
+  root.querySelectorAll("*").forEach(el => {
+    const t = el.tagName.toLowerCase();
+    if (!["line", "rect", "circle", "ellipse", "path", "polyline", "polygon", "text"].includes(t)) return;
+    const o = subir(el);
+    if (o.oculto && !o.dxf) return;
+    // Lo que está dentro de un recorte (clipPath) no se dibuja: son sus definiciones
+    for (let e = el.parentNode; e && e.tagName; e = e.parentNode) if (e.tagName.toLowerCase() === "clippath") return;
+    const st = hex(el.getAttribute("stroke")),
+      fi =
+        el.getAttribute("fill") === null
+          ? t === "text"
+            ? "#000000"
+            : t === "line"
+              ? ""
+              : "#000000"
+          : hex(el.getAttribute("fill")),
+      sw = sw0(el),
+      dash = el.getAttribute("stroke-dasharray");
     if (t === "line") {
-      const dash = el.getAttribute("stroke-dasharray"),
-        x1 = n(el.getAttribute("x1")),
-        y1 = n(el.getAttribute("y1")),
-        x2 = n(el.getAttribute("x2")),
-        y2 = n(el.getAttribute("y2"));
-      const capa = capaDe(el, ""),
-        cl = sobreClaro((x1 + x2) / 2, (y1 + y2) / 2);
-      // Punteadas: la de tierra (verde) en E-TIERRA; las demás (reservas, niveles) en su capa
-      if (dash)
-        return linea(
-          x1,
-          y1,
-          x2,
-          y2,
-          capa || (st === "#2f7a4b" ? "E-TIERRA" : "E-RESERVA"),
-          esq === "capas" ? 256 : esq === "mono" ? 7 : col(st, false, cl)
-        );
-      if (sw >= 3)
-        return pline(
-          [
-            [x1, y1],
-            [x2, y2]
-          ],
-          "E-BARRAS",
-          // Cada barra en su color: cobre en el unifilar; R, S, T, N y tierra en el banco de medidores
-          esq === "capas" ? 256 : esq === "mono" ? 7 : col(st),
-          sw * k
-        );
-      const ly = capa || (st === "#2f7a4b" ? "E-TIERRA" : "E-UNIFILAR");
-      if (sw >= 1.5)
-        return pline(
-          [
-            [x1, y1],
-            [x2, y2]
-          ],
-          ly,
-          col(st, false, cl),
-          0.35
-        );
-      return linea(x1, y1, x2, y2, ly, col(st, false, cl));
+      const P = [
+        [n(el.getAttribute("x1")), n(el.getAttribute("y1"))],
+        [n(el.getAttribute("x2")), n(el.getAttribute("y2"))]
+      ];
+      return trazo(
+        P,
+        false,
+        st,
+        sw,
+        dash,
+        o,
+        dash
+          ? st === "#2f7a4b"
+            ? "E-TIERRA"
+            : "E-RESERVA"
+          : sw >= 3
+            ? "E-BARRAS"
+            : st === "#2f7a4b"
+              ? "E-TIERRA"
+              : "E-UNIFILAR"
+      );
     }
     if (t === "rect") {
       const x = n(el.getAttribute("x")),
         y = n(el.getAttribute("y")),
         w = n(el.getAttribute("width")),
         h = n(el.getAttribute("height"));
-      if (!st && x === 0 && y === 0) return;
-      const cl = sobreClaro(x + w / 2, y + h / 2);
-      if (esq === "jmg" && CLARO[fi] && capaDe(el, "") === "E-TABLEROS") {
-        solido(x, y, w, h, "E-RELLENOS", CLARO[fi]);
-        claros.push([x, y, w, h]);
-      } else if (fi && OSCURO.includes(fi)) {
-        solido(x, y, w, h, capaDe(el, "E-RELLENOS"), esq === "capas" ? 256 : esq === "mono" ? 9 : col(fi));
-        fondos.push([x, y, w, h]);
-      }
-      if (st) {
-        const marco = x === 6 && y === 4;
-        pline(
-          [
-            [x, y],
-            [x + w, y],
-            [x + w, y + h],
-            [x, y + h]
-          ],
-          marco ? "E-MARCO" : capaDe(el, "E-CUADROS"),
-          col(st, false, cl),
-          marco ? 0.5 : sw >= 1.2 ? 0.25 : 0,
-          true
-        );
-      }
+      // El fondo blanco de toda la lámina ya es el papel
+      if (x === 0 && y === 0 && Math.abs(w - W) < 1 && Math.abs(h - H) < 1 && fi === "#ffffff" && !st) return;
+      const P = rectPts(x, y, w, h, n(el.getAttribute("rx")), n(el.getAttribute("ry")));
+      relleno([P], fi, o, "E-RELLENOS");
+      trazo(P, true, st, sw, dash, o, x === 6 && y === 4 ? "E-MARCO" : "E-CUADROS");
       return;
     }
-    if (t === "circle") {
-      add(
-        0,
-        "CIRCLE",
-        8,
-        capaDe(el, "E-SIMBOLOS"),
-        62,
-        col(st || fi, false, sobreClaro(n(el.getAttribute("cx")), n(el.getAttribute("cy")))),
-        10,
-        X(n(el.getAttribute("cx"))),
-        20,
-        Y(n(el.getAttribute("cy"))),
-        40,
-        f(n(el.getAttribute("r")) * k)
-      );
-      if (fi && fi !== "#ffffff" && fi !== "none" && n(el.getAttribute("r")) < 4) {
-        const cx = n(el.getAttribute("cx")),
-          cy = n(el.getAttribute("cy")),
-          r = n(el.getAttribute("r"));
-        pline(
-          [
-            [cx - r / 2, cy],
-            [cx + r / 2, cy]
-          ],
-          capaDe(el, "E-SIMBOLOS"),
-          col(fi),
-          r * k * 1.6
-        );
-      }
-      return;
-    }
-    if (t === "ellipse") {
+    if (t === "circle" || t === "ellipse") {
       const cx = n(el.getAttribute("cx")),
         cy = n(el.getAttribute("cy")),
-        rx = n(el.getAttribute("rx")),
-        ry = n(el.getAttribute("ry")),
-        P = [];
-      for (let i = 0; i < 36; i++) {
-        const a = (i / 36) * 2 * Math.PI;
+        rx = t === "circle" ? n(el.getAttribute("r")) : n(el.getAttribute("rx")),
+        ry = t === "circle" ? rx : n(el.getAttribute("ry"));
+      if (!dentro(cx, cy, o.clip) || !(rx > 0)) return;
+      if (t === "circle") {
+        relleno(
+          [
+            [
+              [cx - rx, cy],
+              [cx + rx, cy]
+            ]
+          ],
+          fi,
+          o,
+          "E-SIMBOLOS",
+          true
+        );
+        if (st)
+          ents.push([
+            "CIRCLE",
+            ...comun(capaDe(o, "E-SIMBOLOS"), color(st), tipoDe(dash), grosor(sw * k)),
+            100,
+            "AcDbCircle",
+            10,
+            f(X(cx)),
+            20,
+            f(Y(cy)),
+            30,
+            "0.0",
+            40,
+            f(rx * k)
+          ]);
+        return;
+      }
+      const P = [];
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * 2 * Math.PI;
         P.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
       }
-      return pline(P, capaDe(el, "E-SIMBOLOS"), col(st), 0, true);
+      relleno([P], fi, o, "E-SIMBOLOS");
+      trazo(P, true, st, sw, dash, o, "E-SIMBOLOS");
+      return;
     }
-    if (t === "path") {
-      const P = [];
-      (el.getAttribute("d") || "").replace(/([MLZ])\s*([-\d.]+)?[\s,]*([-\d.]+)?/gi, (m, c, a, b) => {
-        if (!/z/i.test(c)) P.push([n(a), n(b)]);
-        return m;
-      });
-      if (P.length >= 3) {
-        const c = col(fi || st, false, sobreClaro(P[0][0], P[0][1])),
-          q = P.length === 4 ? P[3] : P[2];
-        add(
-          0,
-          "SOLID",
-          8,
-          capaDe(el, "E-SIMBOLOS"),
-          62,
-          c,
-          10,
-          X(P[0][0]),
-          20,
-          Y(P[0][1]),
-          11,
-          X(P[1][0]),
-          21,
-          Y(P[1][1]),
-          12,
-          X(q[0]),
-          22,
-          Y(q[1]),
-          13,
-          X(P[2][0]),
-          23,
-          Y(P[2][1])
+    if (t === "path" || t === "polyline" || t === "polygon") {
+      const L =
+        t === "path"
+          ? lazosDe(el.getAttribute("d"))
+          : [
+              (el.getAttribute("points") || "")
+                .trim()
+                .split(/[\s,]+/)
+                .map(Number)
+                .reduce((a, v, i, s) => (i % 2 ? a : (a.push([v, s[i + 1]]), a)), [])
+            ];
+      if (t === "polygon") L[0].c = true;
+      if (t !== "polyline")
+        relleno(
+          L.filter(P => P.length >= 3),
+          fi,
+          o,
+          "E-SIMBOLOS"
         );
-      }
+      L.forEach(P => trazo(P, !!P.c, st, sw, dash, o, "E-SIMBOLOS"));
       return;
     }
     if (t === "text") {
       const x = n(el.getAttribute("x")),
-        y = n(el.getAttribute("y")),
-        fs = n(el.getAttribute("font-size")) || 9,
+        y = n(el.getAttribute("y"));
+      if (!dentro(x, y, o.clip)) return;
+      const txt = String(el.textContent || "")
+        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        .trim()
+        .slice(0, 250);
+      if (!txt) return;
+      const fs = n(el.getAttribute("font-size")) || 9,
         an = el.getAttribute("text-anchor"),
-        b = el.getAttribute("font-weight") === "700";
-      const tr = (el.getAttribute("transform") || "").match(/rotate\(([-\d.]+)/),
+        db = el.getAttribute("dominant-baseline") || "",
+        neg = /^(700|bold|600|800|900)$/.test(el.getAttribute("font-weight") || ""),
+        cur = el.getAttribute("font-style") === "italic",
+        tr = (el.getAttribute("transform") || "").match(/rotate\(([-\d.e]+)/),
         rot = tr ? -n(tr[1]) : 0,
-        j = an === "middle" ? 1 : an === "end" ? 2 : 0;
-      let c = col(fi, true, sobreClaro(x, y));
-      if (esq === "mono" && fi === "#ffffff") c = 7;
-      if (esq === "capas") c = 256;
-      add(
-        0,
+        j = an === "middle" ? 1 : an === "end" ? 2 : 0,
+        v = /central|middle/.test(db)
+          ? 2
+          : /hanging|text-before-edge|^top/.test(db)
+            ? 3
+            : /text-after-edge|ideographic|bottom/.test(db)
+              ? 1
+              : 0,
+        estilo = neg ? (cur ? "JMG_ARIAL_NK" : "JMG_ARIAL_N") : cur ? "JMG_ARIAL_K" : "JMG_ARIAL";
+      ents.push([
         "TEXT",
-        8,
-        capaDe(el, "E-TEXTOS"),
-        62,
-        c,
-        7,
-        b ? "JMG_ARIAL_N" : "JMG_ARIAL",
+        ...comun(capaDe(o, "E-TEXTOS"), color(fi || "#000000")),
+        100,
+        "AcDbText",
         10,
-        X(x),
+        f(X(x)),
         20,
-        Y(y),
+        f(Y(y)),
+        30,
+        "0.0",
         40,
-        f(fs * 0.72 * k),
+        f(fs * 0.716 * k),
         1,
-        enc(el.textContent)
-      );
-      if (rot) add(50, rot.toFixed(2));
-      if (j) add(72, j, 11, X(x), 21, Y(y));
+        txt,
+        ...(rot ? [50, rot.toFixed(3)] : []),
+        7,
+        estilo,
+        ...(j ? [72, j] : []),
+        ...(j || v ? [11, f(X(x)), 21, f(Y(y)), 31, "0.0"] : []),
+        100,
+        "AcDbText",
+        ...(v ? [73, v] : [])
+      ]);
     }
   });
-  // Lámina: borde del papel (no se imprime en capa DEFPOINTS)
-  add(0, "POLYLINE", 8, "Defpoints", 62, 8, 66, 1, 10, "0.0", 20, "0.0", 70, 1);
-  [
-    [0, 0],
-    [lam[0], 0],
-    [lam[0], lam[1]],
-    [0, lam[1]]
-  ].forEach(([x, y]) => add(0, "VERTEX", 8, "Defpoints", 10, f(x), 20, f(y)));
-  add(0, "SEQEND", 8, "Defpoints");
-  const CAPAS = {
-    "E-UNIFILAR": [7, "CONTINUOUS"],
-    "E-BARRAS": [30, "CONTINUOUS"],
-    "E-RESERVA": [8, "DASHED"],
-    "E-TIERRA": [3, "CONTINUOUS"],
-    "E-SIMBOLOS": [4, "CONTINUOUS"],
-    "E-CUADROS": [5, "CONTINUOUS"],
-    "E-MARCO": [5, "CONTINUOUS"],
-    "E-RELLENOS": [9, "CONTINUOUS"],
-    "E-TEXTOS": [7, "CONTINUOUS"],
-    "E-ROTULO": [5, "CONTINUOUS"],
-    "E-LEYENDA": [4, "CONTINUOUS"],
-    "E-ELEVACION": [7, "CONTINUOUS"],
-    "E-NIVELES": [8, "DASHED"],
-    "E-TUBERIA": [30, "CONTINUOUS"],
-    "E-DETALLE": [7, "CONTINUOUS"],
-    "E-TABLEROS": [7, "CONTINUOUS"],
-    "E-CABLEADO": [7, "CONTINUOUS"],
-    "E-NOTAS": [7, "CONTINUOUS"],
-    Defpoints: [8, "CONTINUOUS"]
-  };
-  // Solo las capas que el dibujo usa (código 8 de cada entidad), en el orden de la lista
-  const usadas = new Set();
-  for (let i = 0; i < E.length; i += 2) if (E[i] === 8) usadas.add(E[i + 1]);
-  const capas = Object.keys(CAPAS)
-    .filter(k => usadas.has(k))
-    .concat([...usadas].filter(k => !CAPAS[k]))
-    .map(k => [k, ...(CAPAS[k] || [7, "CONTINUOUS"])]);
-  const head = [
-    0,
-    "SECTION",
-    2,
-    "HEADER",
-    9,
-    "$ACADVER",
-    1,
-    "AC1009",
-    9,
-    "$DWGCODEPAGE",
-    3,
-    "ANSI_1252",
-    9,
-    "$INSBASE",
-    10,
-    "0.0",
-    20,
-    "0.0",
-    30,
-    "0.0",
-    9,
-    "$EXTMIN",
-    10,
-    "0.0",
-    20,
-    "0.0",
-    30,
-    "0.0",
-    9,
-    "$EXTMAX",
-    10,
-    f(lam[0]),
-    20,
-    f(lam[1]),
-    30,
-    "0.0",
-    9,
-    "$LIMMIN",
-    10,
-    "0.0",
-    20,
-    "0.0",
-    9,
-    "$LIMMAX",
-    10,
-    f(lam[0]),
-    20,
-    f(lam[1]),
-    9,
-    "$LTSCALE",
-    40,
-    "1.0",
-    // Vista al abrir: centrada en la lámina y con su altura más un margen (como «Zoom extensión»)
-    9,
-    "$VIEWCTR",
-    10,
-    f(lam[0] / 2),
-    20,
-    f(lam[1] / 2),
-    9,
-    "$VIEWSIZE",
-    40,
-    f(lam[1] * 1.04),
-    0,
-    "ENDSEC",
-    0,
-    "SECTION",
-    2,
-    "TABLES",
-    0,
-    "TABLE",
-    2,
-    "VPORT",
+  // Borde del papel (no se imprime: capa Defpoints)
+  ents.push([
+    "LWPOLYLINE",
+    8,
+    capaDe({}, "Defpoints"),
+    62,
+    8,
+    100,
+    "AcDbPolyline",
+    90,
+    4,
     70,
     1,
-    0,
-    "VPORT",
-    2,
-    "*ACTIVE",
-    70,
-    0,
-    10,
-    "0.0",
-    20,
-    "0.0",
-    11,
-    "1.0",
-    21,
-    "1.0",
-    12,
-    f(lam[0] / 2),
-    22,
-    f(lam[1] / 2),
-    13,
-    "0.0",
-    23,
-    "0.0",
-    14,
-    "10.0",
-    24,
-    "10.0",
-    15,
-    "10.0",
-    25,
-    "10.0",
-    16,
-    "0.0",
-    26,
-    "0.0",
-    36,
-    "1.0",
-    17,
-    "0.0",
-    27,
-    "0.0",
-    37,
-    "0.0",
-    40,
-    f(lam[1] * 1.04),
-    41,
-    f(lam[0] / lam[1]),
-    42,
-    "50.0",
     43,
     "0.0",
-    44,
+    10,
     "0.0",
-    50,
+    20,
     "0.0",
-    51,
+    10,
+    f(lam[0]),
+    20,
     "0.0",
-    71,
-    0,
-    72,
-    100,
-    73,
-    1,
-    74,
-    3,
-    75,
-    0,
-    76,
-    0,
-    77,
-    0,
-    78,
-    0,
-    0,
-    "ENDTAB",
-    0,
-    "TABLE",
-    2,
-    "LTYPE",
-    70,
-    2,
-    0,
-    "LTYPE",
-    2,
-    "CONTINUOUS",
-    70,
-    0,
-    3,
-    "Solid line",
-    72,
-    65,
-    73,
-    0,
-    40,
+    10,
+    f(lam[0]),
+    20,
+    f(lam[1]),
+    10,
     "0.0",
-    0,
-    "LTYPE",
-    2,
-    "DASHED",
-    70,
-    0,
-    3,
-    "__  __  __",
-    72,
-    65,
-    73,
-    2,
-    40,
-    f(Math.max(3, 6 * k)),
-    49,
-    f(Math.max(2, 4 * k)),
-    49,
-    f(-Math.max(1, 2 * k)),
-    0,
-    "ENDTAB",
-    0,
-    "TABLE",
-    2,
-    "LAYER",
-    70,
-    capas.length,
-    ...capas.flatMap(([nm, c, lt]) => [0, "LAYER", 2, nm, 70, 0, 62, c, 6, lt]),
-    0,
-    "ENDTAB",
-    0,
-    "TABLE",
-    2,
-    "STYLE",
-    70,
-    2,
-    0,
-    "STYLE",
-    2,
-    "JMG_ARIAL",
-    70,
-    0,
-    40,
-    "0.0",
-    41,
-    "1.0",
-    50,
-    "0.0",
-    71,
-    0,
-    42,
-    "2.5",
-    3,
-    "arial.ttf",
-    4,
-    "",
-    0,
-    "STYLE",
-    2,
-    "JMG_ARIAL_N",
-    70,
-    0,
-    40,
-    "0.0",
-    41,
-    "1.0",
-    50,
-    "0.0",
-    71,
-    0,
-    42,
-    "2.5",
-    3,
-    "arialbd.ttf",
-    4,
-    "",
-    0,
-    "ENDTAB",
-    0,
-    "ENDSEC",
-    0,
-    "SECTION",
-    2,
-    "ENTITIES"
-  ];
-  const all = [...head, ...E, 0, "ENDSEC", 0, "EOF"];
-  let out = "";
-  for (let i = 0; i < all.length; i += 2) out += String(all[i]).padStart(3, " ") + "\r\n" + all[i + 1] + "\r\n";
-  return out;
+    20,
+    f(lam[1])
+  ]);
+  const CAPAS = {
+    "E-PAPEL": 7,
+    "E-UNIFILAR": 7,
+    "E-BARRAS": 30,
+    "E-RESERVA": 8,
+    "E-TIERRA": 3,
+    "E-SIMBOLOS": 4,
+    "E-CUADROS": 5,
+    "E-MARCO": 5,
+    "E-RELLENOS": 9,
+    "E-TEXTOS": 7,
+    "E-ROTULO": 5,
+    "E-LEYENDA": 4,
+    "E-ELEVACION": 7,
+    "E-NIVELES": 8,
+    "E-TUBERIA": 30,
+    "E-DETALLE": 7,
+    "E-TABLEROS": 7,
+    "E-CABLEADO": 7,
+    "E-NOTAS": 7,
+    Defpoints: 8
+  };
+  return dxfEnBase(ents, {
+    capas: [...usadas.keys()].map(c => [c, CAPAS[c] ?? 7]),
+    tipos: [...tipos],
+    estilos: [
+      ["JMG_ARIAL", "arial.ttf"],
+      ["JMG_ARIAL_N", "arialbd.ttf"],
+      ["JMG_ARIAL_K", "ariali.ttf"],
+      ["JMG_ARIAL_NK", "arialbi.ttf"]
+    ],
+    ext: [0, 0, lam[0], lam[1]]
+  });
+}
+/* Escribe las entidades en la base de AutoCAD 2013 (DXF_BASE_2013, js/planos/dxf-base.js): sus capas, tipos de línea y
+   estilos de texto en las tablas, las entidades en el espacio modelo con identificadores desde $HANDSEED, la extensión
+   del dibujo y la vista al abrir (toda la lámina). Devuelve el texto del archivo (UTF-8, como AutoCAD 2007 en adelante). */
+function dxfEnBase(ents, { capas, tipos, estilos, ext }) {
+  const nl = "\n",
+    L = DXF_BASE_2013.split(/\r?\n/),
+    c = i => (L[i] || "").trim();
+  let sec = "",
+    tabla = "",
+    reg = null,
+    iSeed = -1,
+    iEnt = -1,
+    ms = "",
+    vp = null;
+  const T = {},
+    regs = [],
+    hdr = {};
+  for (let i = 0; i + 1 < L.length; i += 2) {
+    const kk = c(i),
+      v = c(i + 1);
+    if (kk === "0") {
+      if (reg) regs.push(reg);
+      reg = null;
+      if (v === "SECTION") sec = "?";
+      else if (v === "ENDSEC") {
+        if (sec === "ENTITIES") iEnt = i;
+        sec = "";
+      } else if (v === "TABLE") tabla = "?";
+      else if (v === "ENDTAB") {
+        if (T[tabla]) T[tabla].fin = i;
+        tabla = "";
+      } else if (sec === "TABLES" && tabla) reg = { tabla, i, g: {} };
+      continue;
+    }
+    if (sec === "?" && kk === "2") sec = v;
+    else if (tabla === "?" && kk === "2") {
+      tabla = v;
+      T[v] = { h: "", fin: -1, n: new Set() };
+    } else if (tabla && !reg && kk === "5" && T[tabla]) T[tabla].h = v;
+    else if (reg) {
+      if (!(kk in reg.g)) reg.g[kk] = v;
+      (reg.pos = reg.pos || {})[kk] = reg.pos[kk] ?? i + 1;
+    }
+    if (sec === "HEADER" && kk === "9") hdr[v] = i + 2;
+  }
+  if (reg) regs.push(reg);
+  regs.forEach(r => {
+    if (T[r.tabla] && r.g[2] !== undefined) T[r.tabla].n.add(r.g[2].toUpperCase());
+    if (r.tabla === "BLOCK_RECORD" && /^\*model_space$/i.test(r.g[2] || "")) ms = r.g[5];
+    if (r.tabla === "VPORT" && /^\*active$/i.test(r.g[2] || "")) vp = r;
+  });
+  iSeed = hdr.$HANDSEED;
+  let h = parseInt(c(iSeed + 1), 16);
+  const id = () => (h++).toString(16).toUpperCase(),
+    rec = (tb, tipo, sub, campos) => [
+      0,
+      tipo,
+      5,
+      id(),
+      330,
+      T[tb].h,
+      100,
+      "AcDbSymbolTableRecord",
+      100,
+      sub,
+      ...campos
+    ],
+    ins = {},
+    poner = (i, a) => (ins[i] = (ins[i] || []).concat(a)),
+    lay0 = regs.find(r => r.tabla === "LAYER" && r.g[2] === "0");
+  const nuevo = (tb, nom) => !T[tb].n.has(String(nom).toUpperCase());
+  tipos
+    .filter(([nom]) => nuevo("LTYPE", nom))
+    .forEach(([nom, pat]) =>
+      poner(
+        T.LTYPE.fin,
+        rec("LTYPE", "LTYPE", "AcDbLinetypeTableRecord", [
+          2,
+          nom,
+          70,
+          0,
+          3,
+          "Trazos",
+          72,
+          65,
+          73,
+          pat.length,
+          40,
+          pat.reduce((a, b) => a + b, 0).toFixed(4),
+          ...pat.flatMap((v, i) => [49, (i % 2 ? -v : v).toFixed(4), 74, 0])
+        ])
+      )
+    );
+  estilos
+    .filter(([nom]) => nuevo("STYLE", nom))
+    .forEach(([nom, fuente]) =>
+      poner(
+        T.STYLE.fin,
+        rec("STYLE", "STYLE", "AcDbTextStyleTableRecord", [
+          2,
+          nom,
+          70,
+          0,
+          40,
+          "0.0",
+          41,
+          "1.0",
+          50,
+          "0.0",
+          71,
+          0,
+          42,
+          "2.5",
+          3,
+          fuente,
+          4,
+          ""
+        ])
+      )
+    );
+  capas
+    .filter(([nom]) => nuevo("LAYER", nom))
+    .forEach(([nom, col]) =>
+      poner(
+        T.LAYER.fin,
+        rec("LAYER", "LAYER", "AcDbLayerTableRecord", [
+          2,
+          nom,
+          70,
+          0,
+          62,
+          col,
+          6,
+          "Continuous",
+          ...(nom === "Defpoints" ? [290, 0] : []),
+          370,
+          -3,
+          ...(lay0 && lay0.g[390] ? [390, lay0.g[390]] : [])
+        ])
+      )
+    );
+  poner(
+    iEnt,
+    ents.flatMap(([tipo, ...g]) => [0, tipo, 5, id(), 330, ms, 100, "AcDbEntity", ...g])
+  );
+  // Extensión y vista al abrir: toda la lámina con un margen
+  const cx = (ext[0] + ext[2]) / 2,
+    cy = (ext[1] + ext[3]) / 2,
+    alto = (ext[3] - ext[1]) * 1.05,
+    pon = (i, v) => i !== undefined && (L[i] = String(v));
+  if (hdr.$EXTMIN !== undefined) {
+    pon(hdr.$EXTMIN + 1, ext[0].toFixed(4));
+    pon(hdr.$EXTMIN + 3, ext[1].toFixed(4));
+  }
+  if (hdr.$EXTMAX !== undefined) {
+    pon(hdr.$EXTMAX + 1, ext[2].toFixed(4));
+    pon(hdr.$EXTMAX + 3, ext[3].toFixed(4));
+  }
+  if (vp && vp.pos) {
+    pon(vp.pos[12], cx.toFixed(4));
+    pon(vp.pos[22], cy.toFixed(4));
+    pon(vp.pos[40], alto.toFixed(4));
+    pon(vp.pos[41], ((ext[2] - ext[0]) / (ext[3] - ext[1])).toFixed(4));
+  }
+  L[iSeed + 1] = h.toString(16).toUpperCase();
+  Object.keys(ins)
+    .map(Number)
+    .sort((a, b) => b - a)
+    .forEach(i => L.splice(i, 0, ...ins[i].map(String)));
+  return L.join(nl);
 }
 function svgPng(svg, scale = 2) {
   return new Promise((ok, ko) => {

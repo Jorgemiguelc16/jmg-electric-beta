@@ -2,6 +2,75 @@
    rotuloSvg(): el rótulo que llevan todos los planos (logo, datos del proyecto, plano, fecha y número de lámina). */
 /* Rótulo de las láminas (unifilar y alturas): logo, datos del proyecto, plano y número de lámina, dentro del
    recuadro x, y, w, h. El logo vectorial (oculto en pantalla) es el que usa el DXF. */
+/* Logo dibujado con figuras rellenas, medido sobre la imagen del logo (200 × 200): así se ve igual en cualquier AutoCAD,
+   sin depender de la fuente. Letras «JMG» de bloques y el rayo amarillo dentro de la M; x0, y0: esquina del cuadro de
+   200 × 200 a la escala e; s: tamaño de la letra de «PROJECTS & ENERGY». Va dentro de <g display="none" data-dxf="logo">:
+   en pantalla se ve la imagen y en el DXF estas figuras. */
+function logoVector(o, x0, y0, e, s) {
+  const LY = "#ffd200",
+    T = (x, y, t, { s = 9, b = 0, a = "start", f = PAL.INK } = {}) =>
+      o.push(
+        `<text x="${x}" y="${y}" font-size="${s}"${b ? ' font-weight="700"' : ""} text-anchor="${a}" fill="${f}">${esc(t)}</text>`
+      ),
+    fig = pts =>
+      o.push(
+        `<path d="${pts.map(([u, v], n) => `${n ? "L" : "M"}${px2(x0 + u * e)} ${px2(y0 + v * e)}`).join("")}Z" fill="${LY}"/>`
+      ),
+    caja = (u1, v1, u2, v2) =>
+      fig([
+        [u1, v1],
+        [u2, v1],
+        [u2, v2],
+        [u1, v2]
+      ]);
+  // J
+  caja(46.9, 61, 62.3, 121.3);
+  caja(17.8, 106.6, 46.9, 121.3);
+  caja(17.8, 96, 32.9, 106.6);
+  // M: trazos verticales, brazo izquierdo y arranque del derecho
+  caja(68.1, 61, 83.1, 121.3);
+  fig([
+    [68.1, 61],
+    [86.3, 61],
+    [95, 77.5],
+    [83.1, 90]
+  ]);
+  caja(111.9, 61, 126.9, 121.3);
+  fig([
+    [109.4, 61],
+    [111.9, 61],
+    [111.9, 85.6]
+  ]);
+  // Rayo
+  fig([
+    [98.1, 61.5],
+    [108.8, 61.3],
+    [104.6, 85]
+  ]);
+  fig([
+    [98.1, 61.5],
+    [104.6, 85],
+    [96, 96.3],
+    [86.9, 96.3]
+  ]);
+  fig([
+    [104.6, 85],
+    [110, 88.1],
+    [96, 96.3]
+  ]);
+  fig([
+    [96, 96.3],
+    [110, 88.1],
+    [90.3, 120]
+  ]);
+  // G
+  caja(133.1, 61, 148.1, 121.3);
+  caja(148.1, 61, 182.5, 75);
+  caja(156.3, 85, 182.5, 99.4);
+  caja(166.9, 99.4, 182.5, 106.6);
+  caja(148.1, 106.6, 182.5, 121.3);
+  T(x0 + 100 * e, y0 + 140 * e, "PROJECTS & ENERGY", { s, b: 1, a: "middle", f: LY });
+}
 /* Número de lámina corrido: en el expediente, cuando van primero las láminas de planta del diseño, las que genera la
    plataforma (IE-01 unifilar, IE-02 alturas…) siguen después. ROT_DESP es cuánto se corren (0 fuera del expediente). */
 let ROT_DESP = 0;
@@ -16,8 +85,7 @@ function rotuloSvg(o, rx, yr, rw, hr, P, plano, lamina) {
     o.push(
       `<text x="${x}" y="${y}" font-size="${s}"${b ? ' font-weight="700"' : ""} text-anchor="${a}" fill="${f}">${esc(t)}</text>`
     );
-  const LY = "#ffd200",
-    LB = "#1f2328",
+  const LB = "#1f2328",
     { CU, NAVY } = PAL;
   o.push(`<g data-capa="E-ROTULO">`);
   o.push(`<rect x="${rx}" y="${yr}" width="110" height="${hr}" fill="${LB}"/>`);
@@ -30,67 +98,8 @@ function rotuloSvg(o, rx, yr, rw, hr, P, plano, lamina) {
   // AutoCAD, sin depender de la fuente. Letras «JMG» de bloques y el rayo amarillo dentro de la M
   {
     // Misma escala que la imagen en pantalla: cubre la caja de 110 de ancho por el alto del rótulo
-    const e = Math.max(110, hr) / 200,
-      x0 = rx + 55 - 100 * e,
-      y0 = yr + hr / 2 - 100 * e,
-      fig = pts =>
-        o.push(
-          `<path d="${pts.map(([u, v], n) => `${n ? "L" : "M"}${px2(x0 + u * e)} ${px2(y0 + v * e)}`).join("")}Z" fill="${LY}"/>`
-        ),
-      caja = (u1, v1, u2, v2) =>
-        fig([
-          [u1, v1],
-          [u2, v1],
-          [u2, v2],
-          [u1, v2]
-        ]);
-    // J
-    caja(46.9, 61, 62.3, 121.3);
-    caja(17.8, 106.6, 46.9, 121.3);
-    caja(17.8, 96, 32.9, 106.6);
-    // M: trazos verticales, brazo izquierdo y arranque del derecho
-    caja(68.1, 61, 83.1, 121.3);
-    fig([
-      [68.1, 61],
-      [86.3, 61],
-      [95, 77.5],
-      [83.1, 90]
-    ]);
-    caja(111.9, 61, 126.9, 121.3);
-    fig([
-      [109.4, 61],
-      [111.9, 61],
-      [111.9, 85.6]
-    ]);
-    // Rayo
-    fig([
-      [98.1, 61.5],
-      [108.8, 61.3],
-      [104.6, 85]
-    ]);
-    fig([
-      [98.1, 61.5],
-      [104.6, 85],
-      [96, 96.3],
-      [86.9, 96.3]
-    ]);
-    fig([
-      [104.6, 85],
-      [110, 88.1],
-      [96, 96.3]
-    ]);
-    fig([
-      [96, 96.3],
-      [110, 88.1],
-      [90.3, 120]
-    ]);
-    // G
-    caja(133.1, 61, 148.1, 121.3);
-    caja(148.1, 61, 182.5, 75);
-    caja(156.3, 85, 182.5, 99.4);
-    caja(166.9, 99.4, 182.5, 106.6);
-    caja(148.1, 106.6, 182.5, 121.3);
-    T(x0 + 100 * e, y0 + 140 * e, "PROJECTS & ENERGY", { s: 8, b: 1, a: "middle", f: LY });
+    const e = Math.max(110, hr) / 200;
+    logoVector(o, rx + 55 - 100 * e, yr + hr / 2 - 100 * e, e, 8);
   }
   o.push(`</g>`);
   const rot = [
@@ -174,6 +183,14 @@ function rotuloLamina(o, q, x, y, w, h, P, d) {
     o.push(
       `<image x="${q(x)}" y="${q(y)}" width="${q(lw)}" height="${q(yy[3] - y)}" href="${LOGO_JPG}" preserveAspectRatio="xMidYMid slice"/>`
     );
+  // El mismo logo con figuras para el DXF (en pantalla se ve la imagen)
+  {
+    const lh = yy[3] - y,
+      e = q(Math.min(lw, lh * 1.2)) / 200;
+    o.push(`<g display="none" data-dxf="logo">`);
+    logoVector(o, q(x + lw / 2) - 100 * e, q(y + lh / 2) - 100 * e, e, 16 * e);
+    o.push(`</g>`);
+  }
   C(x + lw, yy[0], w - lw, f[0], "PROYECTO", P.nombre, { b: 1, col: NAVY, fs: 3.1 });
   C(x + lw, yy[1], w - lw, f[1], "PROPIETARIO", P.prop);
   C(x + lw, yy[2], w - lw, f[2], "UBICACIÓN", P.ubic);

@@ -18,6 +18,7 @@ const { ctx, cargar, run, raiz } = crearContexto([
   "js/planos/dibujo.js",
   "js/planos/unifilar.js",
   "js/planos/rotulo.js",
+  "js/planos/dxf-base.js",
   "js/planos/exportar-planos.js",
   "js/planos/simbolos.js",
   "js/planos/alturas.js",
@@ -75,7 +76,11 @@ for (const cp of run("CASOS_PRUEBA")) {
             const antes = (previas.casos[cp.id] || {})[id];
             if (!ACTUALIZAR && antes !== h[id]) {
               mal++;
-              console.log(`✘ ${cp.id} · ${id}: ${antes ? "cambió" : "plano nuevo, sin huella"}`);
+              // La huella es la del dibujo (SVG) y la de su DXF: se dice cuál de las dos cambió
+              const soloDxf = antes && antes.split(" ")[0] === h[id].split(" ")[0];
+              console.log(
+                `✘ ${cp.id} · ${id}: ${antes ? (soloDxf ? "cambió solo el DXF" : "cambió el dibujo") : "plano nuevo, sin huella"}`
+              );
               fs.mkdirSync(DIF, { recursive: true });
               fs.writeFileSync(path.join(DIF, `${cp.id} ${id}.svg`.replace(/[^\w.\- ]/g, "_")), u.svg);
             }

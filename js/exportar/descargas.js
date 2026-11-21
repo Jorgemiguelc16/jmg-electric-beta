@@ -247,6 +247,9 @@ function dxfDialogo(abrir) {
   d.hidden = !abrir;
   document.body.classList.toggle("wl-open", abrir);
   if (abrir) {
+    // Las láminas de planta solo si el proyecto tiene diseño sobre el plano
+    const conDis = typeof PLANO !== "undefined" && PLANO && PLANO.dis && (PLANO.dis.els || []).some(e => e.t === "sim");
+    $("dx_plantas").hidden = $("dx_plantas").disabled = !conDis;
     // Por defecto, el plano que está abierto
     $("dx_plano").value = PLANOS[VIEW] ? VIEW : "unifilar";
     try {
@@ -279,9 +282,19 @@ $("dxfDlg").addEventListener("click", async e => {
       .slice(0, 60) || "proyecto";
   const pl = $("dx_plano").value;
   dxfDialogo(false);
-  for (const u of (pl === "todos" ? Object.keys(PLANOS) : [pl]).flatMap(k => PLANOS[k](op.lamina))) {
+  // Láminas de planta del diseño (a su papel y escala) y las de la plataforma (en la lámina elegida)
+  const plantas =
+    (pl === "plantas" || pl === "todos") && typeof laminasExpediente === "function" && !$("dx_plantas").disabled
+      ? (await laminasExpediente()).map(h => ({ svg: h.svg, corto: `${h.hoja} ${h.vista || ""}`.trim(), papel: h.tam }))
+      : [];
+  if (pl === "plantas" && !plantas.length) return toast("El proyecto no tiene láminas de planta del diseño");
+  const hojas = [
+    ...plantas,
+    ...(pl === "plantas" ? [] : pl === "todos" ? Object.keys(PLANOS) : [pl]).flatMap(k => PLANOS[k](op.lamina))
+  ];
+  for (const u of hojas) {
     const blob = new Blob([svgDxf(u.svg, op)], { type: "application/dxf" }),
-      nombre = `JMG-ELECTRIC - ${u.corto} ${op.lamina} - ${nm}.dxf`;
+      nombre = `JMG-ELECTRIC - ${u.corto} ${u.papel || op.lamina} - ${nm}.dxf`;
     try {
       if (downloads) await downloads.save({ filename: nombre, data: blob });
       else descargarLocal(blob, nombre);

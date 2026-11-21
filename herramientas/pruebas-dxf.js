@@ -8,13 +8,14 @@ const fs = require("fs");
 const path = require("path");
 const { crearContexto } = require("./contexto.js");
 const { DOMParser } = require("./mini-dom.js");
-const { dxfR12Problemas } = require("./dxf-r12.js");
+const { dxf2013Problemas } = require("./dxf-2013.js");
 
 const { ctx, cargar, run, raiz } = crearContexto([
   "js/base/logo.js",
   "js/planos/dibujo.js",
   "js/planos/unifilar.js",
   "js/planos/rotulo.js",
+  "js/planos/dxf-base.js",
   "js/planos/exportar-planos.js",
   "js/planos/simbolos.js",
   "js/planos/alturas.js",
@@ -124,9 +125,9 @@ for (const cp of run("CASOS_PRUEBA").slice(0, 3)) {
       try {
         const txt = svgDxf(u.svg, { lamina: "A3", colores: "jmg" }),
           d = modeloDxf(txt),
-          pr = dxfR12Problemas(typeof txt === "string" ? txt : new TextDecoder("latin1").decode(txt));
+          pr = dxf2013Problemas(txt);
         ok(d.trazos.length > 20 && d.textos.length > 5, `${cp.id} · ${u.corto}: se lee con trazos y textos`);
-        ok(!pr.length, `${cp.id} · ${u.corto}: cumple las reglas de R12 que exige AutoCAD (${pr.join("; ")})`);
+        ok(!pr.length, `${cp.id} · ${u.corto}: DXF de AutoCAD 2013 bien formado (${pr.join("; ")})`);
       } catch (e) {
         ok(false, `${cp.id} · ${u.corto}: ${e.message}`);
       }

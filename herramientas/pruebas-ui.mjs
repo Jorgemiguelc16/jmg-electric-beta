@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { abrirApp, esperar, raiz } from "./chrome.mjs";
 import { createRequire } from "node:module";
 const { dxfR12Problemas } = createRequire(import.meta.url)("./dxf-r12.js");
+const { dxf2013Problemas } = createRequire(import.meta.url)("./dxf-2013.js");
 
 const { cdp, ev, J, cerrar } = await abrirApp();
 const poner = (sel, v) =>
@@ -1564,6 +1565,21 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
     JSON.stringify(ex2.h) === JSON.stringify(["IE-04 PLANTA 1ER PISO", "IE-05 PLANTA 2DO PISO"]) &&
       /Lámina IE-06 · Escala S\/E/.test(ex2.ex),
     `todas las plantas en el expediente: ${ex2.h.join(", ")}`
+  );
+  // Planos › AutoCAD: la lámina de planta en DXF de AutoCAD 2013, a su papel, con su rótulo, colores y letra Arial
+  const pd = await ev("laminasExpediente().then(L => svgDxf(L[0].svg, { colores: 'jmg' }))"),
+    ppr = dxf2013Problemas(pd);
+  ok(
+    !ppr.length &&
+      /\nAC1027\r?\n/.test(pd) &&
+      /\narial\.ttf\r?\n/.test(pd) &&
+      /\n420\r?\n/.test(pd) &&
+      /\nE-ROTULO\r?\n/.test(pd),
+    `lámina de planta en DXF de AutoCAD 2013 con colores exactos, Arial y rótulo ${ppr.join("; ")}`
+  );
+  ok(
+    await ev("dxfDialogo(true), (r => (dxfDialogo(false), r))(!$('dx_plantas').disabled)"),
+    "Planos › AutoCAD ofrece las láminas de planta del diseño"
   );
 });
 

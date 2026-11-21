@@ -624,15 +624,17 @@ function laSvg(op = laOp()) {
   const cuerpo = [],
     leyO = [];
   items.forEach(it => {
-    const dst = it.capa === "E-LEYENDA" ? leyO : cuerpo;
+    const dst = it.capa === "E-LEYENDA" ? leyO : cuerpo,
+      // Su capa (la de la arquitectura o la del diseño): el DXF de la lámina la conserva
+      dc = it.capa ? ` data-capa="${esc(it.capa)}"` : "";
     if (it.t === "l") {
       const p = it.p.map((pp, i) => `${i ? "L" : "M"}${X(pp[0])} ${Y(pp[1])}`).join("") + (it.c ? "Z" : "");
       dst.push(
-        `<path d="${p}" fill="none" stroke="${C(it.col)}" stroke-width="${Math.max(0.1, it.w / LA_K) * LA_PX}"${it.dash ? ` stroke-dasharray="${it.dash.map(v => +((v / LA_K) * LA_PX).toFixed(2)).join(" ")}"` : ""} stroke-linecap="round" stroke-linejoin="round"/>`
+        `<path${dc} d="${p}" fill="none" stroke="${C(it.col)}" stroke-width="${Math.max(0.1, it.w / LA_K) * LA_PX}"${it.dash ? ` stroke-dasharray="${it.dash.map(v => +((v / LA_K) * LA_PX).toFixed(2)).join(" ")}"` : ""} stroke-linecap="round" stroke-linejoin="round"/>`
       );
     } else if (it.t === "f") {
       const p = it.pol.map(u => u.p.map((pp, i) => `${i ? "L" : "M"}${X(pp[0])} ${Y(pp[1])}`).join("") + "Z").join("");
-      dst.push(`<path d="${p}" fill="${C(it.col)}" stroke="none" fill-rule="evenodd"/>`);
+      dst.push(`<path${dc} d="${p}" fill="${C(it.col)}" stroke="none" fill-rule="evenodd"/>`);
     } else if (it.t === "t") {
       const fs = +((it.h / LA_K) * LA_PX).toFixed(2),
         an = it.al === "center" ? "middle" : it.al === "right" || it.al === "end" ? "end" : "start",
@@ -648,7 +650,7 @@ function laSvg(op = laOp()) {
         y = Y(it.p[1]),
         ang = +((it.ang * 180) / Math.PI).toFixed(2);
       dst.push(
-        `<text x="${x}" y="${y}" font-size="${fs}"${it.b ? ' font-weight="700"' : ""}${it.it ? ' font-style="italic"' : ""} text-anchor="${an}" dominant-baseline="${db}" fill="${C(it.col)}"${ang ? ` transform="rotate(${ang} ${x} ${y})"` : ""}>${esc(it.s)}</text>`
+        `<text${dc} x="${x}" y="${y}" font-size="${fs}"${it.b ? ' font-weight="700"' : ""}${it.it ? ' font-style="italic"' : ""} text-anchor="${an}" dominant-baseline="${db}" fill="${C(it.col)}"${ang ? ` transform="rotate(${ang} ${x} ${y})"` : ""}>${esc(it.s)}</text>`
       );
     }
   });

@@ -67,88 +67,89 @@ se dividieron por tema en la v3.2, sin cambiar el código: cada parte dice en su
 | | **`planos/`** | |
 | 17 | `planos/dibujo.js` | **Piezas comunes de los planos**: paleta, colores de los conductores, notas, puerta metálica |
 | 18 | `planos/unifilar.js` | Diagrama unifilar (IE-01) y su división en láminas |
-| 19 | `planos/rotulo.js` | Rótulo de todas las láminas (`rotuloSvg()`) |
-| 20 | `planos/exportar-planos.js` | Tamaños de lámina y conversión de cualquier plano a DXF (`svgDxf()`) y PNG (`svgPng()`) |
-| 21 | `planos/simbolos.js` | Símbolos de la Norma DGE y primitivas de dibujo (`trazos()`: L, T, R, C, TRI) |
-| 22 | `planos/alturas.js` | Diagrama de alturas (IE-02) |
-| 23 | `planos/detalles.js` | Leyenda y detalle del pozo de tierra (IE-03) |
-| 24 | `planos/tableros.js` | Detalle de tableros (IE-04): puerta metálica o de PVC, interior, peinado |
-| 25 | `planos/medidores.js` | Banco de medidores y balance de fases (IE-06, edificios) |
-| 26 | `planos/tablerogeneral.js` | Tablero general del edificio (IE-05, edificios) |
+| 19 | `planos/rotulo.js` | Rótulo de los planos (`rotuloSvg()`), rótulo de las láminas del diseño (`rotuloLamina()`) y logo con figuras para el DXF (`logoVector()`) |
+| 20 | `planos/dxf-base.js` | Base vacía y válida de los DXF de AutoCAD 2013 (`DXF_BASE_2013`), generada con ezdxf: `svgDxf()` le agrega capas, estilos y entidades |
+| 21 | `planos/exportar-planos.js` | Tamaños de lámina y conversión de cualquier plano a DXF (`svgDxf()`) y PNG (`svgPng()`) |
+| 22 | `planos/simbolos.js` | Símbolos de la Norma DGE y primitivas de dibujo (`trazos()`: L, T, R, C, TRI) |
+| 23 | `planos/alturas.js` | Diagrama de alturas (IE-02) |
+| 24 | `planos/detalles.js` | Leyenda y detalle del pozo de tierra (IE-03) |
+| 25 | `planos/tableros.js` | Detalle de tableros (IE-04): puerta metálica o de PVC, interior, peinado |
+| 26 | `planos/medidores.js` | Banco de medidores y balance de fases (IE-06, edificios) |
+| 27 | `planos/tablerogeneral.js` | Tablero general del edificio (IE-05, edificios) |
 | | **`exportar/`** | |
-| 27 | `exportar/expediente.js` | Expediente técnico en PDF |
+| 28 | `exportar/expediente.js` | Expediente técnico en PDF |
 | | **`interfaz/`** | |
-| 28 | `interfaz/interfaz.js` | **Ciclo principal** `update()` y navegación |
+| 29 | `interfaz/interfaz.js` | **Ciclo principal** `update()` y navegación |
 | | **`exportar/`** | |
-| 29 | `exportar/excel.js` | Memoria de cálculo en Excel: `exportar()` arma el libro, los estilos y las ayudas, y llama a cada hoja |
-| 30 | `exportar/excel-anexos.js` | Hoja Anexos: tablas del CNE que consultan las fórmulas |
-| 31 | `exportar/excel-memoria.js` | Hoja Memoria: datos, parámetros (celdas de las fórmulas) y máxima demanda |
-| 32 | `exportar/excel-calculos.js` | Hoja Cálculos: alimentadores, cuadro de cargas, balance y cortocircuito |
-| 33 | `exportar/excel-resumen.js` | Hoja Memoria (continuación): resumen, suministro, tierra, verificaciones y firmas |
-| 34 | `exportar/excel-planos.js` | Hojas de los planos, como imagen |
-| 35 | `exportar/excel-metrado.js` | Hoja Metrado |
-| 36 | `exportar/excel-presupuesto.js` | Hoja Presupuesto, con fórmulas (solo si el proyecto tiene precios) |
-| 37 | `exportar/descargas.js` | Guardar archivos, lista de planos (`PLANOS`) y diálogos de exportación |
+| 30 | `exportar/excel.js` | Memoria de cálculo en Excel: `exportar()` arma el libro, los estilos y las ayudas, y llama a cada hoja |
+| 31 | `exportar/excel-anexos.js` | Hoja Anexos: tablas del CNE que consultan las fórmulas |
+| 32 | `exportar/excel-memoria.js` | Hoja Memoria: datos, parámetros (celdas de las fórmulas) y máxima demanda |
+| 33 | `exportar/excel-calculos.js` | Hoja Cálculos: alimentadores, cuadro de cargas, balance y cortocircuito |
+| 34 | `exportar/excel-resumen.js` | Hoja Memoria (continuación): resumen, suministro, tierra, verificaciones y firmas |
+| 35 | `exportar/excel-planos.js` | Hojas de los planos, como imagen |
+| 36 | `exportar/excel-metrado.js` | Hoja Metrado |
+| 37 | `exportar/excel-presupuesto.js` | Hoja Presupuesto, con fórmulas (solo si el proyecto tiene precios) |
+| 38 | `exportar/descargas.js` | Guardar archivos, lista de planos (`PLANOS`) y diálogos de exportación |
 | | **`interfaz/`** | |
-| 38 | `interfaz/sitio.js` | Páginas de la web (glosario, novedades, soporte) |
+| 39 | `interfaz/sitio.js` | Páginas de la web (glosario, novedades, soporte) |
 | | **`proyectos/`** | |
-| 39 | `proyectos/proyectos.js` | Guardar, abrir y ejemplos de proyectos. **Almacén** (v3.0): biblioteca y proyecto abierto en IndexedDB (`jmg-electric-proyectos`, `alCargar`, `alEscribir`), con copia de respaldo en localStorage (completos si caben, si no su resumen `_idb`); almacenamiento persistente; respaldo .json con el plano DXF (`proyectoConPlano`, `guardarPlanoDeArchivo`) |
+| 40 | `proyectos/proyectos.js` | Guardar, abrir y ejemplos de proyectos. **Almacén** (v3.0): biblioteca y proyecto abierto en IndexedDB (`jmg-electric-proyectos`, `alCargar`, `alEscribir`), con copia de respaldo en localStorage (completos si caben, si no su resumen `_idb`); almacenamiento persistente; respaldo .json con el plano DXF (`proyectoConPlano`, `guardarPlanoDeArchivo`) |
 | | **`interfaz/`** | |
-| 40 | `interfaz/herramientas.js` | Calculadoras rápidas |
+| 41 | `interfaz/herramientas.js` | Calculadoras rápidas |
 | | **`proyectos/`** | |
-| 41 | `proyectos/archivo.js` | Abrir y guardar `.json` |
-| 42 | `proyectos/respaldo.js` | **Respaldo**: todos los proyectos con sus planos en un archivo (`respDescargar`) y su restauración sin borrar nada (`respLeer`, `respAplicar`); fecha del último respaldo |
+| 42 | `proyectos/archivo.js` | Abrir y guardar `.json` |
+| 43 | `proyectos/respaldo.js` | **Respaldo**: todos los proyectos con sus planos en un archivo (`respDescargar`) y su restauración sin borrar nada (`respLeer`, `respAplicar`); fecha del último respaldo |
 | | **`interfaz/`** | |
-| 43 | `interfaz/app.js` | Espacio de trabajo: árbol, propiedades, cinta |
+| 44 | `interfaz/app.js` | Espacio de trabajo: árbol, propiedades, cinta |
 | | **`ventanas/`** | |
-| 44 | `ventanas/ventana.js` | Comportamiento común de las ventanas (mover, redimensionar, recordar tamaño) |
-| 45 | `ventanas/conductores.js` | Ventana Cuadro de conductores |
-| 46 | `ventanas/ficha.js` | Ventana Ficha del circuito (con vista previa) |
-| 47 | `ventanas/longitudes.js` | Ventana **Verificar longitudes** (cuadro de conductores): los tramos que suma la longitud de cada circuito del plano (`plCamino`), con el acumulado, el total y el recorrido de cada salida |
-| 48 | `ventanas/precios.js` | Ventana **Precios unitarios**: rejilla editable con las partidas del metrado (buscar, filtros sin precio / recordados), origen de cada precio, porcentajes y resumen con el total en letras; cambios pendientes con vista previa (`preCalc` con los precios pendientes) hasta Aplicar |
-| 49 | `ventanas/ficha-tablero.js` | Ventana Ficha del tablero (alimentador, circuitos, equipos y gabinete) |
-| 50 | `ventanas/tabla-cargas.js` | Ventana Editor de cargas especiales (con vista previa) |
-| 51 | `ventanas/parametros.js` | Ventana Parámetros de diseño (se arma con el formulario de parámetros) |
-| 52 | `ventanas/departamentos.js` | Ventana Editor de departamentos |
-| 53 | `ventanas/datos-proyecto.js` | Ventana Datos del proyecto (se arma con los formularios del panel) |
+| 45 | `ventanas/ventana.js` | Comportamiento común de las ventanas (mover, redimensionar, recordar tamaño) |
+| 46 | `ventanas/conductores.js` | Ventana Cuadro de conductores |
+| 47 | `ventanas/ficha.js` | Ventana Ficha del circuito (con vista previa) |
+| 48 | `ventanas/longitudes.js` | Ventana **Verificar longitudes** (cuadro de conductores): los tramos que suma la longitud de cada circuito del plano (`plCamino`), con el acumulado, el total y el recorrido de cada salida |
+| 49 | `ventanas/precios.js` | Ventana **Precios unitarios**: rejilla editable con las partidas del metrado (buscar, filtros sin precio / recordados), origen de cada precio, porcentajes y resumen con el total en letras; cambios pendientes con vista previa (`preCalc` con los precios pendientes) hasta Aplicar |
+| 50 | `ventanas/ficha-tablero.js` | Ventana Ficha del tablero (alimentador, circuitos, equipos y gabinete) |
+| 51 | `ventanas/tabla-cargas.js` | Ventana Editor de cargas especiales (con vista previa) |
+| 52 | `ventanas/parametros.js` | Ventana Parámetros de diseño (se arma con el formulario de parámetros) |
+| 53 | `ventanas/departamentos.js` | Ventana Editor de departamentos |
+| 54 | `ventanas/datos-proyecto.js` | Ventana Datos del proyecto (se arma con los formularios del panel) |
 | | **`interfaz/`** | |
-| 54 | `interfaz/panel.js` | Panel del proyecto (resumen, elemento elegido, por revisar) |
-| 55 | `interfaz/menus-cinta.js` | Menús ▾ de la cinta (sistema eléctrico y agregar cargas) |
+| 55 | `interfaz/panel.js` | Panel del proyecto (resumen, elemento elegido, por revisar) |
+| 56 | `interfaz/menus-cinta.js` | Menús ▾ de la cinta (sistema eléctrico y agregar cargas) |
 | | **`editor/`** | |
-| 56 | `editor/dxf.js` | **Lector DXF**: lee un plano de AutoCAD y lo convierte en trazos, textos, capas y puntos de enganche (sin pantalla) |
-| 57 | `editor/plano-archivo.js` | **Editor de diseño** (1/5): a pantalla completa. plano de arquitectura con zoom, escala, plantas, selección y medición; objetos de la arquitectura borrados de la vista (`EPL.borr`, número de objeto del DXF; el archivo no cambia); Ctrl+X / Supr (`edBorrar`); paneles con ancho ajustable; menú del clic derecho (`edMenuAbrir`; con una herramienta, termina); mano y barra de navegación (zoom ventana, vista anterior `PL_VHIST`); comandos por teclado (`ED_CMD`) y atajos del usuario (`atjAbrir`); buscar en el plano (`buAbrir`, Ctrl+F); modo presentación (`edPresentar`); autoguardado (`edAutoguardar`, `edRecuperar`); con el plano atenuado la arquitectura no se elige; deshacer con tope de memoria (unos 80 MB, al menos 10 pasos); mouse y teclado; Aplicar / Aceptar / Cancelar Aquí: el archivo DXF en la base de datos del navegador, abrir, deshacer y aplicar, y la preparación del dibujo. |
-| 58 | `editor/plano-vista.js` | Editor (2/5): coordenadas, zoom y desplazamiento, colores, dibujo del plano, lienzo superior (selección, mediciones, encuadres y plantas), enganche y orto |
-| 59 | `editor/plano-herramientas.js` | Editor (3/5): herramientas de medición, escala y plantas, panel de propiedades, mouse y teclado sobre el plano |
-| 60 | `editor/plano-comandos.js` | Editor (4/5): panel izquierdo, mostrar el editor, cinta plegable, barra de navegación, comandos por teclado, atajos, buscar (Ctrl+F), modo presentación y autoguardado |
-| 61 | `editor/plano-menu.js` | Editor (5/5): menú del clic derecho, pestaña Diseño del espacio de trabajo y barra de título, pestañas y cinta del editor |
-| 62 | `editor/diseno-catalogo.js` | **Diseño eléctrico** (1/9): **Diseño eléctrico** en el editor: símbolos de la Norma DGE (catálogo `DS_CAT` con su código) que se encajan en el muro, tuberías con tramos rectos o curvos (longitud del arco), cotas, directrices, líneas y textos; pinzamientos (giro libre y letra del tipo movible, `el.dt`), color propio (`el.col`) o por tipo de símbolo (`DS_COLT`, `dsColorEl`), paso de giro (`DSU.giro`), **conexiones** de las tuberías a los artefactos (`c0`/`c1`, imán `dsEngancheCon`, borde `dsBorde`, `dsReconectar`, aviso `dsSueltos`; el tablero se conecta por su salida, eligiéndola en un menú con `dsElegirSalida`), color por circuito (`dsColCir`), marcas de conductores (`el.cond`, `dsMarcas`), letra de encendido (`el.enc`), rastreo polar (`DSU.polar`), copiar en fila y espejo (`dsIniciarCopia`, `dsClonar`, `dsReflejar`), leyenda automática (`t: "ley"`, `dsDibLeyenda`), ventana de propiedades con doble clic (`elAbrir`), revisión del diseño con criterios editables (`dsVerificar`, `D.crit`), mover, girar, copiar, borrar, rejilla, propiedades la **Biblioteca de símbolos** con buscador (`bibAbrir`, tecla B), el **editor de símbolos** con criterio del proyectista (`D.simb`: relleno, tamaño, letra y grosor; `siAbrir`, `dsTam`, `dsRellenoCuerpo`) y el fondo del plano regulable (`dsFondo`). **Rapidez**: índice espacial del diseño (`dsIdx`, `dsEnZona`, `dsCercanos`; se rehace con `dsIdxSucio`), se dibuja solo lo visible y el panel izquierdo se difiere en proyectos grandes Aquí: el catálogo `DS_CAT`, los sistemas y capas, los datos del diseño (`dsD()`) y las preferencias de esta computadora. |
-| 63 | `editor/diseno-geometria.js` | Diseño (2/9): símbolos como primitivas, tramos rectos y curvos, cotas y directrices, símbolos con criterio, geometría de cada elemento y leyenda automática |
-| 64 | `editor/diseno-conexiones.js` | Diseño (3/9): índice espacial (cuadrícula) y **conexiones** de las tuberías con los artefactos; circuitos que pasan a lo conectado y conductores automáticos contados por el recorrido (fase, retornos, neutro y tierra) |
-| 65 | `editor/diseno-dibujo.js` | Diseño (4/9): rejilla, dibujo de cada elemento, pinzamientos y encaje de los símbolos de pared en el muro |
-| 66 | `editor/diseno-herramientas.js` | Diseño (5/9): lienzo superior (selección, fantasma del símbolo, trazo en curso) y herramientas para colocar y dibujar |
-| 67 | `editor/diseno-edicion.js` | Diseño (6/9): copiar en fila y espejo; seleccionar, mover, girar, copiar, pegar y borrar; editar vértices, partir y unir |
-| 68 | `editor/diseno-propiedades.js` | Diseño (7/9): panel de propiedades de lo seleccionado (circuito, conductores F, R, N y T, etiquetas…) y resumen del diseño |
-| 69 | `editor/diseno-cinta.js` | Diseño (8/9): cinta del editor, editor de símbolos (criterio), fondo del plano y ventana de propiedades (doble clic) |
-| 70 | `editor/diseno-revision.js` | Diseño (9/9): revisión del diseño (avisos y «Juntar tuberías»), biblioteca de símbolos de la Norma DGE y ventana Tablero |
-| 71 | `editor/laminas.js` | **Láminas y DXF del diseño**: un lienzo que graba lo que dibuja el editor (`laGrabador`); con eso, la lámina en PDF (`laSvg`: varias láminas `D.lams`, cada una con papel A4 a A1, su escala, su zona —planta, pantalla o rectángulo marcado— y sus capas, leyenda, escala gráfica, notas y rótulo) y el DXF del diseño en coordenadas reales (`laDxf`, R12, con o sin la arquitectura) |
-| 72 | `editor/plantas-areas.js` | **Diseño avanzado** (1/8): **Diseño avanzado**: plantas (`dpPlantaEl`, copiar a otra planta) y montantes (`el.mon`), bloques propios en el navegador (Biblioteca › Mis bloques), plantillas (de partida y propias), ruta automática de tuberías (`dpRuta`), versiones del diseño (`EPL.vers`, comparar y restaurar), **cuadro de circuitos** (`t: "cua"`, `dsFilasCua`), **metrado del diseño** (`metAbrir`, CSV) y caja de paso automática (`dpPonerCaja`); tablas guardadas hasta el próximo cambio (`dpCache`) Aquí: plantas y montantes, y áreas para el cálculo. |
-| 73 | `editor/ambientes.js` | Diseño avanzado (2/8): ambientes con su tipo y verificación de las reglas de seguridad del CNE-Utilización por ambiente |
-| 74 | `editor/arquitectura.js` | Diseño avanzado (3/8): actualizar arquitectura (comparar versiones del DXF sin perder el diseño) y ver elementos (`dsVerIds`, `edVerEnPlano`) |
-| 75 | `editor/luminarias.js` | Diseño avanzado (4/8): tipos de luminaria del proyecto (L1, L2…) y su biblioteca |
-| 76 | `editor/datos-calculo.js` | Diseño avanzado (5/8): ventana «Datos del diseño para el cálculo» (`dcDatos`, `dcRender`) y escribir el cálculo en el plano |
-| 77 | `editor/bloques-plantillas.js` | Diseño avanzado (6/8): bloques propios, plantillas, ruta automática de tuberías y versiones del diseño |
-| 78 | `editor/cuadro-metrado.js` | Diseño avanzado (7/8): cuadro de circuitos de la lámina, caja de paso automática y metrado del diseño |
-| 79 | `editor/repartir-pasos.js` | Diseño avanzado (8/8): repartir en un ambiente o a lo largo de un muro, bloque por colocar, comparación con una versión y pasos del diseño con el cálculo en vivo |
-| 80 | `editor/iluminacion-ventana.js` | Pestaña **Niveles de iluminación** de la ventana «Ambientes e iluminación» (`luxAbrir`, `amVentana` en diseno-avanzado.js): por uso, buscar, solo los cambiados, volver a la norma, ambientes propios y elegir el tipo de un ambiente (`luxElegir`) |
-| 81 | `editor/capas.js` | Ventana **Administrador de capas** del editor |
+| 57 | `editor/dxf.js` | **Lector DXF**: lee un plano de AutoCAD y lo convierte en trazos, textos, capas y puntos de enganche (sin pantalla) |
+| 58 | `editor/plano-archivo.js` | **Editor de diseño** (1/5): a pantalla completa. plano de arquitectura con zoom, escala, plantas, selección y medición; objetos de la arquitectura borrados de la vista (`EPL.borr`, número de objeto del DXF; el archivo no cambia); Ctrl+X / Supr (`edBorrar`); paneles con ancho ajustable; menú del clic derecho (`edMenuAbrir`; con una herramienta, termina); mano y barra de navegación (zoom ventana, vista anterior `PL_VHIST`); comandos por teclado (`ED_CMD`) y atajos del usuario (`atjAbrir`); buscar en el plano (`buAbrir`, Ctrl+F); modo presentación (`edPresentar`); autoguardado (`edAutoguardar`, `edRecuperar`); con el plano atenuado la arquitectura no se elige; deshacer con tope de memoria (unos 80 MB, al menos 10 pasos); mouse y teclado; Aplicar / Aceptar / Cancelar Aquí: el archivo DXF en la base de datos del navegador, abrir, deshacer y aplicar, y la preparación del dibujo. |
+| 59 | `editor/plano-vista.js` | Editor (2/5): coordenadas, zoom y desplazamiento, colores, dibujo del plano, lienzo superior (selección, mediciones, encuadres y plantas), enganche y orto |
+| 60 | `editor/plano-herramientas.js` | Editor (3/5): herramientas de medición, escala y plantas, panel de propiedades, mouse y teclado sobre el plano |
+| 61 | `editor/plano-comandos.js` | Editor (4/5): panel izquierdo, mostrar el editor, cinta plegable, barra de navegación, comandos por teclado, atajos, buscar (Ctrl+F), modo presentación y autoguardado |
+| 62 | `editor/plano-menu.js` | Editor (5/5): menú del clic derecho, pestaña Diseño del espacio de trabajo y barra de título, pestañas y cinta del editor |
+| 63 | `editor/diseno-catalogo.js` | **Diseño eléctrico** (1/9): **Diseño eléctrico** en el editor: símbolos de la Norma DGE (catálogo `DS_CAT` con su código) que se encajan en el muro, tuberías con tramos rectos o curvos (longitud del arco), cotas, directrices, líneas y textos; pinzamientos (giro libre y letra del tipo movible, `el.dt`), color propio (`el.col`) o por tipo de símbolo (`DS_COLT`, `dsColorEl`), paso de giro (`DSU.giro`), **conexiones** de las tuberías a los artefactos (`c0`/`c1`, imán `dsEngancheCon`, borde `dsBorde`, `dsReconectar`, aviso `dsSueltos`; el tablero se conecta por su salida, eligiéndola en un menú con `dsElegirSalida`), color por circuito (`dsColCir`), marcas de conductores (`el.cond`, `dsMarcas`), letra de encendido (`el.enc`), rastreo polar (`DSU.polar`), copiar en fila y espejo (`dsIniciarCopia`, `dsClonar`, `dsReflejar`), leyenda automática (`t: "ley"`, `dsDibLeyenda`), ventana de propiedades con doble clic (`elAbrir`), revisión del diseño con criterios editables (`dsVerificar`, `D.crit`), mover, girar, copiar, borrar, rejilla, propiedades la **Biblioteca de símbolos** con buscador (`bibAbrir`, tecla B), el **editor de símbolos** con criterio del proyectista (`D.simb`: relleno, tamaño, letra y grosor; `siAbrir`, `dsTam`, `dsRellenoCuerpo`) y el fondo del plano regulable (`dsFondo`). **Rapidez**: índice espacial del diseño (`dsIdx`, `dsEnZona`, `dsCercanos`; se rehace con `dsIdxSucio`), se dibuja solo lo visible y el panel izquierdo se difiere en proyectos grandes Aquí: el catálogo `DS_CAT`, los sistemas y capas, los datos del diseño (`dsD()`) y las preferencias de esta computadora. |
+| 64 | `editor/diseno-geometria.js` | Diseño (2/9): símbolos como primitivas, tramos rectos y curvos, cotas y directrices, símbolos con criterio, geometría de cada elemento y leyenda automática |
+| 65 | `editor/diseno-conexiones.js` | Diseño (3/9): índice espacial (cuadrícula) y **conexiones** de las tuberías con los artefactos; circuitos que pasan a lo conectado y conductores automáticos contados por el recorrido (fase, retornos, neutro y tierra) |
+| 66 | `editor/diseno-dibujo.js` | Diseño (4/9): rejilla, dibujo de cada elemento, pinzamientos y encaje de los símbolos de pared en el muro |
+| 67 | `editor/diseno-herramientas.js` | Diseño (5/9): lienzo superior (selección, fantasma del símbolo, trazo en curso) y herramientas para colocar y dibujar |
+| 68 | `editor/diseno-edicion.js` | Diseño (6/9): copiar en fila y espejo; seleccionar, mover, girar, copiar, pegar y borrar; editar vértices, partir y unir |
+| 69 | `editor/diseno-propiedades.js` | Diseño (7/9): panel de propiedades de lo seleccionado (circuito, conductores F, R, N y T, etiquetas…) y resumen del diseño |
+| 70 | `editor/diseno-cinta.js` | Diseño (8/9): cinta del editor, editor de símbolos (criterio), fondo del plano y ventana de propiedades (doble clic) |
+| 71 | `editor/diseno-revision.js` | Diseño (9/9): revisión del diseño (avisos y «Juntar tuberías»), biblioteca de símbolos de la Norma DGE y ventana Tablero |
+| 72 | `editor/laminas.js` | **Láminas y DXF del diseño**: un lienzo que graba lo que dibuja el editor (`laGrabador`); con eso, la lámina en PDF (`laSvg`: varias láminas `D.lams`, cada una con papel A4 a A1, su escala, su zona —planta, pantalla o rectángulo marcado— y sus capas, leyenda, escala gráfica, notas y rótulo) y el DXF del diseño en coordenadas reales (`laDxf`, R12, con o sin la arquitectura) |
+| 73 | `editor/plantas-areas.js` | **Diseño avanzado** (1/8): **Diseño avanzado**: plantas (`dpPlantaEl`, copiar a otra planta) y montantes (`el.mon`), bloques propios en el navegador (Biblioteca › Mis bloques), plantillas (de partida y propias), ruta automática de tuberías (`dpRuta`), versiones del diseño (`EPL.vers`, comparar y restaurar), **cuadro de circuitos** (`t: "cua"`, `dsFilasCua`), **metrado del diseño** (`metAbrir`, CSV) y caja de paso automática (`dpPonerCaja`); tablas guardadas hasta el próximo cambio (`dpCache`) Aquí: plantas y montantes, y áreas para el cálculo. |
+| 74 | `editor/ambientes.js` | Diseño avanzado (2/8): ambientes con su tipo y verificación de las reglas de seguridad del CNE-Utilización por ambiente |
+| 75 | `editor/arquitectura.js` | Diseño avanzado (3/8): actualizar arquitectura (comparar versiones del DXF sin perder el diseño) y ver elementos (`dsVerIds`, `edVerEnPlano`) |
+| 76 | `editor/luminarias.js` | Diseño avanzado (4/8): tipos de luminaria del proyecto (L1, L2…) y su biblioteca |
+| 77 | `editor/datos-calculo.js` | Diseño avanzado (5/8): ventana «Datos del diseño para el cálculo» (`dcDatos`, `dcRender`) y escribir el cálculo en el plano |
+| 78 | `editor/bloques-plantillas.js` | Diseño avanzado (6/8): bloques propios, plantillas, ruta automática de tuberías y versiones del diseño |
+| 79 | `editor/cuadro-metrado.js` | Diseño avanzado (7/8): cuadro de circuitos de la lámina, caja de paso automática y metrado del diseño |
+| 80 | `editor/repartir-pasos.js` | Diseño avanzado (8/8): repartir en un ambiente o a lo largo de un muro, bloque por colocar, comparación con una versión y pasos del diseño con el cálculo en vivo |
+| 81 | `editor/iluminacion-ventana.js` | Pestaña **Niveles de iluminación** de la ventana «Ambientes e iluminación» (`luxAbrir`, `amVentana` en diseno-avanzado.js): por uso, buscar, solo los cambiados, volver a la norma, ambientes propios y elegir el tipo de un ambiente (`luxElegir`) |
+| 82 | `editor/capas.js` | Ventana **Administrador de capas** del editor |
 | | **`interfaz/`** | |
-| 82 | `interfaz/centro.js` | Centro de ingeniería (Inicio) |
-| 83 | `interfaz/inicio.js` | Arranque y bienvenida |
-| 84 | `interfaz/tema.js` | Tema, zoom y mano de arrastre |
+| 83 | `interfaz/centro.js` | Centro de ingeniería (Inicio) |
+| 84 | `interfaz/inicio.js` | Arranque y bienvenida |
+| 85 | `interfaz/tema.js` | Tema, zoom y mano de arrastre |
 | | **`cuenta/`** | |
-| 85 | `cuenta/nube.js` | **Proyectos en la nube** (Firestore): copia de cada proyecto y su plano en `proyectos/{uid}` (el sitio de pruebas, en `proyectos-beta/{uid}`), gana la fecha más reciente, eliminados como «borrado» |
-| 86 | `cuenta/acceso.js` | Ingreso con cuenta y Administración |
-| 87 | `cuenta/admin.js` | **Administración** (solo el administrador): PIN, panel con agenda, calendario, pendientes y notas, hoja de cuentas con vigencia y nueva cuenta |
+| 86 | `cuenta/nube.js` | **Proyectos en la nube** (Firestore): copia de cada proyecto y su plano en `proyectos/{uid}` (el sitio de pruebas, en `proyectos-beta/{uid}`), gana la fecha más reciente, eliminados como «borrado» |
+| 87 | `cuenta/acceso.js` | Ingreso con cuenta y Administración |
+| 88 | `cuenta/admin.js` | **Administración** (solo el administrador): PIN, panel con agenda, calendario, pendientes y notas, hoja de cuentas con vigencia y nueva cuenta |
 
 Cada archivo empieza con un comentario que explica lo mismo con más detalle.
 
