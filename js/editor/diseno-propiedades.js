@@ -157,6 +157,8 @@ function dsPropsBanco(el, campo) {
 }
 // Encabezado de una sección del panel de propiedades
 const dsSec = t => `<div class="ed-ps">${t}</div>`;
+// Campo a todo el ancho del panel: el nombre arriba y sus controles debajo (conductores, circuitos que lleva)
+const campoAncho = (k, html) => `<label class="ed-pf ed-pc ed-pw"><span>${k}</span>${html}</label>`;
 function dsProps(c) {
   const sel = dsSel(),
     D = dsD();
@@ -180,30 +182,36 @@ function dsProps(c) {
       igualCir = sel.every(el => (el.cir || "") === (sel[0].cir || "") && (el.tab || "") === (sel[0].tab || "")),
       tubs = sel.filter(el => el.t === "tub");
     c.innerHTML =
-      `<div class="ed-pt">${sel.length} elementos seleccionados</div>` +
+      `<div class="ed-pt">${sel.length} elementos seleccionados<small>Lo que cambie aquí se aplica a todos</small></div>` +
+      dsSec("Selección") +
       Object.entries(cuenta)
         .map(([t, n]) => fila(dsNomTipo(t), n))
         .join("") +
       (tubs.length ? fila("Tuberías", `${plFm(tubs.reduce((s, el) => s + dsLargo(el), 0))} m`) : "") +
-      campo("Capa", capas(capa0)) +
-      (sel.every(el => el.t === "sim" || el.t === "tub")
-        ? campo("Circuito", igualCir ? circ(sel[0].cir, sel[0].tab) : circ(null)) + lista
+      (sel.every(el => el.t === "sim" || el.t === "tub") || sel.every(dsConEnc)
+        ? dsSec("Datos eléctricos") +
+          (sel.every(el => el.t === "sim" || el.t === "tub")
+            ? campo("Circuito", igualCir ? circ(sel[0].cir, sel[0].tab) : circ(null)) + lista
+            : "") +
+          (sel.every(dsConEnc)
+            ? campo(
+                "Encendido",
+                `<input type="text" data-dsp="enc" value="${sel.every(e => (e.enc || "") === (sel[0].enc || "")) ? esc(sel[0].enc || "") : ""}" placeholder="a, b…" maxlength="${sel.every(dsEsInt) ? 15 : 3}">`
+              )
+            : "")
         : "") +
-      (tubs.length === sel.length ? dsCampoCond(campo, tubs) : "") +
-      (sel.every(dsConEtq) ? dsCampoEtq(campo, sel) : "") +
+      (tubs.length === sel.length ? dsSec("Tubería") + dsCampoCond(campo, tubs) : "") +
       dsCamposVarios(campo, sel) +
-      (sel.every(dsConEnc)
-        ? campo(
-            "Encendido",
-            `<input type="text" data-dsp="enc" value="${sel.every(e => (e.enc || "") === (sel[0].enc || "")) ? esc(sel[0].enc || "") : ""}" placeholder="a, b…" maxlength="${sel.every(dsEsInt) ? 15 : 3}">`
-          )
-        : "") +
+      (sel.every(dsConEtq) ? dsCampoEtq(campo, sel) : "") +
+      dsSec("Dibujo") +
+      campo("Capa", capas(capa0)) +
       (sel.some(el => el.t === "lin" || el.t === "tub") ? curvas : "") +
       acciones;
     return;
   }
   const el = sel[0],
-    cap = dsCapaDe(el);
+    cap = dsCapaDe(el),
+    capaSec = dsSec("Dibujo") + campo("Capa", capas(el.capa));
   let h = "";
   if (el.t === "sim") {
     const cat = DS_CAT[el.k],
@@ -291,62 +299,67 @@ function dsProps(c) {
         : "") +
       (el.cir && dsConEtq(el) ? dsCampoEtq(campo, [el]) : "") +
       montaje +
-      dsSec("Dibujo") +
-      campo("Capa", capas(el.capa));
+      capaSec;
     // Sin datos eléctricos (puesta a tierra, medidor…): sin su encabezado vacío
     h = h.replace(dsSec("Datos eléctricos") + dsSec("Montaje"), dsSec("Montaje"));
   } else if (el.t === "txt") {
     h =
       `<div class="ed-pt">Texto</div>` +
+      dsSec("Contenido") +
       campo("Texto", `<input type="text" data-dsp="s" value="${esc(el.s)}" maxlength="200">`) +
       campo(
         "Altura",
         `<input type="number" data-dsp="ht" value="${+(el.ht * EPL.f).toFixed(3)}" step="0.01" min="0.01"><i>m</i>`
       ) +
       campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
-      campo("Capa", capas(el.capa));
+      capaSec;
   } else if (el.t === "dir") {
     h =
-      `<div class="ed-pt">Directriz</div>` +
+      `<div class="ed-pt">Directriz${el.aut ? "<small>Rótulo automático</small>" : ""}</div>` +
+      dsSec("Contenido") +
       campo("Texto", `<input type="text" data-dsp="s" value="${esc(el.s)}" maxlength="120">`) +
       (el.aut
-        ? `<p class="ds-crit">Rótulo automático: el texto sigue a los alimentadores que pasan por la caja o el montante. Si lo cambia, queda como lo escriba.</p>`
+        ? `<p class="ds-crit">Sigue a los alimentadores que pasan por la caja o el montante. Si lo cambia, queda como lo escriba.</p>`
         : "") +
       campo(
         "Altura",
         `<input type="number" data-dsp="ht" value="${+(el.ht * EPL.f).toFixed(3)}" step="0.01" min="0.01"><i>m</i>`
       ) +
-      campo("Capa", capas(el.capa));
+      capaSec;
   } else if (el.t === "cot") {
     const G = dsCotaGeo(el);
     h =
       `<div class="ed-pt">Cota</div>` +
+      dsSec("Medida") +
       fila("Medida", `${plFm(G.med)} m`) +
       campo(
         "Dirección",
         `<select data-dsp="modo"><option value="alin"${el.modo === "alin" ? " selected" : ""}>Alineada</option><option value="h"${el.modo === "h" ? " selected" : ""}>Horizontal</option><option value="v"${el.modo === "v" ? " selected" : ""}>Vertical</option></select>`
       ) +
-      campo("Capa", capas(el.capa));
+      capaSec;
   } else if (el.t === "cua") {
     h =
       `<div class="ed-pt">Cuadro de circuitos<small>Se arma solo con los tableros y lo conectado a cada circuito</small></div>` +
+      dsSec("Contenido") +
       campo(
         "Título",
         `<input type="text" data-dsp="tit" value="${esc(el.tit || "CUADRO DE CIRCUITOS")}" maxlength="60">`
       ) +
       fila("Circuitos", dsFilasCua().filter(f => f.c).length) +
-      campo("Capa", capas(el.capa));
+      capaSec;
   } else if (el.t === "ley") {
     h =
       `<div class="ed-pt">Leyenda<small>Se arma sola con lo que usa el diseño</small></div>` +
+      dsSec("Contenido") +
       campo("Título", `<input type="text" data-dsp="tit" value="${esc(el.tit || "LEYENDA")}" maxlength="60">`) +
       fila("Filas", dsFilasLey().length) +
-      campo("Capa", capas(el.capa));
+      capaSec;
   } else if (el.t === "lin" && el.ar) {
     const ip = dpPlantaEl(el),
       pl = ip >= 0 ? EPL.plantas[ip] : null;
     h =
-      `<div class="ed-pt">Área para el cálculo<small>${pl ? `${esc(pl.n)} · ${dpNomPiso(plPisoPlanta(pl, ip))}` : EPL.plantas.length ? "fuera de las plantas encuadradas" : "1er piso"}</small></div>` +
+      `<div class="ed-pt">Área para el cálculo<small>${pl ? [...new Set([pl.n, dpNomPiso(plPisoPlanta(pl, ip))])].map(esc).join(" · ") : EPL.plantas.length ? "fuera de las plantas encuadradas" : "1er piso"}</small></div>` +
+      dsSec("Ambiente") +
       campo(
         "Ambiente",
         `<input type="text" data-dsp="arn" value="${esc(el.ar.n || "")}" maxlength="60" placeholder="Sala, cocina, pasillo…">`
@@ -357,6 +370,7 @@ function dsProps(c) {
             `<button type="button" class="ds-amb" data-dsa="ambtipo" title="Elegir el tipo de ambiente (Norma EM.010 o propio)">${esc(el.ar.amb && ambTipo(el.ar.amb) ? ambTipo(el.ar.amb).n : "Elegir el tipo…")}<span class="ds-amb-f">▸</span></button>`
           ) + (el.ar.amb && ambTipo(el.ar.amb) ? fila("Iluminancia", luxCelda(ambTipo(el.ar.amb))) : "")
         : "") +
+      dsSec("Cálculo") +
       campo(
         "Tipo",
         `<select data-dsp="artp">${Object.entries(PL_TAREA)
@@ -369,19 +383,23 @@ function dsProps(c) {
             `<select data-dsp="ardep"><option value="">— Áreas comunes o del piso —</option>${tipos.map((t, i) => `<option value="${i}"${el.ar.dep === i ? " selected" : ""}>${esc(t.nombre || "Tipo " + (i + 1))}</option>`).join("")}</select>`
           )
         : "") +
+      `<p class="ds-crit">Vivienda: suma las áreas techadas por dimensiones interiores (Regla 050-110). Otros usos: el contorno exterior del piso (Regla 050-210).</p>` +
+      dsSec("Medidas") +
       fila("Área", `${fmt(dsM2(el), 2)} m²`) +
       fila("Perímetro", `${plFm(dsLargo(el))} m`) +
-      `<p class="ds-crit">Vivienda: suma las áreas techadas por dimensiones interiores (Regla 050-110). Otros usos: el contorno exterior del piso (Regla 050-210). El área no se imprime en la lámina.</p>` +
-      campo("Capa", capas(el.capa));
+      dsSec("Dibujo") +
+      campo("Capa", capas(el.capa)) +
+      `<p class="ds-crit">El área no se imprime en la lámina.</p>`;
   } else if (el.t === "cir") {
     h =
       `<div class="ed-pt">Círculo</div>` +
+      dsSec("Geometría") +
       campo(
         "Radio",
         `<input type="number" data-dsp="rad" value="${+(el.rad * EPL.f).toFixed(3)}" step="0.05" min="0.01"><i>m</i>`
       ) +
-      campo("Capa", capas(el.capa)) +
-      fila("Centro", `X ${plFm(el.x)} · Y ${plFm(el.y)} m`);
+      fila("Centro", `X ${plFm(el.x)} · Y ${plFm(el.y)} m`) +
+      capaSec;
   } else {
     const tub = el.t === "tub",
       T = dsTramos(el),
@@ -389,11 +407,22 @@ function dsProps(c) {
     h =
       `<div class="ed-pt">${tub ? "Tubería" : el.c ? "Polilínea cerrada" : el.pts.length > 4 ? "Polilínea" : "Línea"}</div>` +
       (tub
-        ? campo(
+        ? dsSec("Datos eléctricos") +
+          campo(
+            "Uso",
+            `<select data-dsp="ali"><option value="">Circuito</option><option value="1"${el.ali ? " selected" : ""}>Alimentador</option></select>`
+          ) +
+          (el.ali ? "" : campo("Circuito", circ(el.cir, el.tab)) + lista + dsCampoCx(campo, el)) +
+          (el.sec ? fila("Del cálculo", esc(el.sec)) : "") +
+          dsSec("Tubería") +
+          campo(
             "Recorrido",
-            `<select data-dsp="modo"><option value="techo"${!el.modo || el.modo === "techo" ? " selected" : ""}>Techo (línea continua)</option><option value="pared"${el.modo === "pared" ? " selected" : ""}>Pared (línea continua)</option><option value="piso"${el.modo === "piso" ? " selected" : ""}>Piso (línea discontinua)</option></select>`
-          )
+            `<select data-dsp="modo" title="Techo y pared: línea continua; piso: línea discontinua"><option value="techo"${!el.modo || el.modo === "techo" ? " selected" : ""}>Techo</option><option value="pared"${el.modo === "pared" ? " selected" : ""}>Pared</option><option value="piso"${el.modo === "piso" ? " selected" : ""}>Piso</option></select>`
+          ) +
+          dsCampoCond(campo, [el]) +
+          dsCampoEtq(campo, [el])
         : "") +
+      dsSec("Geometría") +
       fila(
         "Longitud",
         `${plFm(dsLargo(el))} m${nc ? `<small>con ${nc} tramo${nc > 1 ? "s" : ""} en arco (longitud del arco)</small>` : ""}`
@@ -401,19 +430,9 @@ function dsProps(c) {
       (T.length > 1
         ? `<div class="ds-tramos">${T.map((t, i) => `<span>Tramo ${i + 1}${t.k ? " ◠" : ""}</span><b>${plFm(t.L)} m</b>`).join("")}</div>`
         : "") +
-      campo("Capa", capas(el.capa)) +
-      (tub
-        ? campo(
-            "Uso",
-            `<select data-dsp="ali"><option value="">Circuito</option><option value="1"${el.ali ? " selected" : ""}>Alimentador (sin circuito)</option></select>`
-          ) +
-          (el.ali ? "" : campo("Circuito", circ(el.cir, el.tab)) + lista + dsCampoCx(campo, el)) +
-          (el.sec ? fila("Del cálculo", esc(el.sec)) : "") +
-          dsCampoCond(campo, [el]) +
-          dsCampoEtq(campo, [el])
-        : "") +
+      curvas +
       `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices. Clic derecho en un vértice o en un tramo: quitar o agregar vértices, partir, volver recto o en arco; con dos elegidas, unirlas. Supr sobre un vértice lo quita.</p>` +
-      curvas;
+      capaSec;
   }
   const color = `<label class="ed-pf ed-pc"><span>Color</span><span class="ds-colr"><input type="color" data-dsp="col" value="${dsColorEl(el, cap)}" title="Color propio de este elemento"><button type="button" class="btn sec sm" data-dsa="colcapa"${el.col ? "" : " disabled"} title="Quita el color propio: vuelve al color de su tipo (si está activado en Vista) o al de su capa">Restablecer</button></span></label>`,
     letra = el.dt
@@ -429,6 +448,7 @@ function dsCamposVarios(campo, sel) {
     u = DS_CAT[sel[0].k].u,
     mismaU = sel.every(el => DS_CAT[el.k].u === u);
   return (
+    dsSec("Montaje y carga") +
     campo(
       "Rotación",
       `<input type="number" data-dsp="r" value="${igual("r") ? +(sel[0].r || 0).toFixed(2) : ""}" placeholder="(varias)" step="1"><i>°</i>`
@@ -461,11 +481,11 @@ function dsCampoCx(campo, el) {
   const S = dsSalidasTab(tb).filter(o => o.n !== el.cir);
   if (!S.length) return "";
   return (
-    campo(
+    campoAncho(
       "Lleva también",
       `<span class="ds-cx">${S.map(o => `<label title="${esc(o.d || "")}"><input type="checkbox" data-dsp="cx" value="${o.n}"${(el.cx || []).includes(o.n) ? " checked" : ""}>${o.n}</label>`).join("")}</span>`
     ) +
-    `<p class="ds-crit">Circuitos de ${esc(tb.nom || "este tablero")} que van juntos en esta tubería: el cálculo aplica la Tabla 5C con ellos.</p>` +
+    `<p class="ds-crit ds-crit0">Circuitos de ${esc(tb.nom || "este tablero")} en esta misma tubería: el cálculo aplica la Tabla 5C con ellos.</p>` +
     (dsTubRepetidas(el).length
       ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="juntar" title="Deja una sola tubería entre estos dos puntos, con todos los circuitos y sus conductores">Juntar con ${esc(
           dsTubRepetidas(el)[0]
@@ -529,7 +549,7 @@ function dsCampoCond1(campo, ts) {
     c = igual ? ts[0].cond || {} : {},
     cir = ts.length === 1 && ts[0].cir;
   return (
-    campo(
+    campoAncho(
       "Conductores",
       `<span class="ds-cond"><select data-dsp="condF" title="Fases (en 220 V monofásico, los dos conductores del circuito)">${[
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
@@ -545,7 +565,7 @@ function dsCampoCond1(campo, ts) {
         .map(n => `<option value="${n}"${igual && dsNeutros(c) === n ? " selected" : ""}>${n} N</option>`)
         .join("")}</select><label><input type="checkbox" data-dsp="condT"${c.t ? " checked" : ""}>T</label></span>`
     ) +
-    `<p class="ds-crit">Marcas de la norma sobre la tubería: una raya por fase, el neutro (N) con punto y la tierra (T) con tope; los retornos (R), una raya con una «r» encima (criterio). ${ts.every(t => t.condA) ? "Automáticos según el sistema del proyecto y el recorrido del circuito: la fase llega a cada interruptor y cada tecla devuelve un retorno a sus luminarias (cambian solos si cambia el circuito)." : ts.some(t => t.cir && !t.ali) ? "Elegidos a mano." : ""}</p>` +
+    `<p class="ds-crit ds-crit0" title="Marcas de la norma sobre la tubería: una raya por fase, el neutro (N) con punto y la tierra (T) con tope; los retornos (R), una raya con una «r» encima (criterio).${ts.every(t => t.condA) ? " Automáticos: la fase llega a cada interruptor y cada tecla devuelve un retorno a sus luminarias; cambian solos si cambia el circuito." : ""}">F fase · R retorno · N neutro · T tierra. ${ts.every(t => t.condA) ? "Automáticos según el sistema y el recorrido del circuito." : ts.some(t => t.cir && !t.ali) ? "Elegidos a mano." : ""}</p>` +
     (ts.some(t => t.cir && !t.ali && !t.condA)
       ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="condauto" title="Vuelve a marcar los conductores según el sistema y el circuito">Conductores automáticos</button></div>`
       : "") +

@@ -1845,7 +1845,19 @@
   gap: 8px;
 }
 .ds-cond select {
-  width: auto;
+  flex: 1;
+}
+/* Campo a todo el ancho: el nombre arriba y los controles debajo */
+.ed-pf.ed-pw {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+.ds-cx label {
+  flex-direction: row;
+  white-space: nowrap;
+}
+.ed-pf b small {
+  white-space: normal;
 }
 .ds-cond label {
   display: flex;
