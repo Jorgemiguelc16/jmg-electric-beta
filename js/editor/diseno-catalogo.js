@@ -226,6 +226,9 @@ const DS_CAT = Object.fromEntries(
 // cada grupo, un color distinto para cada tipo, en el orden del catálogo
 // Cajas de paso: llevan su número (CP-1, CP-2…) y pueden ser el arranque de un montante
 const DS_CAJAS = new Set(["caja", "cajaCuad"]);
+// Referencia del símbolo: su código de la Norma DGE o, si la norma no lo tiene, que es criterio del proyectista
+const dsCodTxt = k =>
+  DS_CAT[k] && DS_CAT[k].c !== "criterio" ? `Norma DGE ${DS_CAT[k].c}` : "Sin símbolo en la Norma DGE · criterio";
 const DS_PAL = [
   "#c62828",
   "#ef6c00",

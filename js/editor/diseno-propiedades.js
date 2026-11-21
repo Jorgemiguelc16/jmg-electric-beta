@@ -210,20 +210,11 @@ function dsProps(c) {
       cl = dsClase(el),
       esp = PL_ESP[el.k] || ["otra", 1, "Carga especial"];
     h =
-      `<div class="ed-pt">${cat.n}<small>Norma DGE ${cat.c}</small></div>` +
+      `<div class="ed-pt">${cat.n}<small>${dsCodTxt(el.k)}</small></div>` +
       (el.k === "bmed" && dsMedidoresBanco(el).length
         ? dsBancoPrev(dsMedidoresBanco(el))
         : `<div class="ds-prev">${dsIcono(el.k)}</div>`) +
       `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="simbolo" title="Relleno, tamaño, letra y grosor de este tipo de símbolo (criterio del proyectista)">Editar símbolo…</button>${dsSimb(el.k) ? '<span class="ds-crit">Con criterio del proyectista</span>' : ""}</div>` +
-      // Montante: qué va en este piso (canalización o caja de paso)
-      (dpSimbolosMon(el).length
-        ? campo(
-            "En este piso",
-            `<select data-dsp="kmon">${dpSimbolosMon(el)
-              .map(k => `<option value="${k}"${k === el.k ? " selected" : ""}>${esc(DS_CAT[k].n)}</option>`)
-              .join("")}</select>`
-          ) + `<p class="ds-crit">Criterio del proyectista: el montante sigue enlazado igual.</p>`
-        : "") +
       campo("Capa", capas(el.capa)) +
       campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
       (el.cir && dsConEtq(el) ? dsCampoEtq(campo, [el]) : "") +

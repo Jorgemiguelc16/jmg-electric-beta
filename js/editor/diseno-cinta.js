@@ -187,7 +187,7 @@ function siAbrir(k) {
   const o = dsSimb(k) || {},
     letra = (dsPrims(k).find(p => dsEsLetra(k, p)) || {}).tx;
   $("siT").textContent = "Editar símbolo · " + DS_CAT[k].n;
-  $("siCod").textContent = `Norma DGE ${DS_CAT[k].c}${letra ? " · letra de la norma: " + letra : ""}`;
+  $("siCod").textContent = `${dsCodTxt(k)}${letra ? " · letra de la norma: " + letra : ""}`;
   $("siRel").value = o.rel || "";
   $("siTam").value = Math.round((o.tam || 1) * 100);
   $("siTamV").textContent = Math.round((o.tam || 1) * 100) + " %";

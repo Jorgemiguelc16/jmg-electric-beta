@@ -381,7 +381,7 @@ function bibRender() {
         : "";
     }).join("");
   const tarjeta = k =>
-      `<div class="bi-s" role="button" tabindex="0" data-bik="${k}" title="${esc(DS_CAT[k].n)} · Norma DGE ${DS_CAT[k].c}">${dsSimb(k) ? '<i class="bi-crit">criterio</i>' : ""}<button type="button" class="bi-ed" data-bie="${k}" title="Editar este símbolo (criterio del proyectista)" aria-label="Editar este símbolo">✎</button>${dsIcono(k)}<b>${esc(DS_CAT[k].n)}</b><small>${DS_CAT[k].c}</small></div>`,
+      `<div class="bi-s" role="button" tabindex="0" data-bik="${k}" title="${esc(DS_CAT[k].n)} · ${dsCodTxt(k)}">${dsSimb(k) ? '<i class="bi-crit">criterio</i>' : ""}<button type="button" class="bi-ed" data-bie="${k}" title="Editar este símbolo (criterio del proyectista)" aria-label="Editar este símbolo">✎</button>${dsIcono(k)}<b>${esc(DS_CAT[k].n)}</b><small>${DS_CAT[k].c}</small></div>`,
     bloque = (tit, ks) =>
       ks.length ? `<h4>${esc(tit)}</h4><div class="bi-lista">${ks.map(tarjeta).join("")}</div>` : "";
   let h;

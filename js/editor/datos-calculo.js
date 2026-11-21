@@ -653,11 +653,21 @@ function dsPropsPaso(el, campo, circ) {
   const pas = dcAliPor(el, AL),
     conRot = dsD().els.some(e => e.aut === el.id),
     uso = dsUsoPaso(el, pas);
+  const tipos = dpSimbolosMon(el);
   let h =
     campo(
       "Uso",
       `<select data-dsp="uso"><option value="ali"${uso === "ali" ? " selected" : ""}>Alimentador</option><option value="cir"${uso === "cir" ? " selected" : ""}>Circuito</option></select>`
     ) +
+    // Montante: el elemento de este piso (canalización vertical o caja de paso), criterio del proyectista
+    (tipos.length
+      ? campo(
+          "Tipo",
+          `<select data-dsp="kmon" title="Elemento del montante en este piso; el montante sigue enlazado igual (criterio del proyectista)">${tipos
+            .map(k => `<option value="${k}"${k === el.k ? " selected" : ""}>${esc(DS_CAT[k].n)}</option>`)
+            .join("")}</select>`
+        )
+      : "") +
     (DS_CAJAS.has(el.k)
       ? campo("Número", `<input type="text" data-dsp="nom" value="${esc(el.nom || "")}" maxlength="20">`)
       : "");
