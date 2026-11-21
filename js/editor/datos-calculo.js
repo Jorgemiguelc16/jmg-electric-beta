@@ -642,6 +642,14 @@ function dsNombrarCajas() {
    el que se ve: alimentador si pasa uno o es parte de un montante sin circuito; circuito en lo demás */
 const dsUsoPaso = (el, pas) =>
   el.ali ? "ali" : el.ali === false || el.cir ? "cir" : pas.length || el.mon || el.mon2 ? "ali" : "cir";
+// Nombres cortos del elemento del montante en el panel de propiedades (el completo, en la ayuda de cada opción)
+const DP_MON_CORTO = {
+  subida: "Canalización que sube",
+  bajada: "Canalización que baja",
+  atrav: "Canalización que atraviesa",
+  caja: "Caja general",
+  cajaCuad: "Caja cuadrada"
+};
 // Propiedades de una caja de paso o una canalización: su uso, su número y los alimentadores que pasan (o su circuito)
 function dsPropsPaso(el, campo, circ) {
   let AL = [];
@@ -664,7 +672,10 @@ function dsPropsPaso(el, campo, circ) {
       ? campo(
           "Tipo",
           `<select data-dsp="kmon" title="Elemento del montante en este piso; el montante sigue enlazado igual (criterio del proyectista)">${tipos
-            .map(k => `<option value="${k}"${k === el.k ? " selected" : ""}>${esc(DS_CAT[k].n)}</option>`)
+            .map(
+              k =>
+                `<option value="${k}"${k === el.k ? " selected" : ""} title="${esc(DS_CAT[k].n)}">${DP_MON_CORTO[k] || esc(DS_CAT[k].n)}</option>`
+            )
             .join("")}</select>`
         )
       : "") +
@@ -678,7 +689,7 @@ function dsPropsPaso(el, campo, circ) {
       campo("Circuito", circ(el.cir, el.tab)) +
       `<p class="ds-crit">Caja o paso del circuito: no es una salida (no suma carga); la longitud sigue por ella.</p>`
     );
-  h += `<div class="ed-pt">Alimentadores que pasan${pas.length ? ` (${pas.length})` : ""}</div>`;
+  h += dsSec(`Alimentadores que pasan${pas.length ? ` (${pas.length})` : ""}`);
   if (!pas.length) return h + dsPasosPaso(el);
   return (
     h +

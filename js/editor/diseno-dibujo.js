@@ -189,6 +189,7 @@ function dsCampoEtq(campo, els) {
     plano = t => `Como el plano (${t})`;
   if (!tubs.length && !sims.length) return "";
   return (
+    dsSec("Rótulos en el plano") +
     (tubs.length
       ? campo(
           "Longitud",
@@ -218,7 +219,7 @@ function dsCampoEtq(campo, els) {
           ])
         )
       : "") +
-    `<p class="ds-crit">Etiquetas de ${els.length > 1 ? "estos elementos" : "este elemento"} en el plano y en las láminas. «Como el plano» sigue a la cinta (Diseño › Tuberías); el clic derecho también las muestra u oculta.</p>`
+    `<p class="ds-crit">En el plano y en las láminas. «Como el plano» sigue a la cinta (Diseño › Tuberías).</p>`
   );
 }
 // Longitudes de una tubería: la total en su tramo central o la de cada tramo; texto de 2 mm impreso, a lo largo del

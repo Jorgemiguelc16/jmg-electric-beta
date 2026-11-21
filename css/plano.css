@@ -1082,6 +1082,28 @@
   padding: 3px 10px;
   border-top: 1px solid var(--ws-line, #d6dde6);
 }
+/* Sección del panel (Datos eléctricos, Montaje, Dibujo): título en versalitas y sus filas sin rayas entre ellas */
+.ed-ps {
+  margin-top: 6px;
+  padding: 9px 10px 4px;
+  border-top: 1px solid var(--ws-line, #d6dde6);
+  font: 600 10.5px var(--f-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ws-text2, #66737f);
+}
+.ed-ps ~ .ed-pf {
+  border-top: 0;
+  padding-block: 2px;
+}
+.ed-pb0 {
+  padding-top: 0;
+}
+.ed-pacc {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ws-line, #d6dde6);
+}
 .ed-pf span {
   color: var(--ws-text2, #66737f);
 }

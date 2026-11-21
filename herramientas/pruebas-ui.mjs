@@ -1782,7 +1782,7 @@ prueba(
       cambia('cajaCuad'); out.push(b.k, /^CP-\\d+$/.test(b.nom || ''), b.mon === a.id && b.mon2 === c.id, !!document.querySelector('[data-dsp="kmon"]'));
       cambia('atrav'); out.push(b.k, b.nom === undefined);
       const uso = v => { const s = document.querySelector('[data-dsp="uso"]'); s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); };
-      const u0 = document.querySelector('[data-dsp="uso"]').value; uso('cir'); out.push(u0, b.ali, document.querySelector('[data-dsp="uso"]').value, !!document.querySelector('.ds-cir, [data-dsp="cir"]'), [...document.querySelectorAll('.ed-pt')].some(x => /Alimentadores que pasan/.test(x.textContent))); uso('ali'); out.push(b.ali, document.querySelector('[data-dsp="uso"]').value);
+      const u0 = document.querySelector('[data-dsp="uso"]').value; uso('cir'); out.push(u0, b.ali, document.querySelector('[data-dsp="uso"]').value, !!document.querySelector('.ds-cir, [data-dsp="cir"]'), [...document.querySelectorAll('.ed-ps')].some(x => /Alimentadores que pasan/.test(x.textContent))); uso('ali'); out.push(b.ali, document.querySelector('[data-dsp="uso"]').value);
       PLH.pts = []; dsPuntoTub([c.x, c.y], [c.x, c.y, 9, { con: c.id }]); out.push(PLH.ali); PLH.pts = []; PLH.ali = false; PLH.conIni = null;
       DS_SEL.clear(); [a, b, c].forEach(e => dsD().els.splice(dsD().els.indexOf(e), 1)); EPL.plantas.pop(); edCambio(); return out; })()`
     );

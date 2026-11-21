@@ -155,6 +155,8 @@ function dsPropsBanco(el, campo) {
     `<p class="ds-crit">Uno por departamento (según los tipos y su número) y el de servicios generales si su medidor está en el banco (Proyecto › Suministro). La misma numeración de las láminas del banco y del tablero general.</p>`
   );
 }
+// Encabezado de una sección del panel de propiedades
+const dsSec = t => `<div class="ed-ps">${t}</div>`;
 function dsProps(c) {
   const sel = dsSel(),
     D = dsD();
@@ -169,7 +171,7 @@ function dsProps(c) {
     })(),
     circ = (v, tb) => dsCircSelect(D, v, tb, plSel),
     lista = "",
-    acciones = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="girar">Girar ${DSU.giro || 90}°</button><button type="button" class="btn sec sm" data-dsa="copiar">Copiar</button><button type="button" class="btn sec sm ed-del" data-dsa="borrar">Borrar</button></div>`,
+    acciones = `<div class="ed-pb ed-pacc"><button type="button" class="btn sec sm" data-dsa="girar">Girar ${DSU.giro || 90}°</button><button type="button" class="btn sec sm" data-dsa="copiar">Copiar</button><button type="button" class="btn sec sm ed-del" data-dsa="borrar">Borrar</button></div>`,
     curvas = `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="curvo" title="Todos los tramos en arco">Curvar</button><button type="button" class="btn sec sm" data-dsa="recto" title="Todos los tramos rectos">Enderezar</button><button type="button" class="btn sec sm" data-dsa="invertir" title="Los arcos al otro lado">Invertir curvas</button></div>`;
   if (sel.length > 1) {
     const cuenta = {};
@@ -209,22 +211,26 @@ function dsProps(c) {
       pd = dsPotBase(el),
       cl = dsClase(el),
       esp = PL_ESP[el.k] || ["otra", 1, "Carga especial"];
-    h =
-      `<div class="ed-pt">${cat.n}<small>${dsCodTxt(el.k)}</small></div>` +
-      (el.k === "bmed" && dsMedidoresBanco(el).length
-        ? dsBancoPrev(dsMedidoresBanco(el))
-        : `<div class="ds-prev">${dsIcono(el.k)}</div>`) +
-      `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="simbolo" title="Relleno, tamaño, letra y grosor de este tipo de símbolo (criterio del proyectista)">Editar símbolo…</button>${dsSimb(el.k) ? '<span class="ds-crit">Con criterio del proyectista</span>' : ""}</div>` +
-      campo("Capa", capas(el.capa)) +
-      campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
-      (el.cir && dsConEtq(el) ? dsCampoEtq(campo, [el]) : "") +
+    const montaje =
+      dsSec("Montaje") +
       (cat.h
         ? campo(
             "Altura",
             `<input type="number" data-dsp="h" value="${el.h ?? ""}" placeholder="${hd != null ? fmt(hd, 2) : ""}" step="0.05" min="0" max="10"><i>m</i>`
           ) +
           `<p class="ds-crit">Criterio: si la deja vacía, usa la de Parámetros › Alturas (${hd != null ? fmt(hd, 2) + " m" : "—"}).</p>`
-        : fila("Altura", el.k === "luz" ? "en el techo" : "—")) +
+        : el.k === "luz"
+          ? fila("Altura", "En el techo")
+          : "") +
+      campo("Rotación", `<input type="number" data-dsp="r" value="${+(el.r || 0).toFixed(2)}" step="1"><i>°</i>`) +
+      fila("Posición", `X ${plFm(el.x)} · Y ${plFm(el.y)} m`);
+    h =
+      `<div class="ed-pt">${cat.n}<small>${dsCodTxt(el.k)}</small></div>` +
+      (el.k === "bmed" && dsMedidoresBanco(el).length
+        ? dsBancoPrev(dsMedidoresBanco(el))
+        : `<div class="ds-prev">${dsIcono(el.k)}</div>`) +
+      `<div class="ed-pb ed-pb0"><button type="button" class="btn sec sm" data-dsa="simbolo" title="Relleno, tamaño, letra y grosor de este tipo de símbolo (criterio del proyectista)">Editar símbolo…</button>${dsSimb(el.k) ? '<span class="ds-crit">Con criterio del proyectista</span>' : ""}</div>` +
+      dsSec("Datos eléctricos") +
       (cat.u
         ? campo(
             "Potencia",
@@ -266,10 +272,7 @@ function dsProps(c) {
         : "") +
       (el.k === "tab"
         ? fila("Nombre", esc(el.nom || "—")) +
-          fila(
-            "Circuitos",
-            el.gen ? "Tablero general: solo alimentadores" : el.nc ? `${el.nc} (C-1 a C-${el.nc})` : "sin definir"
-          ) +
+          fila("Circuitos", el.gen ? "Solo alimentadores" : el.nc ? `${el.nc} (C-1 a C-${el.nc})` : "sin definir") +
           `<div class="ed-pb"><button type="button" class="btn sm" data-dsa="tablero">Circuitos del tablero…</button></div>`
         : el.k === "bmed"
           ? dsPropsBanco(el, campo)
@@ -286,8 +289,12 @@ function dsProps(c) {
             ? `<p class="ds-crit">Una letra por tecla: interruptor doble «a,b» (o «ab»), triple «a,b,c». Cada letra enciende las luminarias que la tienen; la tubería lleva la fase y un retorno por tecla.</p>`
             : "")
         : "") +
-      fila("Posición X", `${plFm(el.x)} m`) +
-      fila("Posición Y", `${plFm(el.y)} m`);
+      (el.cir && dsConEtq(el) ? dsCampoEtq(campo, [el]) : "") +
+      montaje +
+      dsSec("Dibujo") +
+      campo("Capa", capas(el.capa));
+    // Sin datos eléctricos (puesta a tierra, medidor…): sin su encabezado vacío
+    h = h.replace(dsSec("Datos eléctricos") + dsSec("Montaje"), dsSec("Montaje"));
   } else if (el.t === "txt") {
     h =
       `<div class="ed-pt">Texto</div>` +
@@ -408,7 +415,7 @@ function dsProps(c) {
       `<p class="ds-crit ds-crit0">Arrastre el rombo del medio de un tramo para curvarlo; los cuadrados mueven los vértices. Clic derecho en un vértice o en un tramo: quitar o agregar vértices, partir, volver recto o en arco; con dos elegidas, unirlas. Supr sobre un vértice lo quita.</p>` +
       curvas;
   }
-  const color = `<label class="ed-pf ed-pc"><span>Color</span><span class="ds-colr"><input type="color" data-dsp="col" value="${dsColorEl(el, cap)}" title="Color propio de este elemento"><button type="button" class="btn sec sm" data-dsa="colcapa"${el.col ? "" : " disabled"} title="Quita el color propio: vuelve al color de su tipo (si está activado en Vista) o al de su capa">Quitar color propio</button></span></label>`,
+  const color = `<label class="ed-pf ed-pc"><span>Color</span><span class="ds-colr"><input type="color" data-dsp="col" value="${dsColorEl(el, cap)}" title="Color propio de este elemento"><button type="button" class="btn sec sm" data-dsa="colcapa"${el.col ? "" : " disabled"} title="Quita el color propio: vuelve al color de su tipo (si está activado en Vista) o al de su capa">Restablecer</button></span></label>`,
     letra = el.dt
       ? `<div class="ed-pb"><button type="button" class="btn sec sm" data-dsa="letra0">Letra a su lugar</button></div>`
       : "";
