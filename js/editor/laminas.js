@@ -570,7 +570,7 @@ function laSvg(op = laOp()) {
     aDib = (px, py) => [cx + (px - acx) / mmU, cy - (py - acy) / mmU];
   const aviso = d.entra
     ? escD > 75 && String(op.zona || "planta:").startsWith("planta:")
-      ? `A 1:${escD} los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala): para las plantas se recomienda 1:50, con el papel automático.`
+      ? `A 1:${escD} los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala)${LAMINAS[op.tam] ? `: el papel está fijo en ${op.tam}` : ""}. Para las plantas se recomienda 1:50, con el papel automático.`
       : ""
     : a.x1 - a.x0 < 60
       ? `En ${d.tam} no queda sitio para el dibujo junto a la leyenda, el cuadro y el rótulo: elija un papel más grande o el automático.`
@@ -1484,7 +1484,8 @@ function lamVista() {
   $("laEsc").querySelector('[value="auto"]').textContent = `Automática: 1:${r.esc} (recomendada)`;
   // Si la zona no entra: pasar al papel y la escala automáticos o, con varias plantas, una lámina por planta
   const op = laOp(),
-    noEntra = /no entra|no cabe|no queda sitio/.test(r.aviso),
+    // También cuando todo entra, pero a una escala menor que 1:75 porque el papel está fijo
+    noEntra = /no entra|no cabe|no queda sitio|quedan juntos/.test(r.aviso),
     fijo = !!LAMINAS[op.tam] || op.esc > 0,
     variasPl = /^(todo|vista)$/.test(op.zona || "") && EPL.plantas.length > 1;
   $("laAviso").innerHTML =
