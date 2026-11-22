@@ -1478,6 +1478,22 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
     JSON.stringify(pp.r[1]) === JSON.stringify(["IE-05", "planta:1", "auto"]) && pp.r.length === 2 && pp.n2 === 2,
     `una lámina por planta (${JSON.stringify(pp.r)}), sin repetirla la segunda vez`
   );
+  // Papel fijo que obliga a una escala menor que 1:75 (láminas de versiones anteriores): va en el papel automático
+  const pf = await J(
+    "(r => ({ tam: r.tam, esc: r.esc, aviso: r.aviso }))(laSvg({ ...laOp(0), tam: 'A4', esc: undefined }))"
+  );
+  ok(
+    pf.tam !== "A4" && pf.esc === 50 && /elija también la escala/.test(pf.aviso),
+    `papel fijo que obliga a una escala chica: va en el automático (${pf.tam} 1:${pf.esc})`
+  );
+  // El recorte es la planta, no toda el área de dibujo (a escala chica no se ve lo de al lado)
+  const rc = await J(
+    `(() => { const op = { ...laOp(0), esc: 100 }, r = laSvg(op), m = /<clipPath[^>]*><rect x="[^"]*" y="[^"]*" width="([^"]*)"/.exec(r.svg), z = laZona(op); return [m[1] / LA_PX, (z[2] - z[0]) * EPL.f * 10]; })()`
+  );
+  ok(
+    Math.abs(rc[0] - rc[1]) < 0.5,
+    `el recorte de la lámina es la planta (${rc.map(v => v.toFixed(1)).join(" y ")} mm)`
+  );
   // Impresión: la hoja cabe en su papel (medio milímetro menos), así no sale una página en blanco
   ok(
     await ev(

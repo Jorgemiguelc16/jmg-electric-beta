@@ -489,7 +489,14 @@ function laElegir(op, z, c) {
   for (const e of escs)
     for (const t of tams) {
       const d = laDisp(op, t, e, z, c);
-      if (d.entra) return d;
+      if (!d.entra) continue;
+      /* Papel fijo y escala automática que no llega a 1:75 (las láminas de versiones anteriores guardaban A3, que era
+         el papel por defecto): va en el papel automático; para ese papel a otra escala, se fija también la escala */
+      if (LAMINAS[op.tam] && !(op.esc > 0) && e > 75) {
+        const a = laElegir({ ...op, tam: "auto" }, z, c);
+        if (a.entra && a.escD < e) return { ...a, papelFijo: op.tam, escFijo: e };
+      }
+      return d;
     }
   return laDisp(op, tams[tams.length - 1], op.esc > 0 ? op.esc : 50, z, c);
 }
@@ -568,15 +575,26 @@ function laSvg(op = laOp()) {
     cy = (z[1] + z[3]) / 2,
     s = mmU * LA_K,
     aDib = (px, py) => [cx + (px - acx) / mmU, cy - (py - acy) / mmU];
-  const aviso = d.entra
-    ? escD > 75 && String(op.zona || "planta:").startsWith("planta:")
-      ? `A 1:${escD} los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala)${LAMINAS[op.tam] ? `: el papel está fijo en ${op.tam}` : ""}. Para las plantas se recomienda 1:50, con el papel automático.`
-      : ""
-    : a.x1 - a.x0 < 60
-      ? `En ${d.tam} no queda sitio para el dibujo junto a la leyenda, el cuadro y el rótulo: elija un papel más grande o el automático.`
-      : d.sobra
-        ? `El cuadro de circuitos no cabe en ${d.tam}: elija un papel más grande o quite el cuadro de esta lámina.`
-        : `La zona (${fmt(d.zw, 0)} × ${fmt(d.zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${d.tam} (${fmt(a.x1 - a.x0, 0)} × ${fmt(a.y1 - a.y0, 0)} mm): elija un papel más grande, otra escala o marque una zona menor.`;
+  // Otra lámina con la misma zona y las mismas capas (se imprimiría dos veces lo mismo)
+  const zk = o => (o.zona || (EPL.plantas.length ? "planta:0" : "todo")) + "|" + (o.ocl || []).slice().sort().join(","),
+    igual = Number.isInteger(op._i)
+      ? laLista()
+          .map((l, i) => laOp(i))
+          .find((o, i) => i !== op._i && zk(o) === zk(op))
+      : null;
+  const aviso = d.papelFijo
+    ? `En ${d.papelFijo} la planta quedaba a 1:${d.escFijo}: va en ${d.tam} a 1:${escD}. Para usar ${d.papelFijo}, elija también la escala.`
+    : igual
+      ? `Esta lámina muestra lo mismo que la ${igual.num} (la misma zona y las mismas capas): elija otra zona u oculte otras capas, o elimínela.`
+      : d.entra
+        ? escD > 75 && String(op.zona || "planta:").startsWith("planta:")
+          ? `A 1:${escD} los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala)${LAMINAS[op.tam] ? `: el papel está fijo en ${op.tam}` : ""}. Para las plantas se recomienda 1:50, con el papel automático.`
+          : ""
+        : a.x1 - a.x0 < 60
+          ? `En ${d.tam} no queda sitio para el dibujo junto a la leyenda, el cuadro y el rótulo: elija un papel más grande o el automático.`
+          : d.sobra
+            ? `El cuadro de circuitos no cabe en ${d.tam}: elija un papel más grande o quite el cuadro de esta lámina.`
+            : `La zona (${fmt(d.zw, 0)} × ${fmt(d.zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${d.tam} (${fmt(a.x1 - a.x0, 0)} × ${fmt(a.y1 - a.y0, 0)} mm): elija un papel más grande, otra escala o marque una zona menor.`;
   const ley = d.ley ? (([x, y]) => ({ t: "ley", tit: "LEYENDA", x, y }))(aDib(d.ley.x, d.ley.y)) : null,
     cuadros = d.cuas.map(u =>
       (([x, y]) => ({
@@ -615,11 +633,18 @@ function laSvg(op = laOp()) {
     q = n => +(n * LA_PX).toFixed(2),
     INK = "#14212e",
     NAVY = "#14304f",
+    // Recorte: la zona (la planta) dentro del área de dibujo; si el área es más grande, no se ve lo de al lado
+    cl = [
+      Math.max(a.x0, acx - d.zw / 2),
+      Math.max(a.y0, acy - d.zh / 2),
+      Math.min(a.x1, acx + d.zw / 2),
+      Math.min(a.y1, acy + d.zh / 2)
+    ],
     // Recorte propio de cada lámina: con varias en la misma página (PDF de todas, expediente) un id repetido
     // haría que todas usen el recorte de la primera
     cid = "laArea" + ++LA_CLIP;
   o.push(
-    `<defs><clipPath id="${cid}"><rect x="${q(a.x0)}" y="${q(a.y0)}" width="${q(a.x1 - a.x0)}" height="${q(a.y1 - a.y0)}"/></clipPath></defs>`
+    `<defs><clipPath id="${cid}"><rect x="${q(cl[0])}" y="${q(cl[1])}" width="${q(cl[2] - cl[0])}" height="${q(cl[3] - cl[1])}"/></clipPath></defs>`
   );
   const cuerpo = [],
     leyO = [];
@@ -1532,7 +1557,7 @@ function lamVista() {
   // Si la zona no entra: pasar al papel y la escala automáticos o, con varias plantas, una lámina por planta
   const op = laOp(),
     // También cuando todo entra, pero a una escala menor que 1:75 porque el papel está fijo
-    noEntra = /no entra|no cabe|no queda sitio|quedan juntos/.test(r.aviso),
+    noEntra = /no entra|no cabe|no queda sitio|quedan juntos|elija también la escala/.test(r.aviso),
     fijo = !!LAMINAS[op.tam] || op.esc > 0,
     variasPl = /^(todo|vista)$/.test(op.zona || "") && EPL.plantas.length > 1;
   $("laAviso").innerHTML =
@@ -1643,6 +1668,9 @@ function lamImprimir(todas) {
   printTitulo = document.title;
   const nom = ($("p_nombre").value.trim() || "Proyecto").replace(/[\\/:*?"<>|]/g, "").slice(0, 70);
   document.title = todas ? `Láminas - ${nom}` : `${laOp().num} - ${nom}`;
+  // Con una impresora (o «Microsoft Print to PDF») el navegador usa el papel de ella: cada lámina sale girada y
+  // reducida, y puede sobrar una hoja; con «Guardar como PDF», cada una en su papel
+  toast("En Destino elija «Guardar como PDF» (no una impresora): así cada lámina sale en su papel");
   setTimeout(() => window.print(), 80);
 }
 async function lamDxf(conArq) {
