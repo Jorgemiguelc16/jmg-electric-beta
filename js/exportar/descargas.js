@@ -272,7 +272,12 @@ function dxLista() {
   const lam = $("dx_lam").value,
     fuera = new Set(op.fuera || []),
     filas = [];
-  if (dxConDis()) filas.push(["plantas", "Láminas de planta del diseño", "IE-01… · a su papel y escala"]);
+  if (dxConDis())
+    filas.push([
+      "plantas",
+      "Plano con el diseño eléctrico",
+      "su DXF original (capas, bloques y láminas) con el diseño y los diagramas al costado"
+    ]);
   Object.keys(PLANOS).forEach(k => {
     let n = 0;
     try {
@@ -347,19 +352,12 @@ $("dxfDlg").addEventListener("click", async e => {
       .trim()
       .slice(0, 60) || "proyecto";
   dxfDialogo(false);
-  // Las de planta primero; las de la plataforma, numeradas después de ellas (como en el expediente)
-  const hojas = [];
-  if (sel.includes("plantas") && typeof laminasExpediente === "function")
-    (await laminasExpediente()).forEach(h =>
-      hojas.push({
-        svg: h.svg,
-        tit: `${h.hoja} · ${h.tit}${h.vista ? " · " + h.vista[0] + h.vista.slice(1).toLowerCase() : ""} · ${h.tam} 1:${h.esc}`,
-        corto: `${h.hoja} ${h.vista || ""}`.trim(),
-        papel: h.tam,
-        grupo: "plantas"
-      })
-    );
-  const nDis = hojas.reduce((m, h) => Math.max(m, +(/^IE-(\d+)/.exec(h.corto) || [0, 0])[1]), 0);
+  /* Con el plano del diseño: el DXF original del arquitecto con el diseño eléctrico en sus coordenadas y los diagramas
+     a la misma escala, al costado de la arquitectura; los diagramas se numeran después de las láminas de planta (como en
+     el expediente). Sin plano (o si su archivo no se puede usar), las láminas en un archivo de láminas. */
+  const conPlano = sel.includes("plantas") && typeof laDxfProyecto === "function",
+    nDis = conPlano ? (await laNumPlantas()) || 0 : 0,
+    hojas = [];
   ROT_DESP = nDis;
   try {
     sel
@@ -378,10 +376,34 @@ $("dxfDlg").addEventListener("click", async e => {
   } finally {
     ROT_DESP = 0;
   }
-  const archivos =
-    op.modo === "varios"
-      ? hojas.map(h => [svgDxf(h.svg, op), `JMG-ELECTRIC - ${h.corto} ${h.papel || op.lamina} - ${nm}.dxf`])
-      : [[svgDxfVarias(hojas, op), `JMG-ELECTRIC - Planos (${hojas.length} láminas) - ${nm}.dxf`]];
+  let archivos = [],
+    plano = null;
+  if (conPlano) {
+    try {
+      plano = await laDxfProyecto(op.modo === "varios" ? [] : hojas, op);
+    } catch (err) {
+      console.warn(err);
+    }
+    if (plano)
+      archivos.push([plano, `JMG-ELECTRIC - Plano con diseño${op.modo === "varios" ? "" : " y láminas"} - ${nm}.dxf`]);
+  }
+  // Sin el plano original: las láminas de planta dibujadas, junto con las demás
+  if (conPlano && !plano && typeof laminasExpediente === "function")
+    (await laminasExpediente()).reverse().forEach(h =>
+      hojas.unshift({
+        svg: h.svg,
+        tit: `${h.hoja} · ${h.tit} · ${h.tam} 1:${h.esc}`,
+        corto: `${h.hoja} ${h.vista || ""}`.trim(),
+        papel: h.tam,
+        grupo: "plantas"
+      })
+    );
+  if (op.modo === "varios")
+    hojas.forEach(h =>
+      archivos.push([svgDxf(h.svg, op), `JMG-ELECTRIC - ${h.corto} ${h.papel || op.lamina} - ${nm}.dxf`])
+    );
+  else if (!plano && hojas.length)
+    archivos.push([svgDxfVarias(hojas, op), `JMG-ELECTRIC - Planos (${hojas.length} láminas) - ${nm}.dxf`]);
   for (const [txt, nombre] of archivos) {
     const blob = new Blob([txt], { type: "application/dxf" });
     try {
@@ -393,9 +415,11 @@ $("dxfDlg").addEventListener("click", async e => {
     }
   }
   toast(
-    op.modo === "varios"
-      ? `${archivos.length} archivos DXF, uno por lámina`
-      : `Un DXF con ${hojas.length} lámina${hojas.length > 1 ? "s" : ""} ordenadas, cada una con su título`
+    plano && op.modo !== "varios"
+      ? `El DXF del arquitecto con el diseño eléctrico y ${hojas.length} lámina${hojas.length === 1 ? "" : "s"} al costado`
+      : op.modo === "varios"
+        ? `${archivos.length} archivos DXF${plano ? ": el plano con el diseño y uno por lámina" : ", uno por lámina"}`
+        : `Un DXF con ${hojas.length} lámina${hojas.length > 1 ? "s" : ""} ordenadas, cada una con su título`
   );
 });
 addEventListener("keydown", e => {

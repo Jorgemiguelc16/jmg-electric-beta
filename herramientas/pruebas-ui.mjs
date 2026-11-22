@@ -1521,6 +1521,23 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
     og.todo && og.mas && og.capas >= 2 && og.mismas,
     `DXF con la arquitectura original: el archivo del arquitecto completo y en orden, más el diseño en sus capas (${JSON.stringify(og)})`
   );
+  // Planos para AutoCAD con el plano: un DXF de AutoCAD 2013 «del arquitecto» (hecho con la base) con el diseño y un
+  // unifilar al costado, a 1:50; con identificadores, la capa del arquitecto intacta y las letras en UTF-8
+  const cpl = await ev(
+    `(() => { const arq = dxfEnBase([["LINE", 8, "Muros 1er piso", 100, "AcDbLine", 10, "${OX}", 20, "${OY}", 30, "0.0", 11, "${OX + 10}", 21, "${OY}", 31, "0.0"]], { capas: [["Muros 1er piso", 7]], tipos: [], estilos: [], ext: [${OX}, ${OY}, ${OX + 10}, ${OY + 8}] });
+      const o = laDxfCompleto(Array.from(new TextEncoder().encode(arq), b => String.fromCharCode(b)).join(""), { esc: 50, hojas: [{ svg: unifilar(LAST).svg, tit: "IE-02 · Diagrama unifilar · Señal", grupo: "planos" }], op: { colores: "jmg", lamina: "A3" } });
+      return o ? laTextoDe(o.buffer) : ""; })()`
+  );
+  const cpr = dxf2013Problemas(cpl);
+  ok(
+    cpl &&
+      !cpr.length &&
+      /\nMuros 1er piso\r?\n/.test(cpl) &&
+      /\nE-ALUMBRADO\r?\n/.test(cpl) &&
+      /\nE-INDICE\r?\n/.test(cpl) &&
+      /SeÃ±al/.test(cpl),
+    `plano del arquitecto con el diseño y los diagramas a 1:50 en un solo DXF ${cpr.join("; ")}`
+  );
   // Circuito en las salidas
   await ev("(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })($('dsNSal'))");
   ok((await ev("dsD().nsal")) === true, "circuito en las salidas");

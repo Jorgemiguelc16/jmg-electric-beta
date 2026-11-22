@@ -30,9 +30,11 @@ function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
     k = real ? lam[0] / W : Math.min((lam[0] - 20) / W, (lam[1] - 20) / H),
     ox = real ? 0 : (lam[0] - W * k) / 2,
     oy = real ? 0 : (lam[1] - H * k) / 2,
-    f = v => (Number.isFinite(+v) ? (+v).toFixed(4) : "0.0"),
-    X = x => dx + ox + x * k,
-    Y = y => dy + oy + (H - y) * k;
+    // M: unidades del dibujo por mm de papel (1 en una lámina; en el plano del arquitecto, la escala: 1:50 en metros = 0.05)
+    M = op.m || 1,
+    f = v => (Number.isFinite(+v) ? (+v).toFixed(M < 1 ? 6 : 4) : "0.0"),
+    X = x => dx + M * (ox + x * k),
+    Y = y => dy + M * (oy + (H - y) * k);
   const hex = c => {
     c = String(c || "")
       .trim()
@@ -236,7 +238,7 @@ function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
       .split(/[\s,]+/)
       .map(n)
       .filter(x => x > 0)
-      .map(x => +(x * k).toFixed(3));
+      .map(x => +(x * k * M).toFixed(M < 1 ? 6 : 3));
     if (!v.length) return null;
     const nom = "JMG_T" + v.map(x => String(x).replace(".", "_")).join("-");
     if (!tipos.has(nom)) tipos.set(nom, v.length % 2 ? [...v, ...v] : v);
@@ -286,7 +288,7 @@ function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
         70,
         cerr ? 1 : 0,
         43,
-        mm >= 0.5 ? f(mm) : "0.0",
+        mm >= 0.5 ? f(mm * M) : "0.0",
         ...Q.flatMap(([x, y]) => [10, f(X(x)), 20, f(Y(y))])
       ]);
     });
@@ -510,7 +512,7 @@ function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
             30,
             "0.0",
             40,
-            f(rx * k)
+            f(rx * k * M)
           ]);
         return;
       }
@@ -582,9 +584,9 @@ function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
         30,
         "0.0",
         40,
-        f(fs * 0.716 * k),
+        f(fs * 0.716 * k * M),
         1,
-        txt,
+        dxfTexto(txt, op),
         ...(rot ? [50, rot.toFixed(3)] : []),
         7,
         estilo,
@@ -616,7 +618,7 @@ function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
       [lam[0], 0],
       [lam[0], lam[1]],
       [0, lam[1]]
-    ].flatMap(([a, b]) => [10, f(dx + a), 20, f(dy + b)])
+    ].flatMap(([a, b]) => [10, f(dx + a * M), 20, f(dy + b * M)])
   ]);
   const CAPAS = {
     "E-UNIFILAR": 7,
@@ -641,6 +643,19 @@ function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
   };
   return { ents, capas: [...usadas.keys()].map(c => [c, CAPAS[c] ?? 7]), tipos, lam };
 }
+// Texto con lo que no es ASCII como \U+XXXX (lo lee cualquier versión de AutoCAD, sea cual sea la codificación del archivo)
+const dxfAscii = t =>
+  Array.from(String(t))
+    .map(ch => (ch.codePointAt(0) < 128 ? ch : "\\U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")))
+    .join("");
+/* Texto para el archivo: tal cual (un DXF nuevo); en el DXF del arquitecto, leído byte a byte, en bytes UTF-8 (AutoCAD
+   2007 en adelante, op.cod = "utf8") o con \U+XXXX (versiones anteriores, op.cod = "ascii") */
+const dxfTexto = (t, op = {}) =>
+  op.cod === "ascii"
+    ? dxfAscii(t)
+    : op.cod === "utf8"
+      ? Array.from(new TextEncoder().encode(String(t)), b => String.fromCharCode(b)).join("")
+      : t;
 const DXF_ESTILOS = [
   ["JMG_ARIAL", "arial.ttf"],
   ["JMG_ARIAL_N", "arialbd.ttf"],
@@ -661,29 +676,37 @@ function svgDxf(svgTxt, op = {}) {
    hasta cuatro por fila (una fila nueva para las de otro grupo, como las plantas), cada una con su título encima
    (capa E-INDICE). hojas: [{ svg, tit, grupo }] en el orden en que van */
 function svgDxfVarias(hojas, op = {}) {
+  const p = svgDxfJuntar(hojas, op);
+  return dxfEnBase(p.ents, { capas: p.capas, tipos: p.tipos, estilos: DXF_ESTILOS, ext: p.ext });
+}
+/* Las entidades de varias láminas en filas, desde la esquina superior izquierda (x0, y0) y a la escala m (unidades del
+   dibujo por mm de papel: 1 en un archivo de láminas; en el plano del arquitecto, la de su escala). */
+function svgDxfJuntar(hojas, op = {}, { x0 = 0, y0 = 0, m = 1 } = {}) {
   const ents = [],
     capas = new Map(),
     tipos = new Map(),
-    G = 40;
-  let x = 0,
-    y = 0,
+    G = 40 * m,
+    opm = { ...op, m };
+  let x = x0,
+    y = y0,
     altoFila = 0,
     nFila = 0,
     grupo = null,
-    xMax = 0,
-    yMin = 0;
+    xMax = x0,
+    yMin = y0;
   hojas.forEach(h => {
     // Tamaño de la lámina antes de ubicarla
-    const prueba = svgDxfPiezas(h.svg, op),
-      [w, hh] = prueba.lam;
+    const [w0, h0] = svgDxfPiezas(h.svg, op).lam,
+      w = w0 * m,
+      hh = h0 * m;
     if (nFila && (nFila >= 4 || h.grupo !== grupo)) {
-      x = 0;
+      x = x0;
       y -= altoFila + G * 1.5;
       altoFila = 0;
       nFila = 0;
     }
     grupo = h.grupo;
-    const p = svgDxfPiezas(h.svg, op, x, y - hh);
+    const p = svgDxfPiezas(h.svg, opm, x, y - hh);
     for (const e of p.ents) ents.push(e);
     p.capas.forEach(([c, v]) => capas.set(c, v));
     p.tipos.forEach((v, kk) => tipos.set(kk, v));
@@ -697,15 +720,15 @@ function svgDxfVarias(hojas, op = {}) {
         100,
         "AcDbText",
         10,
-        x.toFixed(4),
+        x.toFixed(6),
         20,
-        (y + 8).toFixed(4),
+        (y + 8 * m).toFixed(6),
         30,
         "0.0",
         40,
-        "10.0",
+        (10 * m).toFixed(6),
         1,
-        String(h.tit).slice(0, 200),
+        dxfTexto(String(h.tit).slice(0, 200), op),
         7,
         "JMG_ARIAL_N",
         100,
@@ -718,19 +741,16 @@ function svgDxfVarias(hojas, op = {}) {
     nFila++;
   });
   capas.set("E-INDICE", 2);
-  return dxfEnBase(ents, {
-    capas: [...capas],
-    tipos: [...tipos],
-    estilos: DXF_ESTILOS,
-    ext: [0, yMin, xMax, 24]
-  });
+  return { ents, capas: [...capas], tipos: [...tipos], ext: [x0, yMin, xMax, y0 + 24 * m] };
 }
 /* Escribe las entidades en la base de AutoCAD 2013 (DXF_BASE_2013, js/planos/dxf-base.js): sus capas, tipos de línea y
    estilos de texto en las tablas, las entidades en el espacio modelo con identificadores desde $HANDSEED, la extensión
    del dibujo y la vista al abrir (toda la lámina). Devuelve el texto del archivo (UTF-8, como AutoCAD 2007 en adelante). */
-function dxfEnBase(ents, { capas, tipos, estilos, ext }) {
-  const nl = "\n",
-    L = DXF_BASE_2013.split(/\r?\n/),
+function dxfEnBase(ents, { capas, tipos, estilos, ext }, base = DXF_BASE_2013) {
+  /* base: la base vacía o el DXF del arquitecto (leído byte a byte; lo agregado es ASCII y el resto queda igual).
+     Sin $HANDSEED o sin el registro del espacio modelo (R12, o un archivo sin identificadores), null */
+  const nl = /\r\n/.test(base.slice(0, 2000)) ? "\r\n" : "\n",
+    L = base.split(/\r?\n/),
     c = i => (L[i] || "").trim();
   let sec = "",
     tabla = "",
@@ -777,6 +797,7 @@ function dxfEnBase(ents, { capas, tipos, estilos, ext }) {
     if (r.tabla === "VPORT" && /^\*active$/i.test(r.g[2] || "")) vp = r;
   });
   iSeed = hdr.$HANDSEED;
+  if (iSeed === undefined || !ms || !T.LAYER || T.LAYER.fin < 0 || iEnt < 0) return null;
   let h = parseInt(c(iSeed + 1), 16);
   const id = () => (h++).toString(16).toUpperCase(),
     rec = (tb, tipo, sub, campos) => [
@@ -795,8 +816,9 @@ function dxfEnBase(ents, { capas, tipos, estilos, ext }) {
     ins = {},
     poner = (i, a) => (ins[i] = (ins[i] || []).concat(a)),
     lay0 = regs.find(r => r.tabla === "LAYER" && r.g[2] === "0");
-  const nuevo = (tb, nom) => !T[tb].n.has(String(nom).toUpperCase());
-  tipos
+  // Cada nombre una sola vez (varias láminas pueden traer la misma capa o el mismo tipo de línea)
+  const nuevo = (tb, nom) => !T[tb].n.has(String(nom).toUpperCase()) && (T[tb].n.add(String(nom).toUpperCase()), true);
+  (T.LTYPE && T.LTYPE.fin >= 0 ? tipos : [])
     .filter(([nom]) => nuevo("LTYPE", nom))
     .forEach(([nom, pat]) =>
       poner(
@@ -818,7 +840,7 @@ function dxfEnBase(ents, { capas, tipos, estilos, ext }) {
         ])
       )
     );
-  estilos
+  (T.STYLE && T.STYLE.fin >= 0 ? estilos : [])
     .filter(([nom]) => nuevo("STYLE", nom))
     .forEach(([nom, fuente]) =>
       poner(
