@@ -259,7 +259,9 @@ function modeloDxf(entrada) {
     snapC = [],
     // Número del objeto del DXF (entidad de primer nivel; un bloque insertado es un solo objeto) de cada punto
     snapE = [],
-    insertos = [];
+    insertos = [],
+    // Identificador (handle, código 5) de cada objeto de primer nivel, por su número: para ubicarlo en el archivo
+    hnd = [];
   let nEnt = 0;
   // Punto de enganche: x, y y tipo (1 extremo, 2 punto medio, 3 centro, 4 inserción de bloque), con su capa aparte
   const pS = (x, y, k, capa) => {
@@ -325,7 +327,7 @@ function modeloDxf(entrada) {
       let capa = dxStr(g, 8, "0");
       if (capa === "0" && padre) capa = padre.capa;
       if (!capas[capa]) capas[capa] = { col: "#ffffff", on: true, lt: "CONTINUOUS", n: 0 };
-      if (!prof) nEnt++;
+      if (!prof) hnd[++nEnt] = dxStr(g, 5, "");
       const o = {
         capa,
         col: color(g, capa, padre && padre.col),
@@ -703,6 +705,7 @@ function modeloDxf(entrada) {
     snapC,
     snapE,
     nEnt,
+    hnd,
     ext: x0 <= x1 ? [x0, y0, x1, y1] : [0, 0, 1, 1],
     unidad: unidadDxf(cotas, parseInt(c1("$INSUNITS"), 10) || 0, x1 - x0),
     tipos,

@@ -34,12 +34,17 @@ function dxf2013Problemas(txt) {
     tabla = "",
     rec = null,
     ms = "";
+  // Dueños válidos en ENTITIES: el espacio modelo y los espacios papel (las presentaciones)
+  const ps = new Set();
   const ents = [];
   let ent = null;
+  let conId = false;
   par.forEach(([c, v, l], i) => {
     v = v.trim();
+    if (c === 0) conId = false;
     if (c === 0) {
       if (rec && rec.t === "BLOCK_RECORD" && /^\*model_space$/i.test(rec.n || "")) ms = rec.h;
+      if (rec && rec.t === "BLOCK_RECORD" && /^\*paper_space/i.test(rec.n || "")) ps.add(rec.h);
       rec = null;
       if (ent) ents.push(ent);
       ent = null;
@@ -53,7 +58,10 @@ function dxf2013Problemas(txt) {
     }
     if (sec === "?" && c === 2) sec = v;
     else if (tabla === "?" && c === 2) tabla = v;
-    if ((c === 5 || c === 105) && sec && sec !== "HEADER") {
+    // Solo el identificador propio de cada objeto (el primer 5 o 105 después de su 0): otros objetos usan el código 5
+    // para otros datos (SORTENTSTABLE, el orden de dibujo)
+    if ((c === 5 || c === 105) && sec && sec !== "HEADER" && !conId) {
+      conId = true;
       const h = parseInt(v, 16);
       if (handles.has(h)) mal(`línea ${l}: identificador repetido ${v}`);
       handles.set(h, l);
@@ -66,14 +74,16 @@ function dxf2013Problemas(txt) {
       }
       if (c === 5 && rec.h === undefined) rec.h = v;
     }
-    if (ent) ent.g.push([c, v]);
+    // Lo que va entre «102 {…}» y «102 }» (reactores, diccionarios) no son datos de la entidad
+    if (ent && c === 102) ent.llave = v.startsWith("{");
+    else if (ent && !ent.llave) ent.g.push([c, v]);
     if (i === par.length - 1 && ent) ents.push(ent);
   });
   if (!ms) mal("sin registro *Model_Space");
   ents.forEach(({ t, g, l }) => {
     const val = c => (g.find(p => p[0] === c) || [])[1];
     if (!val(5)) mal(`línea ${l}: ${t} sin identificador`);
-    if (val(330) !== ms) mal(`línea ${l}: ${t} sin dueño en el espacio modelo`);
+    if (val(330) !== ms && !ps.has(val(330))) mal(`línea ${l}: ${t} sin dueño en el espacio modelo ni en el papel`);
     if (!g.some(([c, v]) => c === 100 && v === "AcDbEntity")) mal(`línea ${l}: ${t} sin AcDbEntity`);
     const ly = val(8);
     if (ly === undefined || !nombres.LAYER.has(ly.toUpperCase()))

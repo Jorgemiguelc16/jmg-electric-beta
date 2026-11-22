@@ -1446,3 +1446,24 @@
 #dxfDlg .dx-cards.dx-tres .dx-card {
   padding: 7px 10px;
 }
+/* Dos columnas: las láminas a la izquierda y las opciones a la derecha; en una ventana angosta, una sola */
+#dxfDlg .dx-cuerpo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-content: start;
+  gap: 4px 16px;
+}
+#dxfDlg .dx-lista {
+  grid-template-columns: 1fr;
+}
+#dxfDlg .dx-der .dx-cards {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+#dxfDlg .dx-der .dx-card {
+  padding: 5px 9px;
+}
+#dxfDlg .dx-res {
+  color: var(--dl-ink);
+  font-weight: 600;
+}

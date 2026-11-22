@@ -869,14 +869,14 @@ function dxfEnBase(ents, { capas, tipos, estilos, ext }, base = DXF_BASE_2013) {
     );
   capas
     .filter(([nom]) => nuevo("LAYER", nom))
-    .forEach(([nom, col]) =>
+    .forEach(([nom, col, fl]) =>
       poner(
         T.LAYER.fin,
         rec("LAYER", "LAYER", "AcDbLayerTableRecord", [
           2,
           nom,
           70,
-          0,
+          fl || 0,
           62,
           col,
           6,

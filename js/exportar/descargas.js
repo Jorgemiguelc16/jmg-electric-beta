@@ -247,10 +247,10 @@ const planoActual = () => PLANOS[PLANOS[VIEW] ? VIEW : "unifilar"]();
 let DX_VW = null;
 const dxVw = () =>
   DX_VW ||
-  (DX_VW = ventanaMovil(document.querySelector("#dxfDlg .vw"), "jmg-electric-dxf-vw", {
-    w: 640,
-    h: 640,
-    minW: 480,
+  (DX_VW = ventanaMovil(document.querySelector("#dxfDlg .vw"), "jmg-electric-dxf-vw2", {
+    w: 860,
+    h: 560,
+    minW: 560,
     minH: 420
   }));
 const DX_NOM = {
@@ -272,30 +272,37 @@ function dxLista() {
   const lam = $("dx_lam").value,
     fuera = new Set(op.fuera || []),
     filas = [];
-  if (dxConDis())
-    filas.push([
-      "plantas",
-      "Plano con el diseño eléctrico",
-      "su DXF original (capas, bloques y láminas) con el diseño y los diagramas al costado"
-    ]);
+  if (dxConDis()) filas.push(["plantas", "Plano con el diseño eléctrico", "Tu DXF original, con sus capas y láminas"]);
   Object.keys(PLANOS).forEach(k => {
     let n = 0;
     try {
       n = PLANOS[k](lam).length;
     } catch (e) {}
-    if (n) filas.push([k, DX_NOM[k][0], `${DX_NOM[k][1]}${n > 1 ? ` · ${n} láminas` : ""}`]);
+    if (n) filas.push([k, DX_NOM[k][0], `${DX_NOM[k][1]}${n > 1 ? ` · ${n} láminas` : ""}`, n]);
   });
   $("dxLista").innerHTML = filas
     .map(
-      ([k, t, d]) =>
-        `<label class="dx-it"><input type="checkbox" data-dxk="${k}"${fuera.has(k) ? "" : " checked"}><span><b>${esc(t)}</b><small>${esc(d)}</small></span></label>`
+      ([k, t, d, n]) =>
+        `<label class="dx-it"><input type="checkbox" data-dxk="${k}" data-n="${n || 0}"${fuera.has(k) ? "" : " checked"}><span><b>${esc(t)}</b><small>${esc(d)}</small></span></label>`
     )
     .join("");
   dxCuenta();
 }
+// Cuántos elegidos y qué se va a descargar (al pie de la ventana)
 const dxCuenta = () => {
-  const c = [...$("dxLista").querySelectorAll("[data-dxk]")];
-  $("dxN").textContent = `${c.filter(x => x.checked).length} de ${c.length}`;
+  const c = [...$("dxLista").querySelectorAll("[data-dxk]")],
+    sel = c.filter(x => x.checked),
+    plano = sel.some(x => x.dataset.dxk === "plantas"),
+    n = sel.reduce((s, x) => s + (+x.dataset.n || 0), 0),
+    lam = `${n} lámina${n === 1 ? "" : "s"}`;
+  $("dxN").textContent = `${sel.length} de ${c.length}`;
+  $("dxRes").textContent = !sel.length
+    ? "Elija al menos una lámina"
+    : radio("dx_modo") === "varios"
+      ? `${n + (plano ? 1 : 0)} archivos DXF${plano ? ": tu plano con el diseño y uno por lámina" : ", uno por lámina"}`
+      : plano
+        ? `1 archivo DXF: tu plano con el diseño${n ? ` y ${lam} al costado` : ""}`
+        : `1 archivo DXF con ${lam} ordenadas`;
 };
 function dxfDialogo(abrir) {
   const d = $("dxfDlg");

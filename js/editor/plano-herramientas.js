@@ -195,11 +195,15 @@ function plTerminarRecorrido() {
   plSobreDibujar();
 }
 // Seleccionar: un clic en una línea la elige y muestra sus propiedades; en un lugar vacío, la suelta
+// (también con el plano atenuado: el clic que no da en el diseño elige la arquitectura); si no hay línea, un texto
 function plSeleccionar(p, suma) {
-  PLH.obj = EPL.tenue ? -1 : plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
+  // Un clic dentro de las letras de un texto elige el texto; si no, la línea más cercana
+  const r = (8 * plDpr()) / PLV.s,
+    tx = plTextoEn(p[0], p[1], 0);
+  PLH.obj = tx ? -1 : plObjeto(p[0], p[1], r);
   if (!suma) PL_ASEL.clear();
-  if (PLH.obj >= 0) {
-    const n = PL_MOD.trazos[PLH.obj].e;
+  const n = PLH.obj >= 0 ? PL_MOD.trazos[PLH.obj].e : tx ? tx.e : null;
+  if (n !== null) {
     if (suma && PL_ASEL.has(n)) {
       PL_ASEL.delete(n);
       PLH.obj = -1;

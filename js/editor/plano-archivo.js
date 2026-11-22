@@ -498,6 +498,12 @@ function plMarcoArq(xa, ya, xb, yb, captura, suma) {
   caja.forEach((b, n) => {
     if (toca.has(n) || (b[0] >= xa && b[2] <= xb && b[1] >= ya && b[3] <= yb)) PL_ASEL.add(n);
   });
+  // Textos: todo su recuadro dentro de la ventana, o alguna esquina en captura
+  const en = ([x, y]) => x >= xa && x <= xb && y >= ya && y <= yb;
+  (PL_TX || []).forEach(t => {
+    const P = plCajaTexto(t);
+    if (captura ? P.some(en) || en([t.x, t.y]) : P.every(en)) PL_ASEL.add(t.e);
+  });
 }
 // ¿El tramo A→B toca el rectángulo? (recorte de Liang-Barsky)
 function plTramoEnCaja(ax, ay, bx, by, xa, ya, xb, yb) {

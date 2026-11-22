@@ -36,10 +36,13 @@ function edMenuAbrir(e) {
       DS_SEL.clear();
       PL_ASEL.clear();
       DS_SEL.add(id);
-    } else if (!id && !DS_SEL.size && !EPL.tenue) {
-      // Sobre la arquitectura: si el objeto ya estaba elegido se conserva la selección; si no, se elige solo
-      const i = plObjeto(p[0], p[1], (8 * plDpr()) / PLV.s);
-      if (i < 0 || !PL_ASEL.has(PL_MOD.trazos[i].e)) plSeleccionar(p, false);
+    } else if (!id && !DS_SEL.size) {
+      // Sobre la arquitectura (una línea o un texto): si ya estaba elegido se conserva la selección; si no, se elige solo
+      const r = (8 * plDpr()) / PLV.s,
+        tx = plTextoEn(p[0], p[1], 0),
+        i = tx ? -1 : plObjeto(p[0], p[1], r),
+        n = i >= 0 ? PL_MOD.trazos[i].e : tx ? tx.e : null;
+      if (n === null || !PL_ASEL.has(n)) plSeleccionar(p, false);
     }
     edProps();
     plSobreDibujar();
@@ -934,7 +937,7 @@ $("plVacioB").addEventListener("click", () => $("plArchivo").click());
 $("plTenue").addEventListener("change", e => {
   if (!EPL) return;
   EPL.tenue = e.target.checked;
-  // Atenuado: solo se trabaja el diseño eléctrico; se suelta lo elegido de la arquitectura
+  // Atenuado: la ventana de selección toma solo el diseño (un clic aún elige la arquitectura); se suelta lo elegido
   if (EPL.tenue) {
     PL_ASEL.clear();
     PLH.obj = -1;

@@ -1208,13 +1208,60 @@ function laBytesDe(t) {
    la escala esc, y las láminas hojas (unifilar, tableros…; [{ svg, tit, grupo }]) a esa misma escala, en filas a la
    derecha de la arquitectura, como las láminas que el arquitecto arma en el espacio modelo. Devuelve los bytes o null
    (archivo R12, sin identificadores o no reconocido). */
+/* Lo borrado de la arquitectura en la plataforma (EPL.borr) pasa a la capa JMG-ARQ-BORRADO, apagada y congelada: no
+   se ve ni se imprime, y no se quita del archivo (otros objetos pueden referirse a él); se recupera encendiendo la capa.
+   Cada objeto se ubica por su identificador (PL_MOD.hnd); sus vértices, atributos y fin de secuencia, con él. */
+function laOcultarBorrados(s) {
+  const H = new Set((EPL.borr || []).map(n => String((PL_MOD.hnd || [])[n] || "").toUpperCase()).filter(Boolean));
+  if (!H.size) return { s, n: 0 };
+  const nl = s.includes("\r\n") ? "\r\n" : "\n",
+    L = s.split(/\r?\n/);
+  let sec = "",
+    en = false,
+    marcar = false,
+    hijo = false,
+    h = null,
+    iCapa = -1,
+    n = 0;
+  for (let i = 0; i + 1 < L.length; i += 2) {
+    const c = L[i].trim(),
+      v = L[i + 1].trim();
+    if (c === "0") {
+      if (en && marcar && iCapa >= 0) {
+        L[iCapa] = "JMG-ARQ-BORRADO";
+        n++;
+      }
+      en = false;
+      iCapa = -1;
+      h = null;
+      if (v === "SECTION") sec = "?";
+      else if (v === "ENDSEC") sec = "";
+      else if (sec === "ENTITIES") {
+        en = true;
+        hijo = v === "VERTEX" || v === "ATTRIB" || v === "SEQEND";
+        if (!hijo) marcar = false;
+      }
+      continue;
+    }
+    if (sec === "?" && c === "2") sec = v;
+    else if (en) {
+      if (c === "5" && h === null) {
+        h = v;
+        if (!hijo) marcar = H.has(v.toUpperCase());
+      } else if (c === "8" && iCapa < 0) iCapa = i + 1;
+    }
+  }
+  return { s: L.join(nl), n };
+}
 function laDxfCompleto(s, { esc = dsD().escala, hojas = [], op = {} } = {}) {
   if (s.startsWith("AutoCAD Binary DXF")) return null;
+  const ob = laOcultarBorrados(s);
+  s = ob.s;
   const ltsA = +(/\$LTSCALE\s*\r?\n\s*40\s*\r?\n\s*([-\d.eE]+)/.exec(s) || [])[1] || 1,
     { E, capas } = laCon(esc, null, () => laDxf(false, true)),
     u = esc / 1000 / EPL.f,
     ents = laEntsModernos(E),
-    cps = [...capas];
+    cps = [...capas, ...(ob.n ? [["JMG-ARQ-BORRADO", -8, 1]] : [])];
   // Trazos de la tubería en piso: 3 mm y 1.5 mm en el papel (el $LTSCALE del archivo multiplica)
   let tipos = [["JMG_TRAZOS", [(3 * u) / ltsA, (1.5 * u) / ltsA]]],
     ext = plExtUtil().slice();

@@ -925,14 +925,17 @@ prueba("Editor de diseño: menú del clic derecho, paso de giro, color por tipo 
   await teclaE("r", "KeyR", 82);
   ok((await ev("dsSel()[0].r")) === 225, "con paso de 45°, R gira 45°");
   await poner("#dsGiro", "0");
-  // Plano atenuado: la arquitectura no se elige
+  // Plano atenuado: la ventana de selección toma solo el diseño; un clic donde no hay diseño elige la arquitectura
+  await teclaE("Escape", "Escape", 27);
+  await clic("#plTenue");
+  await ev(`plMarcoArq(${OX} - 1, ${OY} - 1, ${OX} + 11, ${OY} + 9, false, false); 1`);
+  ok((await ev("PL_ASEL.size")) === 0, "con el plano atenuado, la ventana de selección no toma la arquitectura");
+  await clicPlano(OX + 10, OY + 3, 0);
+  ok((await ev("PL_ASEL.size")) === 1, "con el plano atenuado, un clic en el muro lo elige (para borrarlo)");
   await teclaE("Escape", "Escape", 27);
   await clic("#plTenue");
   await clicPlano(OX + 10, OY + 3, 0);
-  ok((await ev("PL_ASEL.size")) === 0 && (await ev("PLH.obj")) === -1, "con el plano atenuado, el muro no se elige");
-  await clic("#plTenue");
-  await clicPlano(OX + 10, OY + 3, 0);
-  ok((await ev("PL_ASEL.size")) === 1, "sin atenuar, sí se elige");
+  ok((await ev("PL_ASEL.size")) === 1, "sin atenuar, también se elige");
   await clic('[data-ed="aceptar"]');
 });
 
@@ -1537,6 +1540,33 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
       /\nE-INDICE\r?\n/.test(cpl) &&
       /SeÃ±al/.test(cpl),
     `plano del arquitecto con el diseño y los diagramas a 1:50 en un solo DXF ${cpr.join("; ")}`
+  );
+  // Lo borrado de la arquitectura en la plataforma va a la capa JMG-ARQ-BORRADO (apagada y congelada), por su handle
+  const ocu = await ev(
+    `(() => { const arq = dxfEnBase([["LINE", 8, "Muros", 100, "AcDbLine", 10, "${OX}", 20, "${OY}", 30, "0.0", 11, "${OX + 10}", 21, "${OY}", 31, "0.0"]], { capas: [["Muros", 7]], tipos: [], estilos: [], ext: [${OX}, ${OY}, ${OX + 10}, ${OY + 8}] }),
+        h = /ENTITIES[\\s\\S]*?\\n0\\r?\\nLINE\\r?\\n5\\r?\\n([0-9A-F]+)/.exec(arq)[1], b0 = EPL.borr, h0 = PL_MOD.hnd;
+      EPL.borr = [999999]; PL_MOD.hnd = { 999999: h };
+      const o = laDxfCompleto(arq, { esc: 50 }); EPL.borr = b0; PL_MOD.hnd = h0;
+      return o ? laTextoDe(o.buffer) : ""; })()`
+  );
+  ok(
+    !dxf2013Problemas(ocu).length &&
+      /\n0\r?\nLINE\r?\n5\r?\n[0-9A-F]+\r?\n330\r?\n[0-9A-F]+\r?\n100\r?\nAcDbEntity\r?\n8\r?\nJMG-ARQ-BORRADO\r?\n/.test(
+        ocu
+      ) &&
+      /\n2\r?\nJMG-ARQ-BORRADO\r?\n70\r?\n1\r?\n62\r?\n-8\r?\n/.test(ocu),
+    "lo borrado de la arquitectura queda en la capa JMG-ARQ-BORRADO, apagada y congelada"
+  );
+  // Textos de la arquitectura: un clic en sus letras los elige (también con el plano atenuado) y se borran
+  const btx = await J(
+    `(() => { const t = PL_TX.find(x => x.s && x.h * PLV.s > 2); if (!t) return null; const ten = EPL.tenue, b0 = (EPL.borr || []).slice();
+      EPL.tenue = true; const c = plCajaTexto(t); plSeleccionar([(c[0][0] + c[2][0]) / 2, (c[0][1] + c[2][1]) / 2], false);
+      const elegido = PL_ASEL.has(t.e); edBorrar(false); const fuera = !PL_TX.some(x => x.e === t.e);
+      EPL.borr = b0; EPL.tenue = ten; plPreparar(); edCambio(); return { s: t.s, elegido, fuera, vuelve: PL_TX.some(x => x.e === t.e) }; })()`
+  );
+  ok(
+    btx && btx.elegido && btx.fuera && btx.vuelve,
+    `un clic en un texto de la arquitectura lo elige y se borra (${JSON.stringify(btx)})`
   );
   // Circuito en las salidas
   await ev("(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })($('dsNSal'))");

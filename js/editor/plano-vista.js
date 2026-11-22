@@ -300,6 +300,18 @@ function plSobreDibujar() {
         if (t.k === "l" && i !== PLH.obj) plTrazo(g, t.p, t.c);
       })
     );
+    // Textos elegidos: su recuadro
+    (PL_TX || []).forEach(t => {
+      if (!PL_ASEL.has(t.e)) return;
+      g.beginPath();
+      plCajaTexto(t).forEach(([x, y], i) => {
+        const [X, Y] = plAPant(x, y);
+        if (i) g.lineTo(X, Y);
+        else g.moveTo(X, Y);
+      });
+      g.closePath();
+      g.stroke();
+    });
     g.setLineDash([]);
   }
   // Objeto seleccionado: resaltado con sus vértices (no se mueve)
@@ -722,6 +734,51 @@ function plObjeto(x, y, r) {
           mejor = i;
         }
       }
+  return mejor;
+}
+/* Textos de la arquitectura: su recuadro en el dibujo (esquinas, con su giro y su alineación; el ancho aproximado
+   de Arial, 0.7 de la altura por letra) y el texto que está bajo el punto x, y (con un margen r) */
+function plCajaTexto(t) {
+  const ls = String(t.s || "").split("\n"),
+    h = t.h,
+    w = Math.max(...ls.map(l => l.length)) * h * 0.7 * (t.w || 1),
+    lh = h * 1.667,
+    alto = h + (ls.length - 1) * lh,
+    ax = t.ha === "center" ? 0.5 : t.ha === "right" || t.ha === "end" ? 1 : 0,
+    // Borde superior del recuadro respecto del punto de inserción (y hacia arriba)
+    arriba =
+      t.va === "top" || t.va === "hanging"
+        ? 0
+        : t.va === "bottom"
+          ? alto
+          : t.va === "middle"
+            ? alto / 2
+            : t.mt
+              ? alto / 2
+              : h,
+    x0 = -ax * w,
+    c = Math.cos(t.rot || 0),
+    sn = Math.sin(t.rot || 0);
+  return [
+    [x0, arriba],
+    [x0 + w, arriba],
+    [x0 + w, arriba - alto - h * 0.25],
+    [x0, arriba - alto - h * 0.25]
+  ].map(([u, v]) => [t.x + u * c - v * sn, t.y + u * sn + v * c]);
+}
+function plTextoEn(x, y, r) {
+  let mejor = null;
+  for (const t of PL_TX || []) {
+    const P = plCajaTexto(t),
+      c = Math.cos(-(t.rot || 0)),
+      sn = Math.sin(-(t.rot || 0)),
+      lc = ([px, py]) => [(px - t.x) * c - (py - t.y) * sn, (px - t.x) * sn + (py - t.y) * c],
+      Q = P.map(lc),
+      [u, v] = lc([x, y]);
+    if (u >= Q[0][0] - r && u <= Q[1][0] + r && v <= Q[0][1] + r && v >= Q[2][1] - r) {
+      if (!mejor || t.h < mejor.h) mejor = t;
+    }
+  }
   return mejor;
 }
 function plDistTrazo(t, x, y) {
