@@ -1497,11 +1497,21 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
   // Impresión: la hoja cabe en su papel (medio milímetro menos), así no sale una página en blanco
   ok(
     await ev(
-      "(() => { const p = window.print; window.print = () => {}; lamImprimir(false); const h = $('printArea').innerHTML; setTimeout(() => { window.print = p; $('printArea').innerHTML = ''; document.body.classList.remove('printing'); if (typeof printTitulo === 'string' && printTitulo) document.title = printTitulo; }, 400); return /width:\\d+(\\.5)?mm;height:\\d+\\.5mm/.test(h); })()"
+      "(() => { const p = window.print; window.print = () => {}; laImprimirYa(false); const h = $('printArea').innerHTML; setTimeout(() => { window.print = p; $('printArea').innerHTML = ''; document.body.classList.remove('printing'); if (typeof printTitulo === 'string' && printTitulo) document.title = printTitulo; }, 400); return /width:\\d+(\\.5)?mm;height:\\d+\\.5mm/.test(h); })()"
     ),
     "la lámina impresa cabe en una página"
   );
   await esperar(500);
+  // Antes de imprimir, la guía «Guardar como PDF»; con «No volver a mostrar» y Continuar, imprime y no vuelve
+  const gp =
+    await J(`(() => { try { localStorage.removeItem("jmg-electric-guia-pdf"); } catch (e) {} let n = 0; const f = () => n++;
+      guiaPdf(f); const vis = !$("cfmDlg").hidden; $("guiaPdfNo").checked = true; $("cfmDlg").querySelector('[data-cf="si"]').click();
+      guiaPdf(f); const r = { vis, n, cerrado: $("cfmDlg").hidden, guardado: localStorage.getItem("jmg-electric-guia-pdf") };
+      localStorage.removeItem("jmg-electric-guia-pdf"); return r; })()`);
+  ok(
+    gp.vis && gp.n === 2 && gp.cerrado && gp.guardado === "1",
+    `guía «Guardar como PDF» antes de imprimir, con «No volver a mostrar» (${JSON.stringify(gp)})`
+  );
   await clic('[data-la="cerrar"]');
   // DXF: se vuelve a leer con el lector de la plataforma, en las mismas coordenadas
   const r = await J(

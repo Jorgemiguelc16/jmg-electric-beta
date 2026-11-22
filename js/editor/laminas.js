@@ -1650,7 +1650,9 @@ async function laminasExpediente() {
     return [];
   }
 }
-function lamImprimir(todas) {
+// Imprimir con la guía de «Guardar como PDF» (js/exportar/descargas.js)
+const lamImprimir = todas => guiaPdf(() => laImprimirYa(todas));
+function laImprimirYa(todas) {
   const L = laLista(),
     idx = todas ? L.map((l, i) => i) : [dsD().lamI || 0],
     hojas = idx.map(i => ({ i, ...laSvg(laOp(i)) }));
@@ -1668,9 +1670,6 @@ function lamImprimir(todas) {
   printTitulo = document.title;
   const nom = ($("p_nombre").value.trim() || "Proyecto").replace(/[\\/:*?"<>|]/g, "").slice(0, 70);
   document.title = todas ? `Láminas - ${nom}` : `${laOp().num} - ${nom}`;
-  // Con una impresora (o «Microsoft Print to PDF») el navegador usa el papel de ella: cada lámina sale girada y
-  // reducida, y puede sobrar una hoja; con «Guardar como PDF», cada una en su papel
-  toast("En Destino elija «Guardar como PDF» (no una impresora): así cada lámina sale en su papel");
   setTimeout(() => window.print(), 80);
 }
 async function lamDxf(conArq) {

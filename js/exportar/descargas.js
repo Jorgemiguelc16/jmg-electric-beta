@@ -119,11 +119,36 @@ $("pdfDlg").addEventListener("click", e => {
     localStorage.setItem(PDFKEY, est);
   } catch (_) {}
   pdfDialogo(false);
-  imprimirExpediente(est);
+  guiaPdf(() => imprimirExpediente(est));
 });
 addEventListener("keydown", e => {
   if (e.key === "Escape" && !$("pdfDlg").hidden) pdfDialogo(false);
 });
+/* Antes de la ventana de impresión: que el destino sea «Guardar como PDF». Con una impresora (o «Microsoft Print to
+   PDF») el navegador usa el papel de ella: el PDF pierde los enlaces del índice y el texto seleccionable, y las
+   láminas salen giradas y reducidas. Se puede dejar de mostrar (en este navegador). */
+function guiaPdf(fn) {
+  let no = false;
+  try {
+    no = localStorage.getItem("jmg-electric-guia-pdf") === "1";
+  } catch (e) {}
+  if (no || typeof confirmar !== "function") return fn();
+  confirmar(
+    "Guardar como PDF",
+    `<p>En la ventana de impresión, en <b>Destino</b>, elija <b>Guardar como PDF</b>.</p>
+    <ul><li>Así el PDF conserva el <b>índice con enlaces</b> a cada capítulo, el <b>texto seleccionable</b> y cada lámina en <b>su papel</b>.</li>
+    <li>Con una impresora o con «Microsoft Print to PDF», el PDF pierde los enlaces y la selección del texto, y las láminas salen giradas y reducidas.</li></ul>
+    <label class="cfm-no"><input type="checkbox" id="guiaPdfNo"> No volver a mostrar</label>`,
+    "Continuar",
+    ok => {
+      try {
+        if ($("guiaPdfNo") && $("guiaPdfNo").checked) localStorage.setItem("jmg-electric-guia-pdf", "1");
+      } catch (e) {}
+      if (ok) fn();
+    },
+    "PDF"
+  );
+}
 async function imprimirExpediente(estilo) {
   if (!LAST || LAST.prelim) return;
   // Láminas de planta del diseño (si el proyecto tiene plano con diseño): van primero en el capítulo de planos

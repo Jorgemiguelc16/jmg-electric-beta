@@ -1467,3 +1467,19 @@
   color: var(--dl-ink);
   font-weight: 600;
 }
+/* Guía «Guardar como PDF»: la casilla junto a su texto */
+#cfmDlg .cfm-no {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted, #5a6775);
+  cursor: pointer;
+}
+#cfmDlg .cfm-no input {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
