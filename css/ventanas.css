@@ -1337,3 +1337,112 @@
 :root[data-theme="dark"] .pu-r.mod {
   background: #1b3149;
 }
+/* Ventana «Planos para AutoCAD»: láminas con casilla, archivo, papel y colores, con la letra de la plataforma */
+.dx-box {
+  font-family: var(--f-body);
+}
+.dx-cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 14px;
+  background: var(--dl-cell);
+}
+.dx-sec {
+  margin: 0 0 12px;
+}
+.dx-sec h4 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font: 600 12.5px var(--f-body);
+  color: var(--dl-ink);
+}
+.dx-sec h4 small {
+  font-weight: 400;
+  color: var(--dl-ink2);
+}
+.dx-sel {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  font: 400 11.5px var(--f-body);
+}
+.dx-lista {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.dx-it,
+.dx-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid var(--dl-grid2);
+  border-radius: 4px;
+  background: var(--dl-bar);
+  cursor: pointer;
+  font: 400 12px var(--f-body);
+}
+.dx-it:has(input:checked),
+.dx-card:has(input:checked) {
+  border-color: var(--dl-acc);
+  background: var(--dl-hover);
+}
+.dx-it input,
+.dx-card input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--dl-acc);
+}
+.dx-it span,
+.dx-card span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dx-it b,
+.dx-card b {
+  font-weight: 600;
+}
+.dx-it small,
+.dx-card small {
+  color: var(--dl-ink2);
+  font-size: 11px;
+}
+.dx-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.dx-cards.dx-tres {
+  grid-template-columns: 1fr;
+}
+.dx-card .sw {
+  margin-left: auto;
+  flex: none;
+}
+.dx-sec select {
+  width: 100%;
+  max-width: 280px;
+  font: 400 12px var(--f-body);
+}
+/* Prioridad sobre los estilos generales de las etiquetas de los diálogos (.welcome label) */
+#dxfDlg .dx-it,
+#dxfDlg .dx-card {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 0;
+  text-align: left;
+}
+#dxfDlg .dx-it input,
+#dxfDlg .dx-card input {
+  width: auto;
+  height: auto;
+}
+#dxfDlg .dx-cards.dx-tres .dx-card {
+  padding: 7px 10px;
+}

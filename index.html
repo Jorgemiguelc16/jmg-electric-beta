@@ -713,23 +713,23 @@
     <div class="wl-acts"><button class="btn" type="button" data-wz="ok">Continuar →</button><button class="btn sec" type="button" data-wz="close">Cancelar</button></div>
   </div>
 </div>
-<div class="welcome" id="dxfDlg" hidden>
-  <div class="wl-box" role="dialog" aria-modal="true" aria-labelledby="dxfT">
-    <button class="wl-x" type="button" data-dx="close" aria-label="Cerrar">×</button>
-    <p class="wl-eyebrow">Planos · AutoCAD</p>
-    <h2 id="dxfT" class="dx-t">Descargar para AutoCAD</h2>
-    <p class="wl-lead">DXF de AutoCAD 2013 en milímetros, como se ve en la plataforma: mismos colores, letra Arial, rellenos y grosores, con capas y textos editables.</p>
-    <div class="dx-grid">
-      <label>Plano<select id="dx_plano"><option value="unifilar">Diagrama unifilar · IE-01 (todas sus láminas)</option><option value="alturas">Diagrama de alturas de montaje · IE-02</option><option value="detalles">Leyenda y detalles · IE-03</option><option value="tableros">Detalle de tableros · IE-04 (todas sus láminas)</option><option value="tgeneral">Tablero general del edificio · IE-05 (edificios)</option><option value="medidores">Banco de medidores · IE-06 (edificios)</option><option value="plantas" id="dx_plantas">Láminas de planta del diseño · IE-01… (a su papel y escala)</option><option value="todos">Todos los planos (un archivo por lámina)</option></select></label>
-      <label>Tamaño de lámina<select id="dx_lam"><option value="A4">A4 · 297 × 210 mm</option><option value="A3" selected>A3 · 420 × 297 mm</option><option value="A2">A2 · 594 × 420 mm</option><option value="A1">A1 · 841 × 594 mm</option></select></label>
-      <fieldset class="dx-opts"><legend>Estilo de colores</legend>
-        <label class="dx-opt"><input type="radio" name="dx_col" value="jmg" checked><span><b>Como en la plataforma</b><small>Los mismos colores, letra Arial y el papel blanco</small></span><i class="sw sw-jmg"></i></label>
-        <label class="dx-opt"><input type="radio" name="dx_col" value="mono"><span><b>Monocromático</b><small>Negro, ideal para imprimir</small></span><i class="sw sw-mono"></i></label>
-        <label class="dx-opt"><input type="radio" name="dx_col" value="capas"><span><b>Por capas</b><small>Colores por capa: cámbielos desde AutoCAD</small></span><i class="sw sw-capas"></i></label>
-      </fieldset>
+<div class="welcome vw-ov" id="dxfDlg" hidden>
+  <div class="vw dx-box" role="dialog" aria-modal="true" aria-labelledby="dxfT">
+    <div class="vw-bar"><svg class="vw-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11"/><path d="M4 11 7 5l3 6M5 9.2h4M11 5v6"/></svg><span id="dxfT">Planos para AutoCAD (DXF)</span><button type="button" class="vw-x" data-dx="close" title="Cerrar (Esc)" aria-label="Cerrar">×</button></div>
+    <div class="dx-cuerpo">
+      <section class="dx-sec"><h4>Láminas<small id="dxN"></small><span class="dx-sel"><button type="button" class="linkbtn" data-dx="todas">Todas</button><button type="button" class="linkbtn" data-dx="ninguna">Ninguna</button></span></h4><div class="dx-lista" id="dxLista"></div></section>
+      <section class="dx-sec"><h4>Archivo</h4><div class="dx-cards">
+        <label class="dx-card"><input type="radio" name="dx_modo" value="uno" checked><span><b>Un solo archivo</b><small>Todas las láminas ordenadas, cada una con su título (recomendado)</small></span></label>
+        <label class="dx-card"><input type="radio" name="dx_modo" value="varios"><span><b>Un archivo por lámina</b><small>Para entregar o editar cada lámina por separado</small></span></label>
+      </div></section>
+      <section class="dx-sec"><h4>Papel de los diagramas<small>las láminas de planta van a su papel y escala</small></h4><select id="dx_lam"><option value="A4">A4 · 297 × 210 mm</option><option value="A3" selected>A3 · 420 × 297 mm</option><option value="A2">A2 · 594 × 420 mm</option><option value="A1">A1 · 841 × 594 mm</option></select></section>
+      <section class="dx-sec"><h4>Colores</h4><div class="dx-cards dx-tres">
+        <label class="dx-card"><input type="radio" name="dx_col" value="jmg" checked><span><b>Colores claros</b><small>Azul, cobre, cian y verde, para el fondo oscuro de AutoCAD</small></span><i class="sw sw-jmg"></i></label>
+        <label class="dx-card"><input type="radio" name="dx_col" value="mono"><span><b>Monocromático</b><small>Sin rellenos, ideal para imprimir</small></span><i class="sw sw-mono"></i></label>
+        <label class="dx-card"><input type="radio" name="dx_col" value="capas"><span><b>Por capas</b><small>Cada capa con su color, para cambiarlo en AutoCAD</small></span><i class="sw sw-capas"></i></label>
+      </div></section>
     </div>
-    <div class="wl-acts"><button class="btn" type="button" data-dx="ok">Descargar DXF</button><button class="btn sec" type="button" data-dx="close">Cancelar</button></div>
-    <p class="wl-note">¿Necesita DWG? Abra el DXF en AutoCAD y use <b>Guardar como → Dibujo (*.dwg)</b>. Cada parte va en su capa: E-ROTULO, E-LEYENDA, E-CUADROS, E-TEXTOS, E-NOTAS, E-MARCO; en el unifilar E-UNIFILAR, E-BARRAS, E-TIERRA y E-RESERVA; en el de alturas E-ELEVACION, E-NIVELES y E-TUBERIA; en el de detalles E-DETALLE; en el de tableros E-TABLEROS, E-DETALLE y, si están peinados, E-CABLEADO. La lámina elegida aquí es la misma de Planos › Lámina: si el texto del unifilar quedara menor de 1.8 mm, se divide en varias láminas.</p>
+    <div class="vw-pie"><span class="vw-nota">DXF de AutoCAD 2013 en milímetros, letra Arial, con capas y textos editables · para DWG: Guardar como en AutoCAD</span><button class="vw-btn def" type="button" data-dx="ok">Descargar DXF</button><button class="vw-btn" type="button" data-dx="close">Cancelar</button></div>
   </div>
 </div>
 <div class="welcome" id="pdfDlg" hidden>

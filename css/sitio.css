@@ -1690,7 +1690,7 @@ body.wl-open {
   border: 1px solid var(--line);
 }
 .sw-jmg {
-  background: linear-gradient(90deg, #14304f 0 50%, #9a5a23 50%);
+  background: linear-gradient(90deg, #1f2328 0 34%, #00bfff 34% 67%, #ff7f00 67%);
 }
 .sw-mono {
   background: linear-gradient(90deg, #14212e 0 50%, #c0c0c0 50%);

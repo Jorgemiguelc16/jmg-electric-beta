@@ -241,31 +241,97 @@ PLANOS.tgeneral = () => (b => (b ? [{ ...b, nom: "Tablero general", corto: "TG" 
 PLANOS.medidores = () =>
   (b => (b ? [{ ...b, nom: "Banco de medidores", corto: "Medidores" }] : []))(bancoMedidores(LAST));
 const planoActual = () => PLANOS[PLANOS[VIEW] ? VIEW : "unifilar"]();
-/* Diálogo de descarga DXF */
+/* Ventana «Planos para AutoCAD»: las láminas a descargar (las de planta del diseño, si hay, y las de la plataforma),
+   en un solo DXF ordenado o un archivo por lámina, el papel de los diagramas y los colores. Recuerda lo elegido. */
+// La ventana móvil se crea al abrirla por primera vez (js/ventanas/ventana.js se carga después de este archivo)
+let DX_VW = null;
+const dxVw = () =>
+  DX_VW ||
+  (DX_VW = ventanaMovil(document.querySelector("#dxfDlg .vw"), "jmg-electric-dxf-vw", {
+    w: 640,
+    h: 640,
+    minW: 480,
+    minH: 420
+  }));
+const DX_NOM = {
+  unifilar: ["Diagrama unifilar", "IE-01"],
+  alturas: ["Diagrama de alturas de montaje", "IE-02"],
+  detalles: ["Leyenda y detalles", "IE-03"],
+  tableros: ["Detalle de tableros", "IE-04"],
+  tgeneral: ["Tablero general del edificio", "IE-05"],
+  medidores: ["Banco de medidores y balance de fases", "IE-06"]
+};
+const dxConDis = () =>
+  typeof PLANO !== "undefined" && PLANO && PLANO.dis && (PLANO.dis.els || []).some(e => e.t === "sim");
+// Lista de láminas con su casilla y cuántas tiene cada plano
+function dxLista() {
+  let op = {};
+  try {
+    op = JSON.parse(localStorage.getItem("jmg-electric-dxf") || "{}");
+  } catch (e) {}
+  const lam = $("dx_lam").value,
+    fuera = new Set(op.fuera || []),
+    filas = [];
+  if (dxConDis()) filas.push(["plantas", "Láminas de planta del diseño", "IE-01… · a su papel y escala"]);
+  Object.keys(PLANOS).forEach(k => {
+    let n = 0;
+    try {
+      n = PLANOS[k](lam).length;
+    } catch (e) {}
+    if (n) filas.push([k, DX_NOM[k][0], `${DX_NOM[k][1]}${n > 1 ? ` · ${n} láminas` : ""}`]);
+  });
+  $("dxLista").innerHTML = filas
+    .map(
+      ([k, t, d]) =>
+        `<label class="dx-it"><input type="checkbox" data-dxk="${k}"${fuera.has(k) ? "" : " checked"}><span><b>${esc(t)}</b><small>${esc(d)}</small></span></label>`
+    )
+    .join("");
+  dxCuenta();
+}
+const dxCuenta = () => {
+  const c = [...$("dxLista").querySelectorAll("[data-dxk]")];
+  $("dxN").textContent = `${c.filter(x => x.checked).length} de ${c.length}`;
+};
 function dxfDialogo(abrir) {
   const d = $("dxfDlg");
   d.hidden = !abrir;
-  document.body.classList.toggle("wl-open", abrir);
-  if (abrir) {
-    // Las láminas de planta solo si el proyecto tiene diseño sobre el plano
-    const conDis = typeof PLANO !== "undefined" && PLANO && PLANO.dis && (PLANO.dis.els || []).some(e => e.t === "sim");
-    $("dx_plantas").hidden = $("dx_plantas").disabled = !conDis;
-    // Por defecto, el plano que está abierto
-    $("dx_plano").value = PLANOS[VIEW] ? VIEW : "unifilar";
-    try {
-      const o = JSON.parse(localStorage.getItem("jmg-electric-dxf") || "{}");
-      if (LAMINAS[o.lamina]) $("dx_lam").value = o.lamina;
-      const r = document.querySelector(`input[name="dx_col"][value="${o.colores}"]`);
-      if (r) r.checked = true;
-    } catch (e) {}
-    d.querySelector('[data-dx="ok"]').focus();
-  }
+  vwFondo();
+  if (!abrir) return;
+  dxVw().abrir();
+  try {
+    const o = JSON.parse(localStorage.getItem("jmg-electric-dxf") || "{}");
+    if (LAMINAS[o.lamina]) $("dx_lam").value = o.lamina;
+    const r = document.querySelector(`input[name="dx_col"][value="${o.colores}"]`);
+    if (r) r.checked = true;
+    const m = document.querySelector(`input[name="dx_modo"][value="${o.modo}"]`);
+    if (m) m.checked = true;
+  } catch (e) {}
+  dxLista();
+  d.querySelector('[data-dx="ok"]').focus();
 }
+$("dxfDlg").addEventListener("change", e => {
+  if (e.target.id === "dx_lam") dxLista();
+  else dxCuenta();
+});
 $("dxfDlg").addEventListener("click", async e => {
   const b = e.target.closest("[data-dx]");
   if (e.target.id === "dxfDlg" || (b && b.dataset.dx === "close")) return dxfDialogo(false);
+  if (b && (b.dataset.dx === "todas" || b.dataset.dx === "ninguna")) {
+    $("dxLista")
+      .querySelectorAll("[data-dxk]")
+      .forEach(c => (c.checked = b.dataset.dx === "todas"));
+    return dxCuenta();
+  }
   if (!b || b.dataset.dx !== "ok" || !LAST || !entregable()) return;
-  const op = { lamina: $("dx_lam").value, colores: radio("dx_col") || "jmg" };
+  const marc = [...$("dxLista").querySelectorAll("[data-dxk]")],
+    sel = marc.filter(c => c.checked).map(c => c.dataset.dxk);
+  if (!sel.length) return toast("Elija al menos una lámina");
+  const op = {
+    lamina: $("dx_lam").value,
+    colores: radio("dx_col") || "jmg",
+    modo: radio("dx_modo") || "uno",
+    fuera: marc.filter(c => !c.checked).map(c => c.dataset.dxk)
+  };
   try {
     localStorage.setItem("jmg-electric-dxf", JSON.stringify(op));
   } catch (err) {}
@@ -280,21 +346,44 @@ $("dxfDlg").addEventListener("click", async e => {
       .replace(/[^\wáéíóúñÁÉÍÓÚÑ .-]/g, "")
       .trim()
       .slice(0, 60) || "proyecto";
-  const pl = $("dx_plano").value;
   dxfDialogo(false);
-  // Láminas de planta del diseño (a su papel y escala) y las de la plataforma (en la lámina elegida)
-  const plantas =
-    (pl === "plantas" || pl === "todos") && typeof laminasExpediente === "function" && !$("dx_plantas").disabled
-      ? (await laminasExpediente()).map(h => ({ svg: h.svg, corto: `${h.hoja} ${h.vista || ""}`.trim(), papel: h.tam }))
-      : [];
-  if (pl === "plantas" && !plantas.length) return toast("El proyecto no tiene láminas de planta del diseño");
-  const hojas = [
-    ...plantas,
-    ...(pl === "plantas" ? [] : pl === "todos" ? Object.keys(PLANOS) : [pl]).flatMap(k => PLANOS[k](op.lamina))
-  ];
-  for (const u of hojas) {
-    const blob = new Blob([svgDxf(u.svg, op)], { type: "application/dxf" }),
-      nombre = `JMG-ELECTRIC - ${u.corto} ${u.papel || op.lamina} - ${nm}.dxf`;
+  // Las de planta primero; las de la plataforma, numeradas después de ellas (como en el expediente)
+  const hojas = [];
+  if (sel.includes("plantas") && typeof laminasExpediente === "function")
+    (await laminasExpediente()).forEach(h =>
+      hojas.push({
+        svg: h.svg,
+        tit: `${h.hoja} · ${h.tit}${h.vista ? " · " + h.vista[0] + h.vista.slice(1).toLowerCase() : ""} · ${h.tam} 1:${h.esc}`,
+        corto: `${h.hoja} ${h.vista || ""}`.trim(),
+        papel: h.tam,
+        grupo: "plantas"
+      })
+    );
+  const nDis = hojas.reduce((m, h) => Math.max(m, +(/^IE-(\d+)/.exec(h.corto) || [0, 0])[1]), 0);
+  ROT_DESP = nDis;
+  try {
+    sel
+      .filter(k => PLANOS[k])
+      .forEach(k =>
+        PLANOS[k](op.lamina).forEach((u, i, a) => {
+          const hoja = ieNum(u.hoja || DX_NOM[k][1]);
+          hojas.push({
+            svg: u.svg,
+            tit: `${hoja} · ${DX_NOM[k][0]}${a.length > 1 && !u.hoja ? ` (${i + 1})` : ""} · ${op.lamina}`,
+            corto: `${hoja} ${u.corto}`,
+            grupo: "planos"
+          });
+        })
+      );
+  } finally {
+    ROT_DESP = 0;
+  }
+  const archivos =
+    op.modo === "varios"
+      ? hojas.map(h => [svgDxf(h.svg, op), `JMG-ELECTRIC - ${h.corto} ${h.papel || op.lamina} - ${nm}.dxf`])
+      : [[svgDxfVarias(hojas, op), `JMG-ELECTRIC - Planos (${hojas.length} láminas) - ${nm}.dxf`]];
+  for (const [txt, nombre] of archivos) {
+    const blob = new Blob([txt], { type: "application/dxf" });
     try {
       if (downloads) await downloads.save({ filename: nombre, data: blob });
       else descargarLocal(blob, nombre);
@@ -303,6 +392,11 @@ $("dxfDlg").addEventListener("click", async e => {
       if (err && err.code === "declined") break;
     }
   }
+  toast(
+    op.modo === "varios"
+      ? `${archivos.length} archivos DXF, uno por lámina`
+      : `Un DXF con ${hojas.length} lámina${hojas.length > 1 ? "s" : ""} ordenadas, cada una con su título`
+  );
 });
 addEventListener("keydown", e => {
   if (e.key === "Escape" && !$("dxfDlg").hidden) dxfDialogo(false);

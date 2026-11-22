@@ -1356,11 +1356,7 @@ function laDxfOriginal(buf) {
   }
   if (!r12) L[iSeed] = h.toString(16).toUpperCase();
   // Se arma de atrás hacia adelante para no mover las posiciones
-  const pos = Object.keys(ins)
-    .map(Number)
-    .sort((a, b) => b - a);
-  pos.forEach(i => L.splice(i, 0, ...ins[i].map(String)));
-  const t = L.join(nl),
+  const t = dxfUnir(L, ins, nl),
     o = new Uint8Array(t.length);
   for (let i = 0; i < t.length; i++) o[i] = t.charCodeAt(i) & 255;
   return o;

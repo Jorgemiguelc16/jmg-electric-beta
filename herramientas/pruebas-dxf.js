@@ -132,6 +132,23 @@ for (const cp of run("CASOS_PRUEBA").slice(0, 3)) {
         ok(false, `${cp.id} · ${u.corto}: ${e.message}`);
       }
     }
+  // Todas las láminas en un solo DXF, ordenadas y con su título, en los tres esquemas de color
+  const hojas = Object.keys(planos).flatMap(k =>
+    planos[k]("A3").map(u => ({ svg: u.svg, tit: u.corto, grupo: "planos" }))
+  );
+  for (const colores of ["jmg", "mono", "capas"]) {
+    const txt = run("svgDxfVarias")(hojas, { lamina: "A3", colores }),
+      pr = dxf2013Problemas(txt),
+      tits = (txt.match(/\nE-INDICE\r?\n/g) || []).length,
+      bordes = (txt.match(/\nDefpoints\r?\n/g) || []).length;
+    ok(
+      // (un nombre más: el de la capa en la tabla de capas)
+      !pr.length && tits === hojas.length + 1 && bordes === hojas.length + 1,
+      `${cp.id} · un solo DXF con ${hojas.length} láminas (${colores}): ${tits} títulos, ${bordes} bordes ${pr.join("; ")}`
+    );
+    // Sin rellenos en monocromático y por capas (no tapan el dibujo)
+    if (colores !== "jmg") ok(!/\nHATCH\r?\n/.test(txt), `${cp.id} · sin rellenos en ${colores}`);
+  }
 }
 
 /* 3. El plano y el diseño eléctrico se guardan con el proyecto solo con datos válidos (planoValido) */

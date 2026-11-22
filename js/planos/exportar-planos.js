@@ -1,9 +1,10 @@
 /* EXPORTAR LOS PLANOS
    Tamaños de lámina (LAMINAS), svgDxf(): el SVG de cualquier plano a DXF de AutoCAD 2013, como se ve en la plataforma, y
    svgPng(): el SVG a imagen PNG. Los usan la cinta Planos, la ventana DXF, el Excel y el expediente. */
-/* SVG de cualquier plano → DXF de AutoCAD 2013 (AC1027), en milímetros. Se ve como en la plataforma:
-   - colores exactos (color verdadero, código 420) en «Como en la plataforma», con el papel blanco debajo (capa
-     E-PAPEL); en negro (7) en «Monocromático»; por capa (256) en «Por capas»;
+/* SVG de cualquier plano → DXF de AutoCAD 2013 (AC1027), en milímetros, con el dibujo de la plataforma:
+   - colores: «Colores claros» (los de la plataforma, aclarados para el fondo oscuro de AutoCAD: azul, cobre, cian,
+     verde y amarillo, con sus rellenos); «Monocromático» (7, sin rellenos, para imprimir); «Por capas» (256, sin
+     rellenos);
    - letras Arial (normal, negrita, cursiva) con la altura de las mayúsculas de Arial (0.716 del tamaño de la letra) y
      la alineación del SVG (izquierda, centro o derecha; línea base, centro, arriba o abajo); tildes y eñes tal cual;
    - rellenos como sombreado sólido (HATCH) y en el mismo orden de dibujo, esquinas redondeadas, elipses, el grosor de
@@ -11,9 +12,10 @@
    - lo recortado (clip-path de un rectángulo, como el área de dibujo de las láminas) queda recortado.
    Capas: la del grupo (data-capa) o la de su tipo (E-UNIFILAR, E-CUADROS, E-TEXTOS…). Un plano con medidas en
    milímetros (width="841mm", las láminas del diseño) va a su tamaño real; los demás se centran en la lámina elegida.
-   op = { lamina, colores: "jmg" (como en la plataforma) | "mono" | "capas" } */
+   op = { lamina, colores: "jmg" (colores claros) | "mono" | "capas" }. svgDxfPiezas() da las entidades de una lámina
+   desplazada (dx, dy) para juntar varias en un solo archivo (svgDxfVarias); svgDxf(), el archivo de una. */
 const LAMINAS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594] };
-function svgDxf(svgTxt, op = {}) {
+function svgDxfPiezas(svgTxt, op = {}, dx = 0, dy = 0) {
   const esq = op.colores || "jmg",
     doc = new DOMParser().parseFromString(svgTxt, "image/svg+xml"),
     root = doc.documentElement,
@@ -29,8 +31,8 @@ function svgDxf(svgTxt, op = {}) {
     ox = real ? 0 : (lam[0] - W * k) / 2,
     oy = real ? 0 : (lam[1] - H * k) / 2,
     f = v => (Number.isFinite(+v) ? (+v).toFixed(4) : "0.0"),
-    X = x => ox + x * k,
-    Y = y => oy + (H - y) * k;
+    X = x => dx + ox + x * k,
+    Y = y => dy + oy + (H - y) * k;
   const hex = c => {
     c = String(c || "")
       .trim()
@@ -67,12 +69,55 @@ function svgDxf(svgTxt, op = {}) {
     }
     return mejor;
   };
-  // Color de la entidad: [62, aci, 420, verdadero] según el esquema
-  const color = h => {
+  /* Colores claros para el fondo oscuro de AutoCAD: los de la plataforma en azul, cobre, cian, verde y amarillo (los
+     textos grises en cian y el azul de los textos más claro, para que se lean); los demás, el color de AutoCAD más
+     cercano, y si es muy oscuro, blanco. Sobre un relleno claro (los gabinetes de los tableros), en oscuro. */
+  const CLARO_ACI = {
+    "#14212e": 7,
+    "#000000": 7,
+    "#14304f": 150,
+    "#9a5a23": 30,
+    "#5a6775": 8,
+    "#2f7a4b": 3,
+    "#bfc8d2": 8,
+    "#ffffff": 255,
+    "#ffd200": 2,
+    "#1f2328": 250,
+    "#b42318": 1,
+    "#c62828": 1,
+    "#1565c0": 150,
+    "#8a9199": 8,
+    "#c98a4b": 32
+  };
+  const SOBRE_CLARO = { "#14212e": 250, "#000000": 250, "#1f2328": 250, "#5a6775": 8, "#bfc8d2": 8, "#8a9199": 8 };
+  // Rellenos claros del dibujo de los tableros (gabinete, módulos, riel), en grises de AutoCAD con volumen
+  const RELL_CLARO = {
+    "#ffffff": 254,
+    "#f3f6f9": 255,
+    "#eaf2fb": 255,
+    "#e3e9f0": 254,
+    "#d9eedf": 254,
+    "#e6e9ed": 253,
+    "#d5dae0": 253,
+    "#c9ced5": 252,
+    "#8f98a3": 8,
+    "#a9b1ba": 9,
+    "#2f7a4b": 3
+  };
+  const claros = [],
+    sobreClaro = (x, y) => claros.some(([a, b, w, h]) => x >= a && x <= a + w && y >= b && y <= b + h),
+    luz = h => {
+      const v = rgb(h);
+      return (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) / 255;
+    };
+  const color = (h, { texto = false, claro = false } = {}) => {
     if (esq === "capas") return [62, 256];
     if (esq === "mono") return [62, 7];
-    const v = rgb(h);
-    return [62, aciDe(h), 420, (v[0] << 16) | (v[1] << 8) | v[2]];
+    if (claro && SOBRE_CLARO[h] !== undefined) return [62, SOBRE_CLARO[h]];
+    if (texto && h === "#5a6775") return [62, 4];
+    if (texto && h === "#14304f") return [62, 140];
+    if (CLARO_ACI[h] !== undefined) return [62, CLARO_ACI[h]];
+    return [62, luz(h) < 0.22 ? 7 : aciDe(h)];
   };
   // Grosor: el estándar de AutoCAD más cercano (centésimas de mm)
   const GROS = [0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211];
@@ -205,13 +250,17 @@ function svgDxf(svgTxt, op = {}) {
       col = color(st),
       lt = tipoDe(dash),
       mm = sw * k,
+      col2 =
+        esq === "jmg" && sobreClaro((P[0][0] + P[1][0]) / 2, (P[0][1] + P[1][1]) / 2)
+          ? color(st, { claro: true })
+          : col,
       partes = o.clip && cerrada ? cortarLinea([...P, P[0]], o.clip) : cortarLinea(P, o.clip),
       cerr = cerrada && !o.clip;
     partes.forEach(Q => {
       if (Q.length === 2 && mm < 0.5)
         return ents.push([
           "LINE",
-          ...comun(ly, col, lt, grosor(mm)),
+          ...comun(ly, col2, lt, grosor(mm)),
           100,
           "AcDbLine",
           10,
@@ -229,7 +278,7 @@ function svgDxf(svgTxt, op = {}) {
         ]);
       ents.push([
         "LWPOLYLINE",
-        ...comun(ly, col, lt, mm >= 0.5 ? undefined : grosor(mm)),
+        ...comun(ly, col2, lt, mm >= 0.5 ? undefined : grosor(mm)),
         100,
         "AcDbPolyline",
         90,
@@ -244,13 +293,29 @@ function svgDxf(svgTxt, op = {}) {
   };
   // Relleno sólido: uno o varios contornos (huecos por paridad, como fill-rule evenodd)
   const relleno = (lazos, fi, o, d, circ) => {
-    if (!fi) return;
-    if (fi === "#ffffff" && esq !== "jmg") return;
+    if (!fi || esq !== "jmg") return;
+    // Claros: solo los del dibujo de los tableros, en gris; el resto (fondos blancos de cuadros y lámina), sin relleno
+    let col = color(fi);
+    if (luz(fi) > 0.8) {
+      if (capaDe(o, d) !== "E-TABLEROS" || RELL_CLARO[fi] === undefined) return;
+      col = [62, RELL_CLARO[fi]];
+      if (!circ)
+        lazos.forEach(P => {
+          const xs = P.map(p => p[0]),
+            ys = P.map(p => p[1]);
+          claros.push([
+            Math.min(...xs),
+            Math.min(...ys),
+            Math.max(...xs) - Math.min(...xs),
+            Math.max(...ys) - Math.min(...ys)
+          ]);
+        });
+    }
     const L = circ ? lazos : lazos.map(P => cortarPoligono(P, o.clip)).filter(P => P.length >= 3);
     if (!L.length) return;
     ents.push([
       "HATCH",
-      ...comun(capaDe(o, d), esq === "mono" ? [62, fi === "#ffffff" ? 7 : 7] : color(fi)),
+      ...comun(capaDe(o, d), col),
       100,
       "AcDbHatch",
       10,
@@ -360,61 +425,6 @@ function svgDxf(svgTxt, op = {}) {
     return L;
   };
   const sw0 = el => (el.getAttribute("stroke-width") === null ? 1 : n(el.getAttribute("stroke-width")));
-  // Papel blanco debajo de todo (como la lámina en pantalla), en su capa
-  if (esq === "jmg")
-    ents.push([
-      "HATCH",
-      8,
-      capaDe({}, "E-PAPEL"),
-      62,
-      7,
-      420,
-      0xffffff,
-      100,
-      "AcDbHatch",
-      10,
-      "0.0",
-      20,
-      "0.0",
-      30,
-      "0.0",
-      210,
-      "0.0",
-      220,
-      "0.0",
-      230,
-      "1.0",
-      2,
-      "SOLID",
-      70,
-      1,
-      71,
-      0,
-      91,
-      1,
-      92,
-      3,
-      72,
-      0,
-      73,
-      1,
-      93,
-      4,
-      ...[
-        [0, 0],
-        [lam[0], 0],
-        [lam[0], lam[1]],
-        [0, lam[1]]
-      ].flatMap(([a, b]) => [10, f(a), 20, f(b)]),
-      97,
-      0,
-      75,
-      0,
-      76,
-      1,
-      98,
-      0
-    ]);
   root.querySelectorAll("*").forEach(el => {
     const t = el.tagName.toLowerCase();
     if (!["line", "rect", "circle", "ellipse", "path", "polyline", "polygon", "text"].includes(t)) return;
@@ -490,7 +500,7 @@ function svgDxf(svgTxt, op = {}) {
         if (st)
           ents.push([
             "CIRCLE",
-            ...comun(capaDe(o, "E-SIMBOLOS"), color(st), tipoDe(dash), grosor(sw * k)),
+            ...comun(capaDe(o, "E-SIMBOLOS"), color(st, { claro: sobreClaro(cx, cy) }), tipoDe(dash), grosor(sw * k)),
             100,
             "AcDbCircle",
             10,
@@ -562,7 +572,7 @@ function svgDxf(svgTxt, op = {}) {
         estilo = neg ? (cur ? "JMG_ARIAL_NK" : "JMG_ARIAL_N") : cur ? "JMG_ARIAL_K" : "JMG_ARIAL";
       ents.push([
         "TEXT",
-        ...comun(capaDe(o, "E-TEXTOS"), color(fi || "#000000")),
+        ...comun(capaDe(o, "E-TEXTOS"), color(fi || "#000000", { texto: true, claro: sobreClaro(x, y) })),
         100,
         "AcDbText",
         10,
@@ -601,25 +611,14 @@ function svgDxf(svgTxt, op = {}) {
     1,
     43,
     "0.0",
-    10,
-    "0.0",
-    20,
-    "0.0",
-    10,
-    f(lam[0]),
-    20,
-    "0.0",
-    10,
-    f(lam[0]),
-    20,
-    f(lam[1]),
-    10,
-    "0.0",
-    20,
-    f(lam[1])
+    ...[
+      [0, 0],
+      [lam[0], 0],
+      [lam[0], lam[1]],
+      [0, lam[1]]
+    ].flatMap(([a, b]) => [10, f(dx + a), 20, f(dy + b)])
   ]);
   const CAPAS = {
-    "E-PAPEL": 7,
     "E-UNIFILAR": 7,
     "E-BARRAS": 30,
     "E-RESERVA": 8,
@@ -640,16 +639,90 @@ function svgDxf(svgTxt, op = {}) {
     "E-NOTAS": 7,
     Defpoints: 8
   };
+  return { ents, capas: [...usadas.keys()].map(c => [c, CAPAS[c] ?? 7]), tipos, lam };
+}
+const DXF_ESTILOS = [
+  ["JMG_ARIAL", "arial.ttf"],
+  ["JMG_ARIAL_N", "arialbd.ttf"],
+  ["JMG_ARIAL_K", "ariali.ttf"],
+  ["JMG_ARIAL_NK", "arialbi.ttf"]
+];
+// El DXF de una lámina
+function svgDxf(svgTxt, op = {}) {
+  const p = svgDxfPiezas(svgTxt, op);
+  return dxfEnBase(p.ents, {
+    capas: p.capas,
+    tipos: [...p.tipos],
+    estilos: DXF_ESTILOS,
+    ext: [0, 0, p.lam[0], p.lam[1]]
+  });
+}
+/* Varias láminas en un solo DXF, ordenadas como en una mesa de trabajo: de izquierda a derecha, con 40 mm entre ellas,
+   hasta cuatro por fila (una fila nueva para las de otro grupo, como las plantas), cada una con su título encima
+   (capa E-INDICE). hojas: [{ svg, tit, grupo }] en el orden en que van */
+function svgDxfVarias(hojas, op = {}) {
+  const ents = [],
+    capas = new Map(),
+    tipos = new Map(),
+    G = 40;
+  let x = 0,
+    y = 0,
+    altoFila = 0,
+    nFila = 0,
+    grupo = null,
+    xMax = 0,
+    yMin = 0;
+  hojas.forEach(h => {
+    // Tamaño de la lámina antes de ubicarla
+    const prueba = svgDxfPiezas(h.svg, op),
+      [w, hh] = prueba.lam;
+    if (nFila && (nFila >= 4 || h.grupo !== grupo)) {
+      x = 0;
+      y -= altoFila + G * 1.5;
+      altoFila = 0;
+      nFila = 0;
+    }
+    grupo = h.grupo;
+    const p = svgDxfPiezas(h.svg, op, x, y - hh);
+    for (const e of p.ents) ents.push(e);
+    p.capas.forEach(([c, v]) => capas.set(c, v));
+    p.tipos.forEach((v, kk) => tipos.set(kk, v));
+    if (h.tit)
+      ents.push([
+        "TEXT",
+        8,
+        "E-INDICE",
+        62,
+        op.colores === "capas" ? 256 : op.colores === "mono" ? 7 : 2,
+        100,
+        "AcDbText",
+        10,
+        x.toFixed(4),
+        20,
+        (y + 8).toFixed(4),
+        30,
+        "0.0",
+        40,
+        "10.0",
+        1,
+        String(h.tit).slice(0, 200),
+        7,
+        "JMG_ARIAL_N",
+        100,
+        "AcDbText"
+      ]);
+    xMax = Math.max(xMax, x + w);
+    yMin = Math.min(yMin, y - hh);
+    altoFila = Math.max(altoFila, hh);
+    x += w + G;
+    nFila++;
+  });
+  capas.set("E-INDICE", 2);
   return dxfEnBase(ents, {
-    capas: [...usadas.keys()].map(c => [c, CAPAS[c] ?? 7]),
+    capas: [...capas],
     tipos: [...tipos],
-    estilos: [
-      ["JMG_ARIAL", "arial.ttf"],
-      ["JMG_ARIAL_N", "arialbd.ttf"],
-      ["JMG_ARIAL_K", "ariali.ttf"],
-      ["JMG_ARIAL_NK", "arialbi.ttf"]
-    ],
-    ext: [0, 0, lam[0], lam[1]]
+    estilos: DXF_ESTILOS,
+    ext: [0, yMin, xMax, 24]
   });
 }
 /* Escribe las entidades en la base de AutoCAD 2013 (DXF_BASE_2013, js/planos/dxf-base.js): sus capas, tipos de línea y
@@ -817,11 +890,17 @@ function dxfEnBase(ents, { capas, tipos, estilos, ext }) {
     pon(vp.pos[41], ((ext[2] - ext[0]) / (ext[3] - ext[1])).toFixed(4));
   }
   L[iSeed + 1] = h.toString(16).toUpperCase();
-  Object.keys(ins)
-    .map(Number)
-    .sort((a, b) => b - a)
-    .forEach(i => L.splice(i, 0, ...ins[i].map(String)));
-  return L.join(nl);
+  return dxfUnir(L, ins, nl);
+}
+// Líneas del archivo con lo agregado antes de cada posición (sin «...»: con muchas entidades desbordaría la pila)
+function dxfUnir(L, ins, nl) {
+  const out = [];
+  for (let i = 0; i < L.length; i++) {
+    const a = ins[i];
+    if (a) for (let j = 0; j < a.length; j++) out.push(String(a[j]));
+    out.push(L[i]);
+  }
+  return out.join(nl);
 }
 function svgPng(svg, scale = 2) {
   return new Promise((ok, ko) => {

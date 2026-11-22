@@ -1570,15 +1570,11 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
   const pd = await ev("laminasExpediente().then(L => svgDxf(L[0].svg, { colores: 'jmg' }))"),
     ppr = dxf2013Problemas(pd);
   ok(
-    !ppr.length &&
-      /\nAC1027\r?\n/.test(pd) &&
-      /\narial\.ttf\r?\n/.test(pd) &&
-      /\n420\r?\n/.test(pd) &&
-      /\nE-ROTULO\r?\n/.test(pd),
-    `lámina de planta en DXF de AutoCAD 2013 con colores exactos, Arial y rótulo ${ppr.join("; ")}`
+    !ppr.length && /\nAC1027\r?\n/.test(pd) && /\narial\.ttf\r?\n/.test(pd) && /\nE-ROTULO\r?\n/.test(pd),
+    `lámina de planta en DXF de AutoCAD 2013 con letra Arial y rótulo ${ppr.join("; ")}`
   );
   ok(
-    await ev("dxfDialogo(true), (r => (dxfDialogo(false), r))(!$('dx_plantas').disabled)"),
+    await ev("dxfDialogo(true), (r => (dxfDialogo(false), r))(!!$('dxLista').querySelector('[data-dxk=\"plantas\"]'))"),
     "Planos › AutoCAD ofrece las láminas de planta del diseño"
   );
 });
