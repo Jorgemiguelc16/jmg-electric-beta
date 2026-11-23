@@ -311,6 +311,8 @@ const HLP = {
   nag: "Circuitos que comparten la misma tubería; corrige la ampacidad (Tabla 5C).",
   rhoMode: "Resistividad del cobre usada para la caída de tensión.",
   desig: "Designación comercial que aparece en tablas y en el unifilar (por ejemplo, NH-80).",
+  cableTipo:
+    "Regla 020-126 (modificada por la R.M. N.° 175-2008-MEM/DM): en los locales de pública concurrencia de la Regla 010-010(4) (comercios, restaurantes, discotecas, teatros, templos, hoteles, hospitales, colegios, oficinas…) los conductores deben ser no propagadores del incendio, de baja emisión de humos y libres de halógenos; en los demás, no propagadores de la llama. «Según el uso» lo decide con el uso del proyecto; elegirlo usted es criterio del proyectista y no cambia la capacidad de corriente.",
   sminD: "Sección mínima en circuitos derivados, aunque el cálculo permita menos.",
   sminA: "Sección mínima en alimentadores, aunque el cálculo permita menos.",
   resAl:
@@ -327,6 +329,8 @@ const HLP = {
     "Desperdicio de conductores y tubos. No se suma al metrado, que es neto (Norma Técnica de Metrados, R.D. N.° 073-2010-VIVIENDA): se informa para el análisis de precios.",
   pzD: "Diámetro del hoyo del pozo. Opcional: vacío, el detalle no lo acota. El CNE no lo fija; use el de su proyecto o el de la concesionaria.",
   pzH: "Profundidad del hoyo del pozo. Opcional: vacío, el detalle no la acota. La varilla debe tener al menos 2 m (Regla 060-702).",
+  pzCab:
+    "Profundidad de la cabeza de la varilla bajo el terreno, dentro de la caja de registro (criterio, 0.25 m por defecto). Con la longitud de la varilla da la profundidad que alcanza su punta: al menos 2.5 m (Regla 060-702(3)(d)); con roca a 1.2 m o más, la varilla llega hasta la roca, y con roca a menos de 1.2 m se entierra en horizontal a 0.6 m.",
   pzTapa: "Lado de la tapa de concreto de la caja de registro.",
   pzTapaE: "Espesor de la tapa de concreto de la caja de registro.",
   pzSal:

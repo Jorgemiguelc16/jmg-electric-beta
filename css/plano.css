@@ -2964,3 +2964,130 @@ input.del-plano,
 .ed-vivo .vw-btn {
   width: 100%;
 }
+
+/* Tema oscuro de las ventanas del editor: los fondos que en el tema claro son blancos o grises claros pasan a los
+   colores de las ventanas (variables --dl-* de css/ventanas.css). La vista previa de la lámina y la del símbolo
+   siguen en blanco, como el papel. */
+:root[data-theme="dark"] .la-op,
+:root[data-theme="dark"] .bi-grupos {
+  background: var(--dl-th);
+}
+:root[data-theme="dark"] .la-op select,
+:root[data-theme="dark"] .la-op input[type="text"],
+:root[data-theme="dark"] .la-op textarea,
+:root[data-theme="dark"] .la-capas div,
+:root[data-theme="dark"] .rev-lista,
+:root[data-theme="dark"] .ca-tabla,
+:root[data-theme="dark"] .bi-rejilla,
+:root[data-theme="dark"] .bi-s,
+:root[data-theme="dark"] .bi-s:hover .bi-ed,
+:root[data-theme="dark"] .ta-lista,
+:root[data-theme="dark"] .lu-bi,
+:root[data-theme="dark"] .ds-amb,
+:root[data-theme="dark"] .si-cuerpo,
+:root[data-theme="dark"] .ca-t input[type="text"]:focus,
+:root[data-theme="dark"] .lx-cab {
+  background: var(--dl-cell);
+  color: var(--dl-ink);
+}
+:root[data-theme="dark"] .la-op select,
+:root[data-theme="dark"] .la-op input[type="text"],
+:root[data-theme="dark"] .la-op textarea {
+  border-color: var(--dl-grid2);
+}
+:root[data-theme="dark"] .atj-t th,
+:root[data-theme="dark"] .met-cuerpo th,
+:root[data-theme="dark"] .ca-t th,
+:root[data-theme="dark"] .dc-t thead th,
+:root[data-theme="dark"] .dc-k,
+:root[data-theme="dark"] .ta-esq {
+  background: var(--dl-th);
+  color: var(--dl-ink);
+}
+:root[data-theme="dark"] .ca-g td,
+:root[data-theme="dark"] .am-tabs b {
+  background: var(--dl-grp);
+}
+:root[data-theme="dark"] .ca-t tr.sel td,
+:root[data-theme="dark"] .bi-grupos button.on,
+:root[data-theme="dark"] .bi-grupos button:hover,
+:root[data-theme="dark"] .bi-s:focus-visible {
+  background: var(--dl-hover);
+}
+:root[data-theme="dark"] .la-prev {
+  background: var(--dl-bg);
+}
+/* Avisos: el mismo tono, oscurecido */
+:root[data-theme="dark"] .la-aviso,
+:root[data-theme="dark"] .ds-aviso {
+  background: #33261a;
+  color: var(--dl-ink);
+}
+:root[data-theme="dark"] .ds-aviso.ok {
+  background: #18301f;
+}
+:root[data-theme="dark"] .ds-aviso.seg {
+  background: #3a1f1f;
+}
+:root[data-theme="dark"] .ds-aviso button {
+  background: var(--dl-btn);
+  color: var(--dl-ink);
+}
+/* Textos con color fijo: azul marino y negro pasan a la tinta clara; grises, al gris claro; verdes, rojos y
+   ocres, a tonos más claros que se leen sobre el fondo oscuro */
+:root[data-theme="dark"] .met-cuerpo h4,
+:root[data-theme="dark"] .si-cod,
+:root[data-theme="dark"] .atj-t td.atj-k,
+:root[data-theme="dark"] .bi-s,
+:root[data-theme="dark"] .bi-s b,
+:root[data-theme="dark"] .rev-it,
+:root[data-theme="dark"] .rev-dato b {
+  color: var(--dl-ink);
+}
+:root[data-theme="dark"] .si-nota,
+:root[data-theme="dark"] .bi-ed,
+:root[data-theme="dark"] .atj-t th,
+:root[data-theme="dark"] .met-cuerpo th,
+:root[data-theme="dark"] .pla-h,
+:root[data-theme="dark"] .rev-it small,
+:root[data-theme="dark"] .bi-s small,
+:root[data-theme="dark"] .rb-paso small,
+:root[data-theme="dark"] .rev-c.cero,
+:root[data-theme="dark"] .rev-dato {
+  color: var(--dl-ink2);
+}
+:root[data-theme="dark"] .rev-ok,
+:root[data-theme="dark"] .ca-act b,
+:root[data-theme="dark"] .ed-refs label i,
+:root[data-theme="dark"] .ds-aviso.ok,
+:root[data-theme="dark"] .pl-chip,
+:root[data-theme="dark"] .dc-t .ok,
+:root[data-theme="dark"] .dc-o.ok,
+:root[data-theme="dark"] .lx-est,
+:root[data-theme="dark"] .lx-uso,
+:root[data-theme="dark"] .rb-paso.ok small,
+:root[data-theme="dark"] .rev-dato .ok,
+:root[data-theme="dark"] #edVivoE .ok {
+  color: #7fd19a;
+}
+:root[data-theme="dark"] .ds-falta,
+:root[data-theme="dark"] .dc-cuerpo h4 small.bad,
+:root[data-theme="dark"] .dc-t .bad,
+:root[data-theme="dark"] .ds-aviso.seg,
+:root[data-theme="dark"] .lux-bajo,
+:root[data-theme="dark"] .rev-dato.pend,
+:root[data-theme="dark"] #edVivoE .bad {
+  color: #f08a80;
+}
+:root[data-theme="dark"] .la-aviso,
+:root[data-theme="dark"] .ds-aviso,
+:root[data-theme="dark"] .dc-k.bad b,
+:root[data-theme="dark"] .lux-crit,
+:root[data-theme="dark"] .rb-paso.av small,
+:root[data-theme="dark"] .ed-vivo .pend,
+:root[data-theme="dark"] .rev-dato .w {
+  color: #f0b96a;
+}
+:root[data-theme="dark"] .rev-it.info i {
+  color: var(--dl-acc);
+}

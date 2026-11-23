@@ -898,3 +898,26 @@ select.adm-in {
 .adm-pie-panel {
   margin: 10px 2px 0;
 }
+
+/* Tema oscuro: la hoja de cuentas y sus resaltados en los colores de las ventanas (en el tema claro son blancos y
+   amarillos claros, y con la tinta clara del tema oscuro el texto no se leía) */
+:root[data-theme="dark"] .adm-hoja-w {
+  background: var(--dl-cell);
+}
+:root[data-theme="dark"] .adm-hoja tbody tr:nth-child(even) td:last-child {
+  background: var(--dl-alt);
+}
+:root[data-theme="dark"] .adm-hoja tr.adm-pend td {
+  background: #33261a !important;
+}
+:root[data-theme="dark"] .adm-hoja td small.w {
+  color: #f0b96a;
+}
+:root[data-theme="dark"] .adm-pin-ico,
+:root[data-theme="dark"] .ap-mas,
+:root[data-theme="dark"] .ap-ev.toca {
+  background: #33261a;
+}
+:root[data-theme="dark"] .ap-mas:hover {
+  background: #3d2e1c;
+}

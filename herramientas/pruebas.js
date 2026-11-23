@@ -120,6 +120,94 @@ mal += require("./pruebas-calc-plano.js")(ctx);
     console.log("✘ Balance por tablero\n" + fallas.map(x => "    " + x).join("\n"));
   } else console.log(`✔ Balance por tablero: ${n} tableros en el menor desbalance posible; fase fijada respetada`);
 }
+/* Regla 150-400: cada tablero tiene su interruptor general (150-400(4)) con la corriente del interruptor de su
+   alimentador; cada diferencial no es menor que la suma de las corrientes de diseño de su grupo ni que su mayor ITM
+   (Nota) y, si un solo diferencial encabeza el tablero, no menor que el interruptor general (150-400(7)) */
+{
+  const fallas = [],
+    calc = p => vm.runInContext("calcular", ctx)(vm.runInContext("proyectoDe", ctx)(JSON.parse(JSON.stringify(p))));
+  let nT = 0,
+    nG = 0;
+  casos.forEach(cp => {
+    const r = calc(cp.p);
+    r.tabs.forEach(tb => {
+      nT++;
+      const f = r.alims[tb.feeder];
+      if (!tb.gen || tb.gen.itm !== f.itm)
+        fallas.push(`${cp.id} ${tb.tab}: sin interruptor general o distinto del alimentador`);
+      const cs = r.circ.filter(q => q.tab === tb.tab);
+      if (r.c.idMode === "circuito") return;
+      const grupos = [...new Set(cs.map(q => q.idName))];
+      grupos.forEach(g => {
+        nG++;
+        const qs = cs.filter(q => q.idName === g),
+          rat = qs[0].idRat,
+          need = Math.max(
+            ...qs.map(q => q.itm || 0),
+            qs.reduce((s, q) => s + q.Id, 0)
+          );
+        if (rat + 1e-9 < Math.min(need, 100)) fallas.push(`${cp.id} ${tb.tab} ${g}: ${rat} A < ${need.toFixed(1)} A`);
+        if (grupos.length === 1 && tb.gen && rat < Math.min(tb.gen.itm, 100))
+          fallas.push(`${cp.id} ${tb.tab} ${g}: ${rat} A menor que el general ${tb.gen.itm} A`);
+      });
+    });
+  });
+  if (fallas.length) {
+    mal++;
+    console.log("✘ Regla 150-400\n" + fallas.map(x => "    " + x).join("\n"));
+  } else
+    console.log(
+      `✔ Regla 150-400: interruptor general en ${nT} tableros y ${nG} diferenciales con su corriente nominal`
+    );
+}
+/* Regla 060-702(3)(d): la punta de la varilla llega al menos a 2.5 m de profundidad (cabeza + longitud) */
+{
+  const calc = p => vm.runInContext("calcular", ctx)(vm.runInContext("proyectoDe", ctx)(JSON.parse(JSON.stringify(p)))),
+    base = casos.find(c => c.id === "C1").p,
+    al = r =>
+      vm
+        .runInContext(
+          "alertas",
+          ctx
+        )(r)
+        .find(x => x[1] === "060-702(3)(d)"),
+    r0 = calc(base),
+    r1 = calc({ ...base, Lv: "2", pzCab: "0.25" }),
+    r2 = calc({ ...base, Lv: "2", pzCab: "0.6" }),
+    f = [];
+  if (!(Math.abs(r0.pat.prof - 2.65) < 1e-9 && r0.pat.okP && al(r0)[0] === true))
+    f.push("por defecto: 0.25 + 2.40 = 2.65 m");
+  if (!(r1.pat.okP === false && al(r1)[0] === false)) f.push("varilla de 2 m con la cabeza a 0.25 m: no llega a 2.5 m");
+  if (!(r2.pat.okP && Math.abs(r2.pat.prof - 2.6) < 1e-9))
+    f.push("varilla de 2 m con la cabeza a 0.60 m: llega a 2.60 m");
+  if (f.length) {
+    mal++;
+    console.log("✘ Regla 060-702(3)(d)\n" + f.map(x => "    " + x).join("\n"));
+  } else console.log("✔ Regla 060-702(3)(d): profundidad de la varilla (por defecto 2.65 m; 2.25 m no cumple)");
+}
+/* Metrado (Norma Técnica de Metrados, OE.5): el tablero general del edificio en OE.5.2.6 y una luminaria por salida
+   de alumbrado en OE.5.5.1 */
+{
+  const calc = p => vm.runInContext("calcular", ctx)(vm.runInContext("proyectoDe", ctx)(JSON.parse(JSON.stringify(p)))),
+    met = r => vm.runInContext("metrado", ctx)(r),
+    f = [];
+  const m7 = met(calc(casos.find(c => c.id === "C7").p)),
+    m1 = met(calc(casos.find(c => c.id === "C1").p)),
+    sal = m => (m.find(x => /^Salida para alumbrado/.test(x.desc || "")) || {}).cant,
+    lum = m => m.find(x => /^Luminaria con lámpara LED/.test(x.desc || "")) || {};
+  if (!m7.some(x => /^OE\.5\.2\.6\.\d/.test(x.cod) && /^Tablero general TG/.test(x.desc || "")))
+    f.push("edificio sin tablero general en OE.5.2.6");
+  if (m1.some(x => /^Tablero general TG, metálico/.test(x.desc || "")))
+    f.push("vivienda con tablero general del edificio");
+  [m1, m7].forEach((m, i) => {
+    if (!(lum(m).cant === sal(m) && /^OE\.5\.5\.1\./.test(lum(m).cod)))
+      f.push(`${i ? "C7" : "C1"}: luminarias ${lum(m).cant} distintas de las salidas de alumbrado ${sal(m)}`);
+  });
+  if (f.length) {
+    mal++;
+    console.log("✘ Metrado OE.5: " + f.join("; "));
+  } else console.log("✔ Metrado OE.5: tablero general del edificio (OE.5.2.6) y una luminaria por salida (OE.5.5.1)");
+}
 /* Edificio: esquema del banco de medidores y del TSG (criterio del proyectista). Por defecto (banco junto al TG y TSG
    con medidor en el banco) el cálculo no cambia: lo verifica la referencia. Banco lejos: alimentador TG → banco con la
    demanda de los departamentos y de los servicios, que los departamentos y el TSG acumulan; TSG desde el TG: sale del

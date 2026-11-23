@@ -134,8 +134,9 @@ function detalles(r) {
   titulo(px, y0, pw, "DETALLE DEL POZO DE PUESTA A TIERRA · ESCALA S/E");
   // Escala vertical: el hoyo (su profundidad, si se indicó) y la varilla deben caber en el dibujo
   const Htot = pz.h || p.Lv + 0.6,
-    k = Math.min((hp + 42) / Htot, (hp + 34) / (p.Lv + 0.25)),
-    yR0 = yG + 0.25 * k,
+    cab = p.cab ?? 0.25,
+    k = Math.min((hp + 42) / Htot, (hp + 34) / (p.Lv + cab)),
+    yR0 = yG + cab * k,
     yR1 = yR0 + p.Lv * k;
   // Terreno, caja de registro con su tapa y hoyo
   L(px + 14, yG, px + pw - 14, yG, 1.4);
@@ -178,6 +179,8 @@ function detalles(r) {
   };
   cotaV(cx - 70, yR0, yR1, `Varilla ${fmt(p.Lv, 2)} m`);
   if (pz.h) cotaV(cx - 92, yG, yG + pz.h * k, `Hoyo ${fmt(pz.h, 2)} m`);
+  // Profundidad que alcanza la punta de la varilla (Regla 060-702(3)(d): al menos 2.5 m)
+  cotaV(pz.h ? cx - 114 : cx - 92, yG, yR1, `Profundidad ${fmt(p.prof ?? cab + p.Lv, 2)} m`);
   if (pz.d) {
     L(cx - 55, yB + 14, cx + 55, yB + 14, 0.7, GR);
     L(cx - 58, yB + 17, cx - 52, yB + 11, 0.9, GR);
@@ -224,13 +227,14 @@ function detalles(r) {
   balon(6, bx, yB - 20, cx + 40, yB - 30);
   // Datos del cálculo
   const dx = px + pw - 150;
-  R(dx, yG + 34, 140, 84, { st: LN, fi: "#f3f6f9", sw: 0.8 });
+  R(dx, yG + 34, 140, 95, { st: LN, fi: "#f3f6f9", sw: 0.8 });
   T(dx + 8, yG + 48, "DATOS DEL CÁLCULO", { s: 6.8, b: 1, f: NAVY });
   [
     `Resistividad: ${fmt(p.rho, 0)} Ω·m`,
     `Factor de tratamiento: ${fmt(p.fr, 2)}`,
     `R con una varilla: ${fmt(p.Rt, 2)} Ω`,
     nV > 1 ? `${nV} pozos: R ≈ ${fmt(p.Rn, 2)} Ω` : `Pozos: 1 (≤ 25 Ω)`,
+    `Punta a ${fmt(p.prof ?? cab + p.Lv, 2)} m (mín. 2.5 m)`,
     "Reglas 060-702 y 060-712"
   ].forEach((t, i) => T(dx + 8, yG + 62 + i * 11, t, { s: 7.2 }));
   // Cuadro de materiales (cantidades totales para todos los pozos)
@@ -260,7 +264,7 @@ function detalles(r) {
   o.push(`</g>`);
   const notas = [
     "Símbolos de la Norma DGE «Símbolos gráficos en electricidad» (R.M. N.° 091-2002-EM/VME), redibujados conservando sus proporciones. Solo se listan los que usan los planos del proyecto.",
-    `Varilla de cobre de ${fmt(p.Lv, 2)} m × ${PULGD} (mínimo 2 m y 13 mm, Regla 060-702) y conductor de ${r.Selec} mm² según la Tabla 17; resistencia no mayor de 25 Ω (Regla 060-712).`,
+    `Varilla de cobre de ${fmt(p.Lv, 2)} m × ${PULGD} (mínimo 2 m y 13 mm, Regla 060-702), con la cabeza a ${fmt(cab, 2)} m bajo el terreno y la punta a ${fmt(p.prof ?? cab + p.Lv, 2)} m de profundidad (al menos 2.5 m, Regla 060-702(3)(d)), y conductor de ${r.Selec} mm² según la Tabla 17; resistencia no mayor de 25 Ω (Regla 060-712).`,
     "Medidas del hoyo y de la caja, y cantidades de materiales: criterio de diseño (Parámetros › Tierra y metrado). Verifíquelas con el estudio de resistividad del terreno.",
     trat
       ? "Relleno de tierra cernida compactada por capas, con las capas de sal y carbón del tratamiento; puede emplearse bentonita o gel con el factor de tratamiento correspondiente."

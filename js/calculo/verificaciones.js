@@ -2,6 +2,47 @@
    alertas(): incumplimientos y comprobaciones normativas con su regla; recomendaciones(): decisiones que cumplen la
    norma pero conviene revisar (conductores mayores de lo necesario o con poco margen). Solo leen el resultado del
    cálculo; no lo cambian. */
+/* Tipo de cable según el uso (Regla 020-126, modificada por la R.M. N.° 175-2008-MEM/DM): en los locales de pública
+   concurrencia de la Regla 010-010(4) (comercios, restaurantes, bares, discotecas, teatros, templos, hoteles,
+   hospitales, colegios, oficinas y similares) los conductores deben ser no propagadores del incendio, de baja emisión
+   de humos y libres de halógenos y ácidos corrosivos (020-126(3)); en los demás, no propagadores de la llama
+   (020-126(2)). Usos de la Tabla 14 que el código trata como pública concurrencia; garajes y almacenaje quedan fuera
+   (el proyectista puede elegir el tipo en Parámetros). */
+const USOS_PUBLICOS = new Set([
+  "oficina",
+  "comercial",
+  "bodegas",
+  "bancos",
+  "barberias",
+  "clubes",
+  "hospedajes",
+  "teatros",
+  "auditorios",
+  "iglesias",
+  "cortes",
+  "escuela",
+  "hospital",
+  "hotel"
+]);
+// Designaciones comerciales conocidas: libres de halógenos (NH, LSOH, N2XOH…) y con PVC (TW, THW, NYY…)
+const CABLE_LSOH = /^(nh|lsoh|ls0h|n2xoh|nhx|afumex|libre)/i,
+  CABLE_HALOG = /^(tw|thw|thhn|nyy|nlt|cpt|ttrf|gpt|vinanel)/i;
+function cableNorma(r) {
+  const c = r.c,
+    usos = r.mode === "uni" ? (r.viv ? [] : [c.uso]) : (r.T || []).filter(t => t.com).map(t => t.uso),
+    pub = [...new Set(usos.filter(u => USOS_PUBLICOS.has(u)))],
+    lsohNorma = pub.length > 0,
+    tipo = c.cableTipo === "lsoh" || c.cableTipo === "llama" ? c.cableTipo : lsohNorma ? "lsoh" : "llama",
+    d = c.desig || "";
+  return {
+    tipo,
+    lsohNorma,
+    auto: c.cableTipo === "auto",
+    usos: pub.map(u => USOS[u].n),
+    desigLsoh: CABLE_LSOH.test(d),
+    desigHalog: CABLE_HALOG.test(d)
+  };
+}
 function alertas(r) {
   const A = [],
     PD = r.pend;
@@ -51,6 +92,19 @@ function alertas(r) {
       "060-702",
       `La varilla debe tener al menos 2 m de longitud y 13 mm de diámetro (cobre) o 16 mm (acero-cobre).`
     ]);
+  A.push(
+    r.pat.okP
+      ? [
+          true,
+          "060-702(3)(d)",
+          `La varilla alcanza ${fmt(r.pat.prof, 2)} m de profundidad (cabeza a ${fmt(r.pat.cab, 2)} m y ${fmt(r.pat.Lv, 2)} m de varilla), no menos de 2.5 m.`
+        ]
+      : [
+          false,
+          "060-702(3)(d)",
+          `La varilla alcanza solo ${fmt(r.pat.prof, 2)} m de profundidad: debe llegar a 2.5 m como mínimo (con roca a 1.2 m o más, hasta la roca; con roca a menos de 1.2 m, enterrada en horizontal a 0.6 m). Aumente la longitud de la varilla o la profundidad de su cabeza.`
+        ]
+  );
   if (r.bal && !(PD && (PD.md || PD.circ.size))) {
     const b = r.bal;
     A.push([
@@ -76,6 +130,38 @@ function alertas(r) {
         ? "Incluye iluminación de emergencia en rutas de evacuación."
         : "Los edificios multifamiliares deben contar con iluminación de emergencia en rutas de evacuación: agréguela en servicios generales."
     ]);
+  {
+    const k = cableNorma(r),
+      d = r.c.desig ? ` (${r.c.desig})` : "";
+    if (k.lsohNorma)
+      A.push(
+        k.tipo !== "lsoh"
+          ? [
+              false,
+              "020-126(3)",
+              `Local de pública concurrencia (${k.usos.join(", ")}, Regla 010-010(4)): los conductores deben ser no propagadores del incendio, de baja emisión de humos y libres de halógenos; elija ese tipo de cable en Parámetros.`
+            ]
+          : k.desigHalog
+            ? [
+                false,
+                "020-126(3)",
+                `La designación ${r.c.desig} no es libre de halógenos: en un local de pública concurrencia (Regla 010-010(4)) use un cable no propagador del incendio, de baja emisión de humos y libre de halógenos (por ejemplo, NH-80).`
+              ]
+            : [
+                true,
+                "020-126(3)",
+                `Local de pública concurrencia (${k.usos.join(", ")}): conductores no propagadores del incendio, de baja emisión de humos y libres de halógenos${d}, protegidos contra daños mecánicos.`
+              ]
+      );
+    else
+      A.push([
+        true,
+        "020-126",
+        k.tipo === "lsoh"
+          ? `Conductores no propagadores del incendio, de baja emisión de humos y libres de halógenos${d} (criterio del proyectista; la norma pide no propagadores de la llama).`
+          : `Conductores no propagadores de la llama${d} (Regla 020-126(2)).`
+      ]);
+  }
   A.push([true, "050-108(2)", `Se prevén ${r.c.reserva} espacio(s) de reserva por tablero para ampliaciones.`]);
   return A;
 }
@@ -145,7 +231,7 @@ function recomendaciones(r) {
       ir: irItem(dv[0])
     });
   // Secciones elegidas en el cuadro de conductores, mayores que la mínima que cumple
-  const ma = items.filter(x => x.Sauto);
+  const ma = items.filter(x => x.Sauto && x.S > x.Sauto);
   if (ma.length)
     R.push({
       id: "secf|" + ma.map(x => `${nom(x)}:${x.S}`).join(","),

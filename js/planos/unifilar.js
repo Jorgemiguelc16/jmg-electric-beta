@@ -92,7 +92,9 @@ function unifilar(r, op = {}) {
       eqs = equiposDe(r, tb.tab),
       // Equipos que no van entre la barra y tierra (el DPS sí): franja propia sobre la barra
       eqx = eqs.filter(([k]) => k !== "dps"),
-      yb = Y + 46 + (eqx.length ? 54 : 0);
+      // Interruptor general del tablero (Regla 150-400(4)) en la llegada, antes de la barra
+      gH = tb.gen ? 40 : 0,
+      yb = Y + 46 + gH + (eqx.length ? 54 : 0);
     const fd = r.mode === "uni" && tb.tab === "TG" ? r.alims.slice(1) : [];
     const ncol = cs.length + fd.length + nres,
       xe = col0 + (ncol - 1) * CW + 26;
@@ -109,17 +111,30 @@ function unifilar(r, op = {}) {
 
     if (entrada) {
       o.push(`<circle cx="${X + 40}" cy="${Y + 6}" r="3" fill="#fff" stroke="${INK}" stroke-width="1.2"/>`);
-      L(X + 40, Y + 9, X + 40, yb);
+      if (gH) {
+        L(X + 40, Y + 9, X + 40, Y + 52);
+        itm(X + 40, Y + 52);
+        L(X + 40, Y + 76, X + 40, yb);
+        T(X + 52, Y + 68, `ITM general ${tb.gen.pol}×${tb.gen.itm} A`, { s: 8, b: 1 });
+      } else L(X + 40, Y + 9, X + 40, yb);
       T(
         X + 48,
         Y + 40,
         `Llega: ${cond(f.s.n, f.S, f.St)} Cu · ${tub(f.tubo)} · ITM ${f.s.tri ? 3 : 2}×${f.itm} A en ${r.mode === "uni" && tb.feeder > 0 ? "tablero TG" : tb.tab === "TSG" && r.topo && r.topo.tsgTG ? "tablero TG" : tb.tab === "TSG" || r.mode === "multi" ? "banco de medidores" : "medidor"}`,
         { s: 7.5, f: GR }
       );
+    } else {
+      // Sin llegada propia (TG de la vivienda): la línea viene de arriba hasta Y + 46
+      if (gH) {
+        L(X + 40, Y + 46, X + 40, Y + 52);
+        itm(X + 40, Y + 52);
+        T(X + 52, Y + 68, `ITM general ${tb.gen.pol}×${tb.gen.itm} A`, { s: 8, b: 1 });
+      }
+      L(X + 40, Y + 46 + (gH ? 30 : 0), X + 40, yb);
     }
     // Equipos del tablero con su símbolo de la Norma DGE
     if (eqx.length) {
-      const ye = Y + 50,
+      const ye = Y + 50 + gH,
         ex = X + 76,
         wE = 158;
       o.push(
@@ -297,6 +312,7 @@ function unifilar(r, op = {}) {
       fd = r.mode === "uni" && tb.tab === "TG" ? r.alims.slice(1) : [];
     return (
       60 +
+      (tb.gen ? 38 : 0) +
       (eqs.some(([k]) => k !== "dps") ? 54 : 0) +
       (eqs.some(([k]) => k === "dps") ? 52 : 0) +
       (fd.length + cs.length + c.reserva) * RHV +
@@ -353,6 +369,16 @@ function unifilar(r, op = {}) {
         T(tx, sy + 9, cd, { s: 6.6, f: GR });
       });
       y += 54;
+    }
+    // Interruptor general del tablero (Regla 150-400(4)): en la llegada, sobre la barra
+    const yG = y;
+    if (tb.gen) {
+      if (entrada) o.push(`<circle cx="${xb}" cy="${y + 2}" r="3" fill="#fff" stroke="${INK}" stroke-width="1.2"/>`);
+      L(xb, entrada ? y + 5 : y, xb, y + 8);
+      itm(xb, y + 8);
+      L(xb, y + 32, xb, y + 38);
+      T(xb + 14, y + 24, `ITM general ${tb.gen.pol}×${tb.gen.itm} A`, { s: 8, b: 1 });
+      y += 38;
     }
     const yb0 = y;
     y += 16;
@@ -445,7 +471,7 @@ function unifilar(r, op = {}) {
     }
     // Barra vertical del tablero y su puesta a tierra
     L(xb, yb0, xb, y, 4, CU);
-    if (!entrada) L(xb, Y0 - 6, xb, yb0);
+    if (!entrada) L(xb, Y0 - 6, xb, tb.gen ? yG : yb0);
     L(xb, y, xb, y + 26, 1.2, "#2f7a4b", "5 3");
     tierra(xb, y + 26);
     T(xb + 16, y + 30, pat ? `PAT · 1×${r.Selec} mm² Cu · R ≤ 25 Ω` : `Barra de tierra · 1×${f.St} mm² Cu`, {

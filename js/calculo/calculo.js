@@ -55,7 +55,15 @@ function ctx(p = estado()) {
       proy: g("p_proy"),
       cip: g("p_cip").replace(/[<>]/g, "").trim()
     },
-    pat: { rho: n("rho_s") || 100, fr: n("fr") || 1, Lv: n("Lv") || 2.4, dv: parseFloat(g("dv")) },
+    /* Puesta a tierra; cab: profundidad de la cabeza de la varilla bajo el terreno (m), bajo la caja de registro
+       (criterio, 0.25 m por defecto): con la longitud de la varilla da la profundidad que alcanza (Regla 060-702(3)(d)) */
+    pat: {
+      rho: n("rho_s") || 100,
+      fr: n("fr") || 1,
+      Lv: n("Lv") || 2.4,
+      dv: parseFloat(g("dv")),
+      cab: g("pzCab") === "" ? 0.25 : Math.max(0, n("pzCab"))
+    },
     rho: g("rhoMode") === "20" ? RHO_CU : aisl === "pvc" ? 0.0209 : 0.0223,
     rhoRef:
       g("rhoMode") === "20"
@@ -64,6 +72,8 @@ function ctx(p = estado()) {
           ? "Cobre a 70 °C · ρ20 (1 + 0,00393·50)"
           : "Cobre a 90 °C · ρ20 (1 + 0,00393·70)",
     desig: g("desig").replace(/[<>]/g, "").trim(),
+    // Tipo de cable (Regla 020-126): «auto» según el uso del edificio, o el que fija el proyectista (criterio)
+    cableTipo: ["lsoh", "llama"].includes(g("cableTipo")) ? g("cableTipo") : "auto",
     pDesp: Math.max(0, n("pDesp")),
     // Detalle del pozo de tierra (js/planos/detalles.js) y metrado: medidas en m, materiales por pozo
     pozo: {

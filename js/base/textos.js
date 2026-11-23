@@ -15,7 +15,8 @@ const ALCANCE = [
   "Otros usos · Regla 050-210 y Tabla 14; escuelas, hospitales y hoteles (050-204 a 050-208)",
   "Circuitos derivados · máx. 12 salidas (070-3000)",
   "Conductores según Tabla 2 y factores 5A / 5C",
-  "Interruptores termomagnéticos y diferenciales (150-400)",
+  "Interruptor general por tablero y diferenciales (150-400)",
+  "Tipo de cable según el uso (020-126, RM 175-2008-MEM/DM)",
   "Caída de tensión en alimentadores y derivados (050-102)",
   "Cortocircuito y poder de corte requerido",
   "Balance de cargas por fase",
@@ -27,6 +28,12 @@ const NORMAS = [
     "Código Nacional de Electricidad – Utilización",
     "Norma obligatoria para las instalaciones eléctricas en edificaciones desde la acometida hasta los puntos de utilización.",
     "Base de los cálculos de cargas, conductores, protección, caída de tensión y puesta a tierra."
+  ],
+  [
+    "RM 175-2008-MEM/DM",
+    "Modificación del CNE-Utilización",
+    "Reglas 020-126 y 020-132: conductores no propagadores de la llama y, en locales de pública concurrencia (Regla 010-010(4)), no propagadores del incendio, de baja emisión de humos y libres de halógenos; interruptor diferencial en toda instalación.",
+    "Tipo de cable según el uso y protección diferencial."
   ],
   [
     "CNE-U · 050-110 · 050-200",
@@ -67,20 +74,38 @@ const NORMAS = [
   [
     "CNE-U · 150-400 · 070-3000",
     "Tableros en vivienda y salidas por circuito",
-    "Interruptor general, diferencial de 30 mA (por grupos de tres circuitos o por circuito) y máximo 12 salidas por circuito.",
+    "Interruptor general en el tablero de cada vivienda, diferencial de 30 mA (por grupos de tres circuitos o por circuito) con su corriente nominal según la Nota de la regla, y máximo 12 salidas por circuito.",
     "Esquema de protección y distribución de circuitos."
   ],
   [
     "CNE-U · 060-702 · 060-712 · Tablas 16 y 17",
     "Puesta a tierra",
-    "Varilla de longitud mínima 2 m; resistencia no mayor de 25 Ω; conductores de protección y de puesta a tierra.",
+    "Varilla de longitud mínima 2 m que alcanza al menos 2.5 m de profundidad; resistencia no mayor de 25 Ω; conductores de protección y de puesta a tierra.",
     "Resistencia del electrodo y secciones de tierra."
+  ],
+  [
+    "CNE-U · 160-106 · 160-200 · Tabla 29",
+    "Motores",
+    "Conductores del circuito de un motor no menores al 125 % de su corriente a plena carga y protección según la Tabla 29.",
+    "Circuitos de motores (bombas, extractores y similares)."
   ],
   [
     "RNE · Norma EM.010 (2019)",
     "Instalaciones eléctricas interiores",
-    "Evaluación de la demanda, documentación del proyecto, circuitos de reserva e iluminación de emergencia en edificios multifamiliares.",
-    "Contenido del expediente y verificaciones del modo multifamiliar."
+    "R.M. N.° 083-2019-VIVIENDA. Niveles de iluminación (Anexo), evaluación de la demanda, documentación del proyecto, escalas de los planos (1:50 o 1:75), circuitos de reserva e iluminación de emergencia.",
+    "Contenido del expediente, niveles de iluminación, escalas de las láminas y verificaciones."
+  ],
+  [
+    "RNE · Norma A.130 (D.S. N.° 017-2012-VIVIENDA)",
+    "Requisitos de seguridad",
+    "Iluminación de emergencia en los medios de evacuación (1½ h y 10 lx en el suelo) y señalización de seguridad.",
+    "Luminarias de emergencia en el metrado y avisos de seguridad."
+  ],
+  [
+    "RNE · Norma A.120 (R.M. N.° 072-2019-VIVIENDA)",
+    "Accesibilidad universal en edificaciones",
+    "Alcance de objetos entre 0.40 y 1.20 m e interruptores y timbres a no más de 1.35 m.",
+    "Alturas de montaje de interruptores, tomacorrientes y timbres."
   ],
   [
     "R.M. N.° 091-2002-EM/VME",
@@ -95,10 +120,28 @@ const NORMAS = [
     "Tipo de conexión, tensiones normalizadas y poder de corte."
   ],
   [
+    "R.D. N.° 073-2010-VIVIENDA/VMCS-DNC",
+    "Norma Técnica «Metrados para obras de edificación y habilitaciones urbanas»",
+    "Partidas OE.5 de instalaciones eléctricas: conexión, salidas, tuberías, conductores, tableros, dispositivos, puesta a tierra y artefactos.",
+    "Orden, unidades y forma de medición del metrado y del presupuesto."
+  ],
+  [
+    "NTP 399.010-1 (2016)",
+    "Señales de seguridad: colores, símbolos y diseño",
+    "Señal de advertencia de fondo amarillo, banda y símbolo negros; tamaño según la distancia de observación (A ≥ L²/2000; 125 cm² como mínimo a menos de 5 m).",
+    "Señal «Riesgo eléctrico» en la puerta de los tableros."
+  ],
+  [
     "IEC 60898-1 · IEC 61008-1",
     "Interruptores para uso doméstico",
     "Interruptores termomagnéticos y diferenciales para instalaciones domésticas y análogas.",
     "Corrientes nominales y poderes de corte normalizados."
+  ],
+  [
+    "IEC 60364-5-53 · IEC 62423",
+    "Selección de interruptores diferenciales",
+    "Diferenciales tipo A para cargas con electrónica (inverter, variador, inducción, cargador), cuyas fugas pueden tener componente continua.",
+    "Tipo de diferencial (A o AC) de cada grupo de circuitos."
   ]
 ];
 const CRITERIOS = [
@@ -115,7 +158,7 @@ const CRITERIOS = [
   "En los circuitos de motores se verifica que la corriente de arranque directo (6 veces la nominal por defecto) no alcance el disparo magnético mínimo de la curva del interruptor (IEC 60898-1); la caída de tensión en el arranque se informa como referencia.",
   "Las alturas de montaje se miden desde el piso terminado hasta el eje de la caja (el tablero, hasta su borde superior). Interruptores y timbres hasta 1.35 m (A.120, Art. 11 d) y alcance frontal de 0.40 a 1.20 m (A.120, Art. 10); las demás alturas son criterio del proyectista.",
   "El metrado sigue las partidas de la Norma Técnica de Metrados (R.D. N.° 073-2010-VIVIENDA, título OE.5) con cantidades netas; la tubería de cada circuito suma la distancia a la salida más alejada y los tramos verticales según las alturas de montaje.",
-  "Los diferenciales protegen grupos de hasta tres circuitos (Regla 150-400(8)). Con suministro trifásico, los grupos se forman después del balance de fases y con circuitos de una misma fase, para que cada diferencial bipolar quede en una sola fase; los circuitos trifásicos se agrupan aparte.",
+  "Los diferenciales protegen grupos de hasta tres circuitos (Regla 150-400(8)). Con suministro trifásico, los grupos se forman después del balance de fases y con circuitos de una misma fase, para que cada diferencial bipolar quede en una sola fase; los circuitos trifásicos se agrupan aparte. Cada tablero tiene su interruptor general termomagnético en la cabecera (Regla 150-400(4)); la corriente nominal de cada diferencial no es menor que la suma de las corrientes de diseño de su grupo ni que el mayor interruptor del grupo (Regla 150-400, Nota) y, si un solo diferencial encabeza el tablero, no menor que el interruptor general (Regla 150-400(7)).",
   "Los planos usan los símbolos de la Norma DGE «Símbolos gráficos en electricidad» (R.M. N.° 091-2002-EM/VME) y la señal de riesgo eléctrico 141-02-02 de la Norma DGE de señalización. Son criterio de diseño las medidas y los materiales del pozo de tierra, el orden de los colores de las fases en los tableros peinados (R rojo, S negro, T azul; neutro blanco y protección verde-amarillo) y la altura mínima del texto impreso, 1.8 mm (ISO 3098), con la que el unifilar se divide en varias láminas.",
   "El balance de fases busca el reparto de cargas monofásicas con el menor desbalance posible; el proyectista puede fijar la fase de cualquier carga. Se recomienda un desbalance no mayor de 10 % como criterio de diseño."
 ];

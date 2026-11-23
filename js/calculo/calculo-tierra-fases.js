@@ -33,7 +33,21 @@ function pozo(p) {
   while ((Rt * fAgr(nVar)) / nVar > 25 && nVar < 60) nVar++;
   const F = fAgr(nVar),
     Rn = (Rt * F) / nVar;
-  return { ...p, Rv, Rt, ok: Rt <= 25, nVar, F, Rn, okL: p.Lv >= 2, okD: p.dv * 1000 >= 13 };
+  // Profundidad que alcanza la punta de la varilla: al menos 2.5 m (Regla 060-702(3)(d)), salvo roca
+  const prof = (p.cab ?? 0.25) + p.Lv;
+  return {
+    ...p,
+    Rv,
+    Rt,
+    ok: Rt <= 25,
+    nVar,
+    F,
+    Rn,
+    okL: p.Lv >= 2,
+    okD: p.dv * 1000 >= 13,
+    prof,
+    okP: prof >= 2.5 - 1e-9
+  };
 }
 // Cortocircuito aguas abajo de un conductor (estimación conservadora: impedancia de la fuente inductiva + resistencia del cable)
 function iccAbajo(iccUp, s, L, S) {

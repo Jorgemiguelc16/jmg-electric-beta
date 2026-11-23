@@ -340,8 +340,19 @@ function laLista() {
   return D.lams;
 }
 const laOp = (i = dsD().lamI || 0) => ({ ...LA_DEF, ...(laLista()[i] || {}), _i: i, _n: laLista().length });
-// Zona del dibujo que va en la lámina: una planta encuadrada, lo que se ve en pantalla o todo el diseño
+/* Zona del dibujo que va en la lámina: una planta encuadrada, lo que se ve en pantalla o todo el diseño. Una lámina con
+   parte [ix, iy, nx, ny] muestra un rectángulo de esa zona dividida en nx columnas y ny filas (la fila 0 arriba): una
+   planta que no entra en A1 a 1:75 se presenta en varias láminas (EM.010, Art. 8.5) */
 function laZona(op) {
+  const z = laZonaBase(op),
+    pt = op.parte;
+  if (!Array.isArray(pt) || pt.length !== 4 || op.zona === "vista") return z;
+  const [ix, iy, nx, ny] = pt,
+    w = (z[2] - z[0]) / nx,
+    h = (z[3] - z[1]) / ny;
+  return [z[0] + ix * w, z[3] - (iy + 1) * h, z[0] + (ix + 1) * w, z[3] - iy * h];
+}
+function laZonaBase(op) {
   // Sin zona elegida: la primera planta encuadrada
   const zona = op.zona || (EPL.plantas.length ? "planta:0" : "todo");
   if (zona === "rect" && op.rect) return op.rect.slice();
@@ -365,10 +376,13 @@ function laZona(op) {
     Math.max(...bb.map(b => b[3])) + m
   ];
 }
-/* Papel y escala automáticos (criterio de la plataforma): las plantas de instalaciones se presentan a 1:50; se elige
-   el papel más chico donde entra la zona con su columna de leyenda, cuadro, notas y rótulo. Si no entra en A1, la
-   escala siguiente. Con el papel o la escala elegidos a mano, solo se ajusta lo otro. */
+/* Papel y escala automáticos: se elige el papel más chico donde entra la zona con su columna de leyenda, cuadro, notas
+   y rótulo, primero a 1:50 y luego a 1:75, las escalas de los planos generales (Norma EM.010, Art. 8.5). Si no entra
+   en A1 a 1:75, la escala siguiente, para que la lámina siga mostrando todo lo diseñado; se avisa la norma y el
+   proyectista puede dividir la planta en varias láminas (laPartes), que nunca se hace solo. Con el papel o la escala
+   elegidos a mano, solo se ajusta lo otro. */
 const LA_ESC_AUTO = [50, 75, 100, 125, 150, 200, 250, 500];
+const LA_ESC_NORMA = 75;
 const LA_TAM_AUTO = ["A3", "A2", "A1"];
 // Alto de cada fila de la leyenda en la lámina (mm; criterio: más compacta que la del editor)
 const LA_LEY_FILA = 7;
@@ -498,7 +512,7 @@ function laElegir(op, z, c) {
       }
       return d;
     }
-  return laDisp(op, tams[tams.length - 1], op.esc > 0 ? op.esc : 50, z, c);
+  return laDisp(op, tams[tams.length - 1], op.esc > 0 ? op.esc : LA_ESC_NORMA, z, c);
 }
 // Con la escala de la lámina y sus capas: los símbolos, textos, leyenda y cuadro miden lo mismo en el papel a
 // cualquier escala (como los objetos anotativos de AutoCAD); la arquitectura sí cambia con la escala
@@ -520,21 +534,18 @@ function laCon(esc, ocl, fn) {
 }
 // Nombre de la vista bajo el dibujo
 function laVistaTit(op) {
-  const z = op.zona || (EPL.plantas.length ? "planta:0" : "todo");
-  if (z.startsWith("planta:") && EPL.plantas[+z.slice(7)]) return "PLANTA " + EPL.plantas[+z.slice(7)].n.toUpperCase();
-  return (op.tit || "Instalaciones eléctricas").toUpperCase();
+  const z = op.zona || (EPL.plantas.length ? "planta:0" : "todo"),
+    pt = Array.isArray(op.parte) ? op.parte : null,
+    p = pt && pt[2] * pt[3] > 1 ? ` · PARTE ${pt[1] * pt[2] + pt[0] + 1} DE ${pt[2] * pt[3]}` : "";
+  if (z.startsWith("planta:") && EPL.plantas[+z.slice(7)])
+    return "PLANTA " + EPL.plantas[+z.slice(7)].n.toUpperCase() + p;
+  return (op.tit || "Instalaciones eléctricas").toUpperCase() + p;
 }
-// Arma la lámina: devuelve { svg, aviso, W, H, tam, esc } (aviso si la zona no entra en el papel a esa escala)
-function laSvg(op = laOp()) {
+/* Contenido de la columna de la lámina para la zona z: leyenda, cuadro de circuitos por tablero y sus medidas. Una
+   parte de una planta lleva la leyenda y el cuadro de toda la planta. */
+function laContenido(op, z0) {
   const D = dsD(),
-    z = laZona(op),
-    P = {
-      nombre: $("p_nombre").value,
-      prop: $("p_prop").value,
-      ubic: $("p_ubic").value,
-      proy: $("p_proy").value,
-      cip: $("p_cip").value
-    },
+    z = Array.isArray(op.parte) ? laZonaBase(op) : z0,
     dentro = t =>
       D.els.some(
         e => e.t === t && dsBBox(e)[0] < z[2] && dsBBox(e)[2] > z[0] && dsBBox(e)[1] < z[3] && dsBBox(e)[3] > z[1]
@@ -560,13 +571,57 @@ function laSvg(op = laOp()) {
       bloques.splice(0, bloques.length, ...sel);
     }
   }
-  const c = {
-      conLey,
-      conCua,
-      leyW: DS_LEY.w.reduce((a, b) => a + b, 0),
-      leyH: DS_LEY.tit + DS_LEY.cab + Math.max(1, filasLey) * LA_LEY_FILA,
-      bloques
+  return {
+    conLey,
+    conCua,
+    leyW: DS_LEY.w.reduce((a, b) => a + b, 0),
+    leyH: DS_LEY.tit + DS_LEY.cab + Math.max(1, filasLey) * LA_LEY_FILA,
+    bloques
+  };
+}
+/* Partes en que se divide una lámina cuya zona no entra en A1 a 1:75 (EM.010, Art. 8.5): la menor cantidad de
+   columnas y filas iguales con las que cada parte entra en A1 a 1:75; todas en A1 y a 1:75, numeradas como el
+   unifilar (IE-01, IE-01A, IE-01B…). Devuelve [op] si entra, o la lista de láminas. */
+function laPartes(op) {
+  const base = { ...op };
+  delete base.parte;
+  const z = laZona(base),
+    entraEn = o => {
+      const zz = laZona(o);
+      return laDisp(o, "A1", LA_ESC_NORMA, zz, laContenido(o, zz)).entra;
+    };
+  const e0 = laElegir(base, z, laContenido(base, z));
+  if (e0.entra && e0.escD <= LA_ESC_NORMA) return [op];
+  const d = laDisp(base, "A1", LA_ESC_NORMA, z, laContenido(base, z)),
+    aw = Math.max(1, d.a.x1 - d.a.x0),
+    ah = Math.max(1, d.a.y1 - d.a.y0);
+  let nx = Math.max(1, Math.ceil(d.zw / aw)),
+    ny = Math.max(1, Math.ceil(d.zh / ah));
+  for (let k = 0; k < 12; k++) {
+    const ps = [];
+    for (let iy = 0; iy < ny; iy++)
+      for (let ix = 0; ix < nx; ix++) ps.push({ ...base, tam: "A1", esc: LA_ESC_NORMA, parte: [ix, iy, nx, ny] });
+    if (ps.every(entraEn)) {
+      const num0 = base.num || "IE-01";
+      return ps.map((p, i) => ({ ...p, num: i ? num0 + String.fromCharCode(64 + i) : num0 }));
+    }
+    // La dimensión que más sobra se divide una vez más
+    if (d.zw / nx / aw >= d.zh / ny / ah) nx++;
+    else ny++;
+  }
+  return [op];
+}
+// Arma la lámina: devuelve { svg, aviso, W, H, tam, esc } (aviso si la zona no entra en el papel a esa escala)
+function laSvg(op = laOp(), lista) {
+  const z = laZona(op),
+    P = {
+      nombre: $("p_nombre").value,
+      prop: $("p_prop").value,
+      ubic: $("p_ubic").value,
+      proy: $("p_proy").value,
+      cip: $("p_cip").value
     },
+    c = laContenido(op, z),
     d = laElegir(op, z, c),
     { W, H, k, escD, mmU, a, mx0, my0, mx1, my1 } = d,
     acx = (a.x0 + a.x1) / 2,
@@ -576,7 +631,12 @@ function laSvg(op = laOp()) {
     s = mmU * LA_K,
     aDib = (px, py) => [cx + (px - acx) / mmU, cy - (py - acy) / mmU];
   // Otra lámina con la misma zona y las mismas capas (se imprimiría dos veces lo mismo)
-  const zk = o => (o.zona || (EPL.plantas.length ? "planta:0" : "todo")) + "|" + (o.ocl || []).slice().sort().join(","),
+  const zk = o =>
+      (o.zona || (EPL.plantas.length ? "planta:0" : "todo")) +
+      "|" +
+      (o.parte || []).join(",") +
+      "|" +
+      (o.ocl || []).slice().sort().join(","),
     igual = Number.isInteger(op._i)
       ? laLista()
           .map((l, i) => laOp(i))
@@ -587,14 +647,18 @@ function laSvg(op = laOp()) {
     : igual
       ? `Esta lámina muestra lo mismo que la ${igual.num} (la misma zona y las mismas capas): elija otra zona u oculte otras capas, o elimínela.`
       : d.entra
-        ? escD > 75 && String(op.zona || "planta:").startsWith("planta:")
-          ? `A 1:${escD} los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala)${LAMINAS[op.tam] ? `: el papel está fijo en ${op.tam}` : ""}. Para las plantas se recomienda 1:50, con el papel automático.`
+        ? escD > LA_ESC_NORMA
+          ? !LAMINAS[op.tam] && !(op.esc > 0) && op.zona !== "vista"
+            ? `La zona entra en A1 recién a 1:${escD} y los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala). La Norma EM.010 (Art. 8.5) pide los planos generales a 1:50 o 1:75: si lo prefiere, divídala en ${laPartes(op).length} láminas.`
+            : `A 1:${escD} los símbolos quedan juntos (miden lo mismo en el papel a cualquier escala)${LAMINAS[op.tam] ? `: el papel está fijo en ${op.tam}` : ""}. La Norma EM.010 (Art. 8.5) pide los planos generales a 1:50 o 1:75: use el papel y la escala automáticos o divida la planta en varias láminas.`
           : ""
-        : a.x1 - a.x0 < 60
-          ? `En ${d.tam} no queda sitio para el dibujo junto a la leyenda, el cuadro y el rótulo: elija un papel más grande o el automático.`
-          : d.sobra
-            ? `El cuadro de circuitos no cabe en ${d.tam}: elija un papel más grande o quite el cuadro de esta lámina.`
-            : `La zona (${fmt(d.zw, 0)} × ${fmt(d.zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${d.tam} (${fmt(a.x1 - a.x0, 0)} × ${fmt(a.y1 - a.y0, 0)} mm): elija un papel más grande, otra escala o marque una zona menor.`;
+        : !LAMINAS[op.tam] && !(op.esc > 0) && !d.sobra && a.x1 - a.x0 >= 60
+          ? `La zona no entra en A1 a 1:75 (${fmt(d.zw, 0)} × ${fmt(d.zh, 0)} mm en un área de ${fmt(a.x1 - a.x0, 0)} × ${fmt(a.y1 - a.y0, 0)} mm). La Norma EM.010 (Art. 8.5) pide los planos generales a 1:50 o 1:75: divídala en ${laPartes(op).length} láminas.`
+          : a.x1 - a.x0 < 60
+            ? `En ${d.tam} no queda sitio para el dibujo junto a la leyenda, el cuadro y el rótulo: elija un papel más grande o el automático.`
+            : d.sobra
+              ? `El cuadro de circuitos no cabe en ${d.tam}: elija un papel más grande o quite el cuadro de esta lámina.`
+              : `La zona (${fmt(d.zw, 0)} × ${fmt(d.zh, 0)} mm a 1:${escD}) no entra en el área de dibujo de ${d.tam} (${fmt(a.x1 - a.x0, 0)} × ${fmt(a.y1 - a.y0, 0)} mm): elija un papel más grande, otra escala o marque una zona menor.`;
   const ley = d.ley ? (([x, y]) => ({ t: "ley", tit: "LEYENDA", x, y }))(aDib(d.ley.x, d.ley.y)) : null,
     cuadros = d.cuas.map(u =>
       (([x, y]) => ({
@@ -680,6 +744,39 @@ function laSvg(op = laOp()) {
     }
   });
   o.push(`<g clip-path="url(#${cid})">${cuerpo.join("")}</g>`, leyO.join(""));
+  /* Planta en varias láminas: línea de corte en cada borde que sigue en otra lámina, con su número */
+  if (Array.isArray(op.parte)) {
+    const [ix, iy, nx, ny] = op.parte,
+      L2 = lista || laLista().map((l, i) => laOp(i)),
+      vec = (dx, dy) =>
+        L2.find(
+          o =>
+            Array.isArray(o.parte) &&
+            (o.zona || "") === (op.zona || "") &&
+            o.parte[0] === ix + dx &&
+            o.parte[1] === iy + dy &&
+            o.parte[2] === nx &&
+            o.parte[3] === ny
+        ),
+      fsC = 2.6 * k,
+      lc = (x1, y1, x2, y2) =>
+        o.push(
+          `<line x1="${q(x1)}" y1="${q(y1)}" x2="${q(x2)}" y2="${q(y2)}" stroke="${NAVY}" stroke-width="${q(0.5)}" stroke-dasharray="${q(6)} ${q(2)} ${q(1)} ${q(2)}"/>`
+        ),
+      tc = (x, y, t, rot) =>
+        o.push(
+          `<text x="${q(x)}" y="${q(y)}" font-size="${q(fsC)}" font-weight="700" text-anchor="middle" fill="${NAVY}"${rot ? ` transform="rotate(${rot} ${q(x)} ${q(y)})"` : ""}>${esc(t)}</text>`
+        );
+    [
+      [1, 0, () => (lc(cl[2], cl[1], cl[2], cl[3]), t => tc(cl[2] - 1.5 * k, (cl[1] + cl[3]) / 2, t, -90))],
+      [-1, 0, () => (lc(cl[0], cl[1], cl[0], cl[3]), t => tc(cl[0] + 1.5 * k + fsC, (cl[1] + cl[3]) / 2, t, -90))],
+      [0, 1, () => (lc(cl[0], cl[3], cl[2], cl[3]), t => tc((cl[0] + cl[2]) / 2, cl[3] - 1.5 * k, t))],
+      [0, -1, () => (lc(cl[0], cl[1], cl[2], cl[1]), t => tc((cl[0] + cl[2]) / 2, cl[1] + 1.5 * k + fsC, t))]
+    ].forEach(([dx, dy, f]) => {
+      const v = vec(dx, dy);
+      if (v) f()(`LÍNEA DE CORTE · CONTINÚA EN LA LÁMINA ${v.num}`);
+    });
+  }
   // Separación entre el área de dibujo y la columna
   o.push(
     `<line x1="${q(d.sep)}" y1="${q(my0)}" x2="${q(d.sep)}" y2="${q(my1)}" stroke="${NAVY}" stroke-width="${q(0.35)}"/>`
@@ -1559,11 +1656,13 @@ function lamVista() {
     // También cuando todo entra, pero a una escala menor que 1:75 porque el papel está fijo
     noEntra = /no entra|no cabe|no queda sitio|quedan juntos|elija también la escala/.test(r.aviso),
     fijo = !!LAMINAS[op.tam] || op.esc > 0,
-    variasPl = /^(todo|vista)$/.test(op.zona || "") && EPL.plantas.length > 1;
+    variasPl = /^(todo|vista)$/.test(op.zona || "") && EPL.plantas.length > 1,
+    // Con el papel y la escala automáticos, una zona que no entra en A1 a 1:75 se divide en varias láminas
+    partir = /divídala en \d+ láminas/.test(r.aviso) && op.zona !== "vista";
   $("laAviso").innerHTML =
     esc(r.aviso) +
-    (noEntra && (fijo || variasPl)
-      ? `<span class="la-av-b">${fijo ? '<button type="button" class="vw-btn" data-la="auto">Usar papel y escala automáticos</button>' : ""}${variasPl ? '<button type="button" class="vw-btn" data-la="porplanta">Una lámina por planta</button>' : ""}</span>`
+    (noEntra && (fijo || variasPl || partir)
+      ? `<span class="la-av-b">${fijo ? '<button type="button" class="vw-btn" data-la="auto">Usar papel y escala automáticos</button>' : ""}${variasPl ? '<button type="button" class="vw-btn" data-la="porplanta">Una lámina por planta</button>' : ""}${partir ? '<button type="button" class="vw-btn" data-la="partir">Dividir en varias láminas</button>' : ""}</span>`
       : "");
   $("laAviso").hidden = !r.aviso;
 }
@@ -1606,7 +1705,7 @@ function lamPorPlanta() {
   if (!falta.length) return toast("Cada planta con diseño ya tiene su lámina");
   const limpia = o => {
     const c = { ...o, tam: "auto" };
-    ["esc", "rect", "_i", "_n"].forEach(k => delete c[k]);
+    ["esc", "rect", "parte", "_i", "_n"].forEach(k => delete c[k]);
     return c;
   };
   let n = 0;
@@ -1625,6 +1724,24 @@ function lamPorPlanta() {
   if (!$("lamDlg").hidden) lamCargar();
   toast(`${falta.length} lámina${falta.length > 1 ? "s" : ""} por planta: ${L.map(l => l.num).join(", ")}`);
 }
+/* «Dividir en varias láminas»: la lámina elegida, si su zona no entra en A1 a 1:75 (EM.010, Art. 8.5), pasa a ser
+   varias, una por parte de la zona, con sus líneas de corte (laPartes) */
+function lamPartir() {
+  const D = dsD(),
+    L = laLista(),
+    i = D.lamI || 0,
+    ps = laPartes(laOp(i));
+  if (ps.length < 2) return toast("Esta lámina ya entra en su papel a 1:50 o 1:75");
+  const limpia = o => {
+    const c = { ...o };
+    ["_i", "_n", "aviso"].forEach(k => delete c[k]);
+    return c;
+  };
+  L.splice(i, 1, ...ps.map(limpia));
+  edCambio();
+  lamCargar();
+  toast(`La planta va en ${ps.length} láminas a 1:${LA_ESC_NORMA}: ${ps.map(p => p.num).join(", ")}`);
+}
 /* Láminas del diseño para el expediente (js/exportar/descargas.js): las del plano aplicado al proyecto (PLANO), con
    su arquitectura leída del navegador. No necesita el editor abierto: usa una copia y deja todo como estaba. Sin
    diseño o sin su archivo DXF, ninguna. */
@@ -1637,10 +1754,12 @@ async function laminasExpediente() {
          las mismas opciones que la primera (papel y escala automáticos), numerada después de la última */
       const ops = laLista().map((l, i) => laOp(i));
       laPlantasSin(ops).forEach(({ z, num }) =>
-        ops.push({ ...ops[0], tam: "auto", esc: undefined, rect: undefined, zona: z, num })
+        ops.push({ ...ops[0], tam: "auto", esc: undefined, rect: undefined, parte: undefined, zona: z, num })
       );
-      return ops.map((op, i) => {
-        const r = laSvg({ ...op, _i: i, _n: ops.length });
+      // Las láminas tal como las dejó el proyectista (una planta se divide solo si él lo decide)
+      const todas = ops;
+      return todas.map((op, i) => {
+        const r = laSvg({ ...op, _i: i, _n: todas.length }, todas);
         return { svg: r.svg, W: r.W, H: r.H, hoja: op.num, tit: op.tit, tam: r.tam, esc: r.esc, vista: laVistaTit(op) };
       });
     });
@@ -1722,6 +1841,7 @@ $("lamDlg").addEventListener("click", e => {
   } else if (a === "pdf") lamImprimir(false);
   else if (a === "pdftodas") lamImprimir(true);
   else if (a === "porplanta") lamPorPlanta();
+  else if (a === "partir") lamPartir();
   else if (a === "auto") {
     $("laTam").value = "auto";
     $("laEsc").value = "auto";

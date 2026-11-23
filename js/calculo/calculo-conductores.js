@@ -19,8 +19,9 @@ function tuboPara(S, St, ncond) {
   return { mm: null, pul: '> 3"' };
 }
 /* Secciones elegidas en el cuadro de conductores (SECF del modo en cálculo), por tramo: «A·descripción» en
-   alimentadores y «tablero·circuito» en derivados. dimensionar() solo acepta una sección mayor que la mínima
-   que cumple capacidad y caída de tensión; una igual o menor se ignora y queda la automática. */
+   alimentadores y «tablero·circuito» en derivados. dimensionar() calcula el tramo con la sección elegida, mayor o
+   menor que la automática (la mínima que cumple capacidad y caída de tensión), y guarda la automática en Sauto: una
+   menor no cumple y se marca así, para que el proyectista vea cuánto excede. Igual a la automática, no cuenta. */
 let SFX = {};
 function dimensionar({ I, K, L, V, cargados, c, fc, dvMax, Smin, Imin = 0, fd = FD, Sfix = 0 }) {
   const Id = Math.max(I * fd, Imin),
@@ -36,8 +37,8 @@ function dimensionar({ I, K, L, V, cargados, c, fc, dvMax, Smin, Imin = 0, fd = 
       dV = (K * c.rho * L * I) / S,
       dVp = (dV / V) * 100;
     if (itm !== null && Izc >= itm && dVp <= dvMax + 1e-9) {
-      const j = Sfix > S ? SECC.indexOf(Sfix) : -1;
-      if (j > k) {
+      const j = Sfix && Sfix !== S ? SECC.indexOf(Sfix) : -1;
+      if (j >= 0) {
         const dVf = (K * c.rho * L * I) / Sfix;
         return {
           Id,
@@ -50,7 +51,8 @@ function dimensionar({ I, K, L, V, cargados, c, fc, dvMax, Smin, Imin = 0, fd = 
           dV: dVf,
           dVp: (dVf / V) * 100,
           Imin,
-          Sauto: S
+          Sauto: S,
+          bajoMin: Sfix < Smin
         };
       }
       return { Id, fd, itm, col, S, Iz, Izc, dV, dVp, Imin };
@@ -81,7 +83,7 @@ function alimentador(desc, P, sk, L, dvUp, dvSel, c, extra = {}) {
   Object.assign(r, { desc, P, sk, s, I, L, dvUp, dvAc: dvUp + r.dVp }, extra);
   r.St = tierraPara(r.itm || 400);
   r.tubo = tuboPara(r.S, r.St, s.n);
-  r.ok = !r.fail && r.itm !== null && r.Izc >= r.itm && r.dvAc <= DV_ALIM + 1e-9;
+  r.ok = !r.fail && !r.bajoMin && r.itm !== null && r.Izc >= r.itm && r.dvAc <= DV_ALIM + 1e-9;
   return r;
 }
 function circuito({ tab, id, desc, tipo, n, P, L, fases, skTri }, c, dvUp, feeder) {
@@ -134,6 +136,7 @@ function circuito({ tab, id, desc, tipo, n, P, L, fases, skTri }, c, dvUp, feede
   }
   r.ok =
     !r.fail &&
+    !r.bajoMin &&
     r.itm !== null &&
     r.Izc >= r.itm &&
     r.dVp <= DV_DER + 1e-9 &&
@@ -141,12 +144,20 @@ function circuito({ tab, id, desc, tipo, n, P, L, fases, skTri }, c, dvUp, feede
     (!motor || r.arrOk);
   return r;
 }
+/* Interruptor general de cada tablero (Regla 150-400(4)): termomagnético, en la cabecera del tablero y aguas arriba de
+   los diferenciales, con la misma corriente nominal que el interruptor de su alimentador. Es obligatorio en el tablero
+   de cada unidad de vivienda; en los demás tableros (locales, servicios generales) se pone por criterio, como medio de
+   desconexión del tablero. Devuelve {itm, pol, viv} o null. */
+function itmGeneral(f, viv) {
+  if (!f || !(f.itm > 0)) return null;
+  return { itm: f.itm, pol: f.s.tri ? 3 : 2, viv: !!viv };
+}
 /* Interruptores diferenciales (Regla 150-400): uno por cada grupo de tres circuitos o uno por circuito. Tipo A en
    todos o, con el parámetro «AC», tipo A solo si el diferencial protege alguna carga marcada «con electrónica»
    (inverter, variador, inducción, cargador): criterio de ingeniería según IEC 60364-5-53 e IEC 62423, porque esas
    cargas producen corrientes de fuga con componente continua que un tipo AC puede no detectar. */
 const tipoID = (grp, c) => (c.idTipo === "A" || grp.some(q => q.elec) ? "A" : "AC");
-function asignarID(cs, c) {
+function asignarID(cs, c, gen = 0) {
   if (c.idMode === "circuito") {
     cs.forEach(q => {
       q.idName = "ID";
@@ -175,12 +186,18 @@ function asignarID(cs, c) {
   });
   // Numerados en el orden de su primer circuito, para que se lean ID-1, ID-2… de izquierda a derecha
   grupos.sort((p, q) => cs.indexOf(p[0]) - cs.indexOf(q[0]));
+  /* Corriente nominal de cada diferencial (Regla 150-400, Nota): con los mismos criterios que un interruptor en esa
+     posición, es decir, no menor que la suma de las corrientes de diseño del grupo ni que el mayor ITM del grupo. Si un
+     solo diferencial encabeza todo el tablero (hasta tres circuitos, Regla 150-400(7)), no menor que el interruptor
+     general. */
   let g = 0;
+  const unico = grupos.length === 1;
   for (const grp of grupos) {
     g++;
     const need = Math.max(
         ...grp.map(q => q.itm || 0),
-        grp.reduce((s, q) => s + q.I, 0)
+        grp.reduce((s, q) => s + (q.Id || q.I), 0),
+        unico ? gen || 0 : 0
       ),
       rat = ID_RAT.find(x => x >= need) ?? 100;
     const tp = tipoID(grp, c);

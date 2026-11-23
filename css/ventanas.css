@@ -121,6 +121,11 @@
   --dl-btn: #243140;
   --dl-btn-b: #3d4e61;
   --dl-acc: #6fa3d6;
+  /* Variables que solo usan las ventanas del editor (css/plano.css); en el tema claro valen su color de respaldo */
+  --dl-mute: #98a7b7;
+  --dl-line: #34424f;
+  --dl-head: #1f2a36;
+  --dl-bg2: #1f2a36;
 }
 .vw.max {
   left: 8px !important;
@@ -327,6 +332,30 @@
 .cd-tabla select:hover {
   border-color: var(--dl-btn-b);
   background-color: var(--dl-cell);
+}
+/* Grupos de la lista de sección: títulos en gris; la automática en negrita; las que no cumplen en rojo (también la
+   lista cerrada, si se eligió una de ellas) */
+.cd-tabla select optgroup {
+  font: 600 11px var(--f-body);
+  font-style: normal;
+  color: var(--dl-ink2);
+  background: var(--dl-th);
+}
+.cd-tabla select option {
+  font: 400 12px var(--f-body);
+  color: var(--dl-ink);
+  background: var(--dl-cell);
+}
+.cd-tabla select option.cd-auto {
+  font-weight: 700;
+}
+.cd-tabla select option.cd-no,
+.cd-tabla select.cd-no {
+  color: #c62828;
+}
+:root[data-theme="dark"] .cd-tabla select option.cd-no,
+:root[data-theme="dark"] .cd-tabla select.cd-no {
+  color: #f08a80;
 }
 .cd-tabla select:focus {
   outline: none;

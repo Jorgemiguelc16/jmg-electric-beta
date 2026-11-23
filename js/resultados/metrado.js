@@ -24,8 +24,8 @@ function tramoVertical(q, c) {
 }
 /* Contenido de un tablero (también lo dibuja el detalle de tableros, js/planos/tableros.js): sus circuitos, los
    diferenciales (uno por grupo o por circuito, de 4 polos si el grupo tiene uno trifásico), las reservas de 2 polos,
-   en el TG de una vivienda los interruptores de los alimentadores de los demás tableros, y los equipos adicionales.
-   m es el total de polos: la capacidad mínima del tablero. */
+   en el TG de una vivienda los interruptores de los alimentadores de los demás tableros, el interruptor general del
+   tablero (Regla 150-400(4)) y los equipos adicionales. m es el total de polos: la capacidad mínima del tablero. */
 function polosTablero(r, tb) {
   const c = r.c,
     cs = r.circ.filter(q => q.tab === tb.tab),
@@ -33,7 +33,11 @@ function polosTablero(r, tb) {
     tri = r.alims[tb.feeder].s.tri,
     ids = [],
     vistos = {};
-  let m = cs.reduce((s, q) => s + (q.f3 ? 3 : 2), 0) + c.reserva * 2 + fd.reduce((s, a) => s + (a.s.tri ? 3 : 2), 0);
+  let m =
+    cs.reduce((s, q) => s + (q.f3 ? 3 : 2), 0) +
+    c.reserva * 2 +
+    fd.reduce((s, a) => s + (a.s.tri ? 3 : 2), 0) +
+    (tb.gen ? tb.gen.pol : 0);
   cs.forEach(q => {
     const k = c.idMode === "circuito" ? q.key : q.idName;
     if (vistos[k]) return;
@@ -49,7 +53,7 @@ function polosTablero(r, tb) {
     pol: k === "dps" ? (tri ? 4 : 2) : k === "med" ? (tri ? 4 : 2) : 2
   }));
   eqs.forEach(e => (m += e.pol));
-  return { m, ids, eqs, fd, cs, tri };
+  return { m, ids, eqs, fd, cs, tri, gen: tb.gen || null };
 }
 /* Medida referencial del gabinete (ancho × alto, mm) según su capacidad en polos y polos por fila de riel DIN que
    caben en su ancho: rangos de catálogo de los fabricantes, no del CNE (criterio). El tablero general del edificio,
@@ -114,6 +118,7 @@ function metrado(r) {
     const n = r.alims[tb.feeder].cant || 1,
       pt = polosTablero(r, tb);
     pt.ids.forEach(d => add(ids, `${d.pol}|${d.rat}|${d.tipo}`, n));
+    if (pt.gen) add(itm, `${pt.gen.pol}|${pt.gen.itm}|C|${tb.pdc}`, n);
     pt.eqs.forEach(e => add(eqm, `${e.k === "ctr" ? (pt.tri ? 3 : 2) : pt.tri ? 4 : 2}|${e.d.d(pt.tri)}`, n));
     mods[tb.tab] = { n, m: pt.m, desc: tb.desc, g: gabineteDe(r, tb, pt.m) };
     nRes += c.reserva * n;
@@ -212,6 +217,18 @@ function metrado(r) {
     ["OE.5.2.7", "TABLEROS DE DISTRIBUCIÓN", false]
   ].forEach(([cod, tit, pr]) => {
     sec(cod, tit);
+    /* Tablero general del edificio (TG, js/planos/tablerogeneral.js): gabinete metálico con el interruptor general en
+       caja moldeada (contado en los dispositivos) y barras de cobre hacia el banco de medidores; medida referencial */
+    if (pr && r.mode === "multi") {
+      const g0 = r.alims[0],
+        gm = medidaGabinete(0, true);
+      it(
+        `Tablero general TG, metálico, con interruptor general ${g0.s.tri ? 3 : 2}×${g0.itm} A en caja moldeada y barras de cobre, de ${gm.a} × ${gm.h} mm (referencial)`,
+        "Und.",
+        1,
+        "Tablero general del edificio"
+      );
+    }
     Object.entries(mods)
       .filter(([t]) => tabPrin(t) === pr)
       .forEach(([t, v]) =>
@@ -269,6 +286,24 @@ function metrado(r) {
     "Und.",
     p.nVar,
     `Regla 060-702. Conductor: ${Math.ceil(pz.cond + 3 * (p.nVar - 1))} m en total (${fmt(pz.cond, 0)} m al tablero${p.nVar > 1 ? ` + 3 m por cada varilla adicional` : ""})${pz.pvc ? `; tubo PVC de protección: ${fmt(pz.pvc, 0)} m` : ""}. Materiales por pozo, criterio de diseño`
+  );
+  /* Artefactos (OE.5.5): una luminaria por salida de alumbrado y, en los circuitos de emergencia dibujados en el plano,
+     un equipo autónomo por salida. Tipo, potencia y lúmenes, según el cálculo de iluminación (EM.010, Art. 6) */
+  sec("OE.5.5.1", "ARTEFACTOS · LÁMPARAS");
+  const emerg = r.circ
+    .filter(q => q.src && q.src.t === "plano" && /emergencia/i.test(`${q.tipo} ${q.desc}`))
+    .reduce((s, q) => s + (q.n || 0) * (r.alims[q.feeder].cant || 1), 0);
+  it(
+    "Luminaria con lámpara LED para salida de alumbrado, con sus accesorios de fijación y conexión",
+    "Und.",
+    al,
+    "Tipo, potencia y lúmenes según el cálculo de iluminación (EM.010, Art. 6) y el cuadro de cargas"
+  );
+  it(
+    "Luminaria de emergencia autónoma con batería, para rutas de evacuación",
+    "Und.",
+    emerg,
+    "Autonomía de 1½ h y 10 lx en el suelo (A.130, Art. 40)"
   );
   sec("C", "COMPLEMENTOS (NO CODIFICADOS EN LA NORMA)");
   it("Tomacorriente doble con toma de tierra, 16 A, 250 V", "Und.", to);

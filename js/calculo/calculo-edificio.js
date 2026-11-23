@@ -324,6 +324,7 @@ function calcMulti(c) {
       tab: "TSG",
       desc: "Tablero de servicios generales",
       feeder: alims.length - 1,
+      gen: itmGeneral(f, false),
       icc,
       pdc: pdcPara(icc, c.pdcMin)
     });
@@ -370,6 +371,7 @@ function calcMulti(c) {
         ? `Tablero de ${t.nombre} (${USOS[t.uso].n}) · ${t.cant} unidad(es)`
         : `Tablero de departamento ${t.nombre} · ${t.cant} unidad(es)`,
       feeder: alims.length - 1,
+      gen: itmGeneral(f, !t.com),
       icc,
       pdc: pdcPara(icc, c.pdcMin)
     });
@@ -431,7 +433,7 @@ function calcMulti(c) {
         q.plano = { lej: q0.lej, Lh: q0.Lh, Lv: q0.Lv, est: q0.est, Lmet: q0.Lmet, auto: q0.auto, ct: q0.tipo };
         return q;
       });
-      asignarID(L2, c);
+      asignarID(L2, c, alims[fi].itm || 0);
       circ.push(...L2);
       return;
     }
@@ -469,7 +471,7 @@ function calcMulti(c) {
       q.elec = !!+x.elec;
       list.push(q);
     });
-    asignarID(list, c);
+    asignarID(list, c, alims[fi].itm || 0);
     circ.push(...list);
   });
   circ
@@ -482,7 +484,8 @@ function calcMulti(c) {
   // Diferenciales del tablero de servicios generales, ya con la fase de cada circuito
   asignarID(
     circ.filter(q => q.tab === "TSG"),
-    c
+    c,
+    (alims.find(a => a.pKey === "servP") || {}).itm || 0
   );
   /* Banco junto al TG: de las barras del TG sale hacia el banco la fase (o las tres) y el neutro de cada suministro,
      con la sección de su alimentador (lámina IE-05), todos por la tubería entre el TG y el banco. Se dimensionan con

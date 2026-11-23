@@ -234,7 +234,7 @@ function expediente(r, estilo = "formal", lamsDis = []) {
     "Tableros y sus alimentadores",
     "Fuente: cálculo del proyecto."
   );
-  B += `<p>Los circuitos derivados de alumbrado y tomacorrientes se agrupan con un máximo de ${c.maxSal} salidas por circuito (Regla 070-3000). Las cargas especiales tienen circuito independiente. Los circuitos se protegen con interruptores termomagnéticos de curva C${r.circ.some(q => q.motor) ? " (curva D en circuitos de motores)" : ""} y con interruptores diferenciales de 30 mA ${c.idMode === "grupo" ? "agrupados cada tres circuitos (Regla 150-400(8))" : "en cada circuito (Regla 150-400(9))"}. Cada tablero cuenta con ${c.reserva} espacio(s) de reserva equipados (Regla 050-108).</p>
+  B += `<p>Los circuitos derivados de alumbrado y tomacorrientes se agrupan con un máximo de ${c.maxSal} salidas por circuito (Regla 070-3000). Las cargas especiales tienen circuito independiente. Cada tablero tiene un interruptor general termomagnético en su cabecera, aguas arriba de los diferenciales (Regla 150-400(4)). Los circuitos se protegen con interruptores termomagnéticos de curva C${r.circ.some(q => q.motor) ? " (curva D en circuitos de motores)" : ""} y con interruptores diferenciales de 30 mA ${c.idMode === "grupo" ? "agrupados cada tres circuitos (Regla 150-400(8))" : "en cada circuito (Regla 150-400(9))"}. Cada tablero cuenta con ${c.reserva} espacio(s) de reserva equipados (Regla 050-108).</p>
     <p>El sistema de puesta a tierra está formado por ${r.pat.nVar > 1 ? `${r.pat.nVar} electrodos (varillas) de cobre en paralelo` : "un electrodo (varilla) de cobre"} de ${fmt(c.pat.Lv, 2)} m, conectados a la barra de tierra del tablero general con conductor de cobre de ${r.Selec} mm² (Tabla 17). Todos los circuitos llevan conductor de protección.</p>`;
   B += sub("Normas aplicables");
   B += tbl(
@@ -378,7 +378,16 @@ function expediente(r, estilo = "formal", lamsDis = []) {
       `<div class="ex-et"><h3>${t}</h3><ul class="ex-list">${items.map(x => `<li>${x}</li>`).join("")}</ul></div>`;
     B += sub("Conductores");
     B += et("Conductores de cobre", [
-      `Cobre electrolítico recocido, cableado, con aislamiento ${c.aisl === "pvc" ? "de PVC para 70 °C" : "de XLPE o EPR para 90 °C"}${c.desig ? `, designación comercial ${esc(c.desig)}` : ""}.`,
+      (() => {
+        const k = cableNorma(r);
+        return `Cobre electrolítico recocido, cableado, ${k.tipo === "lsoh" ? "no propagador del incendio, de baja emisión de humos y libre de halógenos y ácidos corrosivos" : "no propagador de la llama"}${c.desig ? `, designación comercial ${esc(c.desig)}` : ""} (Regla 020-126${k.tipo === "lsoh" && k.lsohNorma ? "(3), por ser un local de pública concurrencia según la Regla 010-010(4)" : k.tipo === "lsoh" ? "; libre de halógenos por criterio del proyectista" : "(2)"}).`;
+      })(),
+      `Capacidad de corriente de la Tabla 2 del CNE-U para aislamiento ${c.aisl === "pvc" ? "de PVC a 70 °C" : "de XLPE o EPR a 90 °C"}${c.aisl === "pvc" ? "; con un cable de mayor temperatura de operación, el valor queda del lado seguro" : ""}.`,
+      ...(cableNorma(r).tipo === "lsoh"
+        ? [
+            "Instalados de modo que no estén expuestos a daños mecánicos y cubiertos con material incombustible: dentro de tuberías o canalizaciones cerradas (Regla 020-126(3) y (4))."
+          ]
+        : []),
       `Secciones de fase y neutro utilizadas: ${secc.map(s => s + " mm²").join(", ")}. Conductores de protección y de puesta a tierra: ${st.map(s => s + " mm²").join(", ")}.`,
       "Conductor de protección con aislamiento de color verde o verde/amarillo, en todos los circuitos.",
       "Sin empalmes dentro de las tuberías; las uniones se ejecutan solo en cajas.",
@@ -397,9 +406,10 @@ function expediente(r, estilo = "formal", lamsDis = []) {
     ]);
     B += sub("Tableros y protecciones");
     B += et("Tableros de distribución", [
-      "Gabinete metálico para empotrar, con puerta, chapa y mandil; barras de cobre para fases, neutro y tierra; directorio de circuitos en la puerta.",
+      "Gabinete según se indica para cada tablero: metálico, con puerta, chapa y mandil, o de PVC con tapa transparente; barras o borneras de cobre para fases, neutro y tierra; directorio de circuitos en la puerta.",
+      "Interruptor general termomagnético en la cabecera de cada tablero, aguas arriba de los diferenciales (Regla 150-400(4)).",
       ...tabs.map(x => `${x.desc}${x.cant > 1 ? ` · ${x.cant} unidades` : ""}.`),
-      `Espacio para ${c.reserva} interruptor(es) de reserva por tablero (Regla 050-108).`
+      `Espacio para ${c.reserva} interruptor${c.reserva === 1 ? "" : "es"} de reserva por tablero (Regla 050-108).`
     ]);
     B += et("Interruptores termomagnéticos", [
       "Norma IEC 60898-1, montaje en riel DIN; curva C para circuitos generales" +
@@ -420,7 +430,7 @@ function expediente(r, estilo = "formal", lamsDis = []) {
       "Salidas de fuerza para cargas especiales con caja y conductor de protección."
     ]);
     B += et("Puesta a tierra", [
-      `Varilla de cobre de ${fmt(c.pat.Lv, 2)} m × ${PULG[c.pat.dv] || fmt(c.pat.dv * 1000, 1) + " mm"} (Regla 060-702)${r.pat.nVar > 1 ? `, ${r.pat.nVar} unidades separadas al menos la longitud de la varilla` : ""}.`,
+      `Varilla de cobre de ${fmt(c.pat.Lv, 2)} m × ${PULG[c.pat.dv] || fmt(c.pat.dv * 1000, 1) + " mm"} (Regla 060-702), hincada con la cabeza a ${fmt(r.pat.cab, 2)} m bajo el terreno hasta ${fmt(r.pat.prof, 2)} m de profundidad (al menos 2.5 m, Regla 060-702(3)(d))${r.pat.nVar > 1 ? `, ${r.pat.nVar} unidades separadas al menos la longitud de la varilla` : ""}.`,
       "Conector de bronce para varilla y caja de registro de concreto con tapa.",
       ...(c.pat.fr < 1 ? ["Tratamiento del suelo con bentonita, gel u otro compuesto, una dosis por electrodo."] : []),
       `Conductor de cobre de ${r.Selec} mm² desde el electrodo hasta la barra de tierra del tablero general (Tabla 17).`,
@@ -471,9 +481,10 @@ function expediente(r, estilo = "formal", lamsDis = []) {
   // Las mismas láminas que se descargan en DXF (la lámina elegida en Planos), cada una reducida a una página A4;
   // horizontal o vertical: la que imprime el dibujo más grande (área útil A4 ≈ 269 × 163 mm o 182 × 245 mm)
   // Con láminas de planta del diseño, esas van primero y las que genera la plataforma se numeran después de ellas
+  // Una planta dividida en varias láminas (IE-01, IE-01A…) cuenta como un solo número
   const nDis = lamsDis.reduce(
     (m, h) => Math.max(m, +(/^IE-(\d+)/.exec(h.hoja) || [0, 0])[1]),
-    lamsDis.length ? lamsDis.length : 0
+    new Set(lamsDis.map(h => (/^IE-(\d+)/.exec(h.hoja) || [h.hoja])[0])).size
   );
   const lam = laminaPlano();
   let LAMS;

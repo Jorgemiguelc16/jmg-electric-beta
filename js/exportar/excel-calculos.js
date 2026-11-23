@@ -200,7 +200,7 @@ function excelCalculos(X) {
       wsC,
       k,
       LC,
-      `Verificación: corriente de diseño ≤ ITM ≤ ampacidad corregida (Tabla 2, método ${c.met}, Tablas 5A y 5C); ΔV del circuito ≤ 2.5 % y total ≤ 4 % (Regla 050-102). Máximo 12 salidas por circuito (Regla 070-3000). Diferenciales de 30 mA ${c.idMode === "grupo" ? "por grupos de tres circuitos (Regla 150-400(8))" : "en cada circuito (Regla 150-400(9))"}. Espacios de reserva: ${c.reserva} por tablero (Regla 050-108(2)).`
+      `Verificación: corriente de diseño ≤ ITM ≤ ampacidad corregida (Tabla 2, método ${c.met}, Tablas 5A y 5C); ΔV del circuito ≤ 2.5 % y total ≤ 4 % (Regla 050-102). Máximo 12 salidas por circuito (Regla 070-3000). Interruptor general en la cabecera de cada tablero (Regla 150-400(4)). Diferenciales de 30 mA ${c.idMode === "grupo" ? "por grupos de tres circuitos (Regla 150-400(8))" : "en cada circuito (Regla 150-400(9))"}. Espacios de reserva: ${c.reserva} por tablero (Regla 050-108(2)).`
     ) + 1;
   cfmt(wsC, `P${genRow}:P${cEnd}`);
   wsC.pageSetup.printTitlesRow = `${cStart - 1}:${cStart - 1}`;

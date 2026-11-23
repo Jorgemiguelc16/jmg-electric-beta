@@ -247,7 +247,12 @@ function renderFicha() {
           (c.desig ? fcCampo("Designación", esc(c.desig)) : "") +
           fcCampo("Tubo", qv.tubo.mm ? `${qv.tubo.mm} mm (${qv.tubo.pul})` : qv.tubo.pul) +
           (qv.Sauto
-            ? fcCampo("Sección elegida", "Mayor que la automática", "", "Elegida en el cuadro de conductores")
+            ? fcCampo(
+                "Sección elegida",
+                qv.S > qv.Sauto ? "Mayor que la automática" : "Menor que la automática: no cumple",
+                "",
+                `Elegida en el cuadro de conductores; la automática es ${qv.Sauto} mm²`
+              )
             : "")
       ) +
       fcGrupo(

@@ -4,3 +4,6 @@ node_modules/
 _v_*.html
 _cap*.html
 _t.html
+
+# Normas en PDF del proyectista (solo en esta computadora; algunas son de pago)
+/CODIGOS APLICADOS/

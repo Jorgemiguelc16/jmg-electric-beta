@@ -303,12 +303,14 @@ function calcUni(c) {
   });
   const bal = balancear(circ, sk, (P.FIX || {}).uni);
   // Diferenciales de cada tablero, ya con la fase de cada circuito
-  tabs.forEach(tb =>
+  tabs.forEach(tb => {
+    tb.gen = itmGeneral(alims[tb.feeder], viv);
     asignarID(
       circ.filter(q => q.tab === tb.tab),
-      c
-    )
-  );
+      c,
+      tb.gen ? tb.gen.itm : 0
+    );
+  });
   return plConDiseno(
     {
       mode: "uni",

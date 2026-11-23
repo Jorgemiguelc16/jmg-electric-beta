@@ -78,6 +78,17 @@ function tableros(r, op = {}) {
       med: ["", "", "Medidor"],
       ctr: ["KM", "reloj", "Contactor"]
     };
+    // Interruptor general del tablero (Regla 150-400(4)), en la cabecera, aguas arriba de equipos y diferenciales
+    if (pt.gen)
+      M.push({
+        pol: pt.gen.pol,
+        t1: `${pt.gen.pol}×${pt.gen.itm} A`,
+        t3: "curva C",
+        t2: "General",
+        fi: "#fff",
+        g: "gen",
+        gen: 1
+      });
     pt.eqs.forEach(e => {
       const [t1, t3, t2] = EQC[e.k] || [e.d.c, "", ""];
       M.push({ pol: e.pol, t1, t3, t2, fi: "#f3f6f9", g: "eq", eq: e.k });
@@ -149,7 +160,8 @@ function tableros(r, op = {}) {
         ["Sistema", a.s.txt],
         ["Poder de corte", `${tb.pdc} kA`],
         ["Capacidad mínima", `${pt.m} polos`],
-        ["Alimentador", `ITM ${pa}×${a.itm} A`],
+        ...(pt.gen ? [["Interruptor general", `ITM ${pt.gen.pol}×${pt.gen.itm} A`]] : []),
+        ["Alimentador", `ITM ${pa}×${a.itm} A en el ${origen}`],
         ["Circuitos", String(pt.cs.length)],
         ["Diferenciales", `${pt.ids.length} de 30 mA`],
         ["Reservas", c.reserva ? `${c.reserva} × ITM 2×16 A` : "—"],
@@ -316,7 +328,7 @@ function tableros(r, op = {}) {
           for (let p = 0; p < m.pol; p++) {
             const px = xs + m.x + MW * (p + 0.5),
               b = bs[p] || "R";
-            if (m.id || m.eq || m.g === "fd") {
+            if (m.id || m.eq || m.gen || m.g === "fd") {
               cable(px, yf - 18, px, yf, b);
               T(px + 2.5, yf - 11, b, { s: 5.2, b: 1, f: colTxt(b) });
             }
@@ -447,7 +459,7 @@ function tableros(r, op = {}) {
       "Señal de advertencia de peligro «Riesgo eléctrico» (Norma DGE, Parte III, Sección 14, código 141-02-02).",
       "Triángulo equilátero de lado d: fondo amarillo, banda triangular negra de 0.10 d y símbolo negro (Figura 134-03).",
       "Con texto: fondo gris oscuro, señal arriba y texto blanco «¡Peligro! Riesgo eléctrico» en letra sanserif.",
-      "Tamaño según la distancia de observación l: A ≥ l² / 2000 (A en m², l en m, para l menor de 50 m).",
+      "Tamaño según la distancia de observación l: A ≥ l² / 2000 (A en m², l en m) de 5 a 50 m; a menos de 5 m, al menos 125 cm² (NTP 399.010-1, 13).",
       "Iluminación de al menos 50 lux sobre la señal; detalles del símbolo de al menos 3 % de la dimensión mayor.",
       r.tabs.some(t => gabineteDe(r, t, polosTablero(r, t).m).tipo === "pvc")
         ? "Se coloca en la puerta de cada tablero metálico; en los de PVC con tapa transparente, a criterio del proyectista."
@@ -473,7 +485,7 @@ function tableros(r, op = {}) {
     "Vistas esquemáticas generadas del cálculo: dispositivos y orden según el cuadro de cargas, cada diferencial con sus circuitos. Medida del gabinete referencial, de catálogo según sus polos (criterio): la define el fabricante.",
     "Espacio de trabajo libre de 1 m frente al tablero, con piso no deslizante, que permita abrir la puerta al menos 90° (Regla 020-308).",
     "Capacidad mínima de cada tablero en polos: circuitos, diferenciales, reservas y equipos, la misma del metrado (partidas OE.5.2.6 y OE.5.2.7).",
-    `El interruptor del alimentador de cada tablero está aguas arriba (lámina ${ieNum("IE-01")}). Reservas equipadas: ITM 2×16 A, curva C${c.reserva ? "" : " (este proyecto no tiene reservas)"}.`,
+    `Cada tablero tiene su interruptor general en la cabecera, aguas arriba de los diferenciales (Regla 150-400(4) en unidades de vivienda; en los demás tableros, criterio); el interruptor de su alimentador está además en el origen (lámina ${ieNum("IE-01")}). Reservas equipadas: ITM 2×16 A, curva C${c.reserva ? "" : " (este proyecto no tiene reservas)"}.`,
     "Los equipos adicionales (DPS, relé de tensión, medidor, contactor) son criterio del proyectista y no cambian el cálculo.",
     PEIN
       ? "Cableado esquemático (peinado): alimentación por la canaleta superior y salidas por la inferior. Colores: fases rojo (R o F), negro (S) y azul (T), neutro blanco y tierra verde con amarillo; el orden de las fases es criterio de diseño."

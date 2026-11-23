@@ -1,8 +1,8 @@
 /* CUADRO DE CONDUCTORES
    Ventana (cinta: Resultados › Cuadro de conductores) con la sección de cada alimentador y circuito derivado.
    Cada tramo usa por defecto la sección automática: la menor que cumple la capacidad de corriente (Tabla 2 con
-   5A y 5C) y la caída de tensión (Regla 050-102). La lista ofrece esa sección y las tres siguientes, que también
-   cumplen. Las elecciones quedan pendientes (CD_PEND) hasta «Aplicar» o «Aceptar»: entonces pasan a SECF y
+   5A y 5C) y la caída de tensión (Regla 050-102). La lista ofrece todas las secciones: las mayores cumplen y las
+   menores no (el cálculo las usa igual y las marca «No cumple», para ver cuánto exceden). Las elecciones quedan pendientes (CD_PEND) hasta «Aplicar» o «Aceptar»: entonces pasan a SECF y
    dimensionar() las aplica (js/calculo/calculo-conductores.js). Un clic elige un circuito para «Verificar longitudes» (js/ventanas/longitudes.js). La ventana se mueve y redimensiona como las demás ventanas de
    escritorio (js/ventanas/ventana.js). Si se angosta, la tabla oculta primero las columnas secundarias (container
    queries en css/ventanas.css) en lugar de desplazarse hacia el costado. Doble clic en un circuito abre su ficha. */
@@ -53,27 +53,29 @@ function renderCond() {
       ia = SECC.indexOf(Sa),
       kc = idxPorCorriente(y, c),
       porDV = kc !== null && SECC[kc] !== Sa,
-      ops = x.fail ? [] : SECC.slice(ia, ia + 4),
+      ops = x.fail || ia < 0 ? [] : SECC,
       uso = usoDV(y, x.S),
       nombre = alim ? x.desc : `${varios ? x.tab + " · " : ""}${x.id} ${x.desc}`;
-    // Una elección que ya no es mayor que la automática (por ejemplo, tras alargar el tramo) deja de valer
+    // Una elección igual a la automática (por ejemplo, tras cambiar la longitud del tramo) deja de valer
     if (!pv && sf[key] && !x.Sauto) {
       if (CD_PEND[key] === sf[key]) delete CD_PEND[key];
       delete sf[key];
     }
-    if (CD_PEND[key] && !(CD_PEND[key] > Sa && ops.includes(CD_PEND[key]))) delete CD_PEND[key];
+    if (CD_PEND[key] && !(CD_PEND[key] !== Sa && ops.includes(CD_PEND[key]))) delete CD_PEND[key];
     const pend = CD_PEND[key] || 0,
       mod = pend !== (sf[key] || 0);
-    const sel = ops.length
-      ? `<select data-secf="${esc(key)}" aria-label="Sección de ${esc(nombre)}">${ops
-          .map(
-            (S, i) => `<option value="${i ? S : ""}"${(i ? pend === S : !pend) ? " selected" : ""}>${S} mm²</option>`
-          )
-          .join("")}</select>`
-      : `<b>${x.S} mm²</b>`;
+    /* Lista en tres grupos: la automática (la menor que cumple), las mayores (cumplen) y las menores (no cumplen, en
+       rojo); cada opción muestra solo la sección, el grupo dice si cumple */
+    const op = (S, v, cl) =>
+        `<option value="${v}"${cl ? ` class="${cl}"` : ""}${(v ? pend === S : !pend) ? " selected" : ""}>${S} mm²</option>`,
+      may = ops.filter(S => S > Sa),
+      men = ops.filter(S => S < Sa),
+      sel = ops.length
+        ? `<select data-secf="${esc(key)}" class="${pend && pend < Sa ? "cd-no" : ""}" aria-label="Sección de ${esc(nombre)}"><optgroup label="Automática · cumple">${op(Sa, "", "cd-auto")}</optgroup>${may.length ? `<optgroup label="Mayores · cumplen">${may.map(S => op(S, S, "")).join("")}</optgroup>` : ""}${men.length ? `<optgroup label="Menores · no cumplen" class="cd-no">${men.map(S => op(S, S, "cd-no")).join("")}</optgroup>` : ""}</select>`
+        : `<b>${x.S} mm²</b>`;
     const [ec, et] = !x.ok
       ? ["bad", "No cumple"]
-      : x.Sauto
+      : x.Sauto && x.S > x.Sauto
         ? ["warn", "Sección mayor"]
         : pocoMargen(y)
           ? ["warn", "Poco margen"]

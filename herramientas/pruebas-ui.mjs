@@ -72,7 +72,7 @@ prueba("Cuadro de conductores: vista previa, cancelar y aplicar", async ok => {
   await ev("cuadroCond(true)");
   const dv0 = await ev("LAST.circ.find(q => /Ducha/.test(q.desc)).dVt");
   await ev(
-    "(s => { s.value = s.options[2].value; s.dispatchEvent(new Event('change', {bubbles:true})); })(document.querySelector('#cdBody select'))"
+    "(s => { s.value = '35'; s.dispatchEvent(new Event('change', {bubbles:true})); })(document.querySelector('#cdBody select'))"
   );
   const fila = await ev("document.querySelector('#cdBody tr:nth-child(2)').cells[6].textContent");
   ok(fila === "0.37", `ΔV del alimentador en la vista previa 0.37 % (dio ${fila})`);
@@ -81,11 +81,35 @@ prueba("Cuadro de conductores: vista previa, cancelar y aplicar", async ok => {
   ok((await J("SECF.uni")) && !Object.keys(await J("SECF.uni")).length, "cancelar no cambia las secciones");
   await ev("cuadroCond(true)");
   await ev(
-    "(s => { s.value = s.options[2].value; s.dispatchEvent(new Event('change', {bubbles:true})); })(document.querySelector('#cdBody select'))"
+    "(s => { s.value = '35'; s.dispatchEvent(new Event('change', {bubbles:true})); })(document.querySelector('#cdBody select'))"
   );
   await clic('#condDlg [data-cd="ok"]');
   ok((await ev("LAST.alims[0].S")) === 35, "aplicado: alimentador de 35 mm²");
   ok((await ev("LAST.circ.find(q => /Ducha/.test(q.desc)).dVt")) < dv0, "baja la ΔV de los circuitos aguas abajo");
+  // También las secciones menores que la automática: el cálculo la usa y la marca «No cumple» (se ve cuánto excede)
+  await ev("cuadroCond(true)");
+  const ops = await J(
+    "(s => ({ grupos: [...s.querySelectorAll('optgroup')].map(g => g.label + ':' + g.children.length), no: [...s.querySelectorAll('option.cd-no')].map(o => o.textContent), auto: s.querySelector('option.cd-auto').textContent, n: s.options.length }))(document.querySelector('#cdBody select'))"
+  );
+  ok(
+    ops.n === 12 &&
+      ops.auto === "16 mm²" &&
+      ops.no.includes("10 mm²") &&
+      ops.grupos.join("|") === "Automática · cumple:1|Mayores · cumplen:6|Menores · no cumplen:5",
+    `la lista tiene todas las secciones en tres grupos (${ops.grupos.join(", ")}), las menores en rojo`
+  );
+  await ev(
+    "(s => { s.value = '10'; s.dispatchEvent(new Event('change', {bubbles:true})); })(document.querySelector('#cdBody select'))"
+  );
+  await clic('#condDlg [data-cd="ok"]');
+  ok(
+    await ev(
+      "LAST.alims[0].S === 10 && LAST.alims[0].Sauto === 16 && !LAST.alims[0].ok && LAST.alims[0].Izc < LAST.alims[0].itm"
+    ),
+    "10 mm² elegido: el alimentador queda con 10 mm², no cumple y se ve que Iz corregida es menor que el ITM"
+  );
+  ok(await ev("alertas(LAST)[0][0] === false"), "y la verificación normativa lo marca como incumplimiento");
+  await ev("SECF.uni = {}; calcularAhora(); 1");
 });
 
 prueba("Ficha del circuito: vista previa, fase, aplicar y deshacer", async ok => {
@@ -1480,11 +1504,33 @@ prueba("Editor de diseño: lámina PDF, DXF del diseño en coordenadas reales y 
   );
   // Papel fijo que obliga a una escala menor que 1:75 (láminas de versiones anteriores): va en el papel automático
   const pf = await J(
-    "(r => ({ tam: r.tam, esc: r.esc, aviso: r.aviso }))(laSvg({ ...laOp(0), tam: 'A4', esc: undefined }))"
+    "(r => ({ tam: r.tam, esc: r.esc, aviso: r.aviso, auto: LA_ESC_AUTO.join() }))(laSvg({ ...laOp(0), tam: 'A4', esc: undefined }))"
   );
   ok(
-    pf.tam !== "A4" && pf.esc === 50 && /elija también la escala/.test(pf.aviso),
+    pf.tam !== "A4" && pf.esc === 50 && /elija también la escala/.test(pf.aviso) && /^50,75,100/.test(pf.auto),
     `papel fijo que obliga a una escala chica: va en el automático (${pf.tam} 1:${pf.esc})`
+  );
+  // Una zona que no entra en A1 a 1:75 sigue completa (a la escala que entra) y se puede dividir en láminas iguales (IE-01, IE-01A…), en A1 a 1:75, con su
+  // línea de corte y el número de la que sigue; a 1:100 elegida a mano, el aviso de la EM.010
+  const pt = await J(
+    `(() => { const op = { ...laOp(0), zona: 'rect', rect: [${OX}, ${OY}, ${OX} + 120 / EPL.f, ${OY} + 12 / EPL.f], num: 'IE-01' },
+      ps = laPartes(op), r0 = laSvg(op), a = r0.aviso, entero = r0.esc > 75 && !/no entra/.test(a), s0 = laSvg({ ...ps[0], _i: 0, _n: ps.length }, ps),
+      a100 = laSvg({ ...laOp(0), esc: 100 }).aviso;
+      return { entero, n: ps.length, nums: ps.map(p => p.num), esc: [...new Set(ps.map(p => laSvg(p, ps).esc))], tam: [...new Set(ps.map(p => laSvg(p, ps).tam))],
+        corte: s0.svg.includes('CONTINÚA EN LA LÁMINA IE-01A'), parte: laVistaTit(ps[1]), aviso: /divídala en [0-9]+ láminas/.test(a), a100: /EM[.]010/.test(a100) }; })()`
+  );
+  ok(
+    pt.entero &&
+      pt.n >= 2 &&
+      pt.nums[0] === "IE-01" &&
+      pt.nums[1] === "IE-01A" &&
+      pt.esc.join() === "75" &&
+      pt.tam.join() === "A1" &&
+      pt.corte &&
+      / · PARTE 2 DE /.test(pt.parte) &&
+      pt.aviso &&
+      pt.a100,
+    `planta que no entra en A1 a 1:75: ${pt.n} láminas (${pt.nums.join(", ")}), línea de corte y aviso EM.010 (${JSON.stringify(pt)})`
   );
   // El recorte es la planta, no toda el área de dibujo (a escala chica no se ve lo de al lado)
   const rc = await J(
@@ -3855,6 +3901,67 @@ prueba(
     );
   }
 );
+prueba("Tipo de cable según el uso (Regla 020-126): vivienda, oficina, criterio y designación con PVC", async ok => {
+  const al = () => ev("JSON.stringify(alertas(LAST).find(x => /020-126/.test(x[1])))").then(JSON.parse);
+  await ejemplo("uni");
+  let a = await al();
+  ok(a && a[0] === true && a[1] === "020-126" && /llama/.test(a[2]), "vivienda: no propagador de la llama");
+  await ejemplo("com");
+  a = await al();
+  ok(a && a[0] === true && a[1] === "020-126(3)" && /libres de halógenos/.test(a[2]), "oficina: libre de halógenos");
+  const poner = async (id, v) =>
+    ev(
+      `(() => { const el = $("${id}"); el.value = "${v}"; el.dispatchEvent(new Event("change", { bubbles: true })); el.dispatchEvent(new Event("input", { bubbles: true })); return 1; })()`
+    );
+  await poner("cableTipo", "llama");
+  await esperar(400);
+  a = await al();
+  ok(a && a[0] === false, "oficina con «no propagador de la llama»: incumple la 020-126(3)");
+  await poner("cableTipo", "auto");
+  await poner("desig", "THW-90");
+  await esperar(400);
+  a = await al();
+  ok(a && a[0] === false && /THW-90/.test(a[2]), "designación con PVC (THW-90) en un local público: se avisa");
+  ok(
+    await ev("estado().cableTipo === 'auto' && estado().desig === 'THW-90'"),
+    "el tipo de cable se guarda con el proyecto"
+  );
+});
+prueba("Profundidad de la varilla (Regla 060-702(3)(d)): cabeza + longitud, al menos 2.5 m", async ok => {
+  const al = () => ev("JSON.stringify(alertas(LAST).find(x => x[1] === '060-702(3)(d)'))").then(JSON.parse);
+  const poner = async (id, v) =>
+    ev(
+      `(() => { const el = $("${id}"); el.value = "${v}"; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`
+    );
+  await ejemplo("uni");
+  let a = await al();
+  ok(a && a[0] === true && /2\.65 m/.test(a[2]), "por defecto: cabeza a 0.25 m y varilla de 2.40 m = 2.65 m");
+  await poner("Lv", "2");
+  await esperar(400);
+  a = await al();
+  ok(a && a[0] === false, "varilla de 2 m con la cabeza a 0.25 m: no llega a 2.5 m");
+  await poner("pzCab", "0.6");
+  await esperar(400);
+  a = await al();
+  ok(a && a[0] === true && /2\.60 m/.test(a[2]), "con la cabeza a 0.60 m llega a 2.60 m");
+  ok(await ev("estado().pzCab === '0.6'"), "la profundidad de la cabeza se guarda con el proyecto");
+});
+prueba("Tema gris: las ventanas del editor y la hoja de cuentas sin fondos blancos", async ok => {
+  await ejemplo("uni");
+  const r = await J(`(() => {
+    aplicarTema("gris");
+    const sel = [".la-op", "#laTam", ".rev-lista", ".ca-tabla", ".bi-rejilla", ".bi-grupos", ".ta-lista", ".dc-cuerpo", ".met-cuerpo", ".si-cuerpo", ".adm-hoja-w"];
+    const lum = c => { const m = /rgba?[(]([^)]+)[)]/.exec(c); if (!m) return 0; const v = m[1].split(",").map(Number); if (v.length > 3 && v[3] < 0.5) return 0; return (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]) / 255; };
+    const out = sel.map(s => { const e = document.querySelector(s); return [s, e ? +lum(getComputedStyle(e).backgroundColor).toFixed(2) : -1]; });
+    aplicarTema("claro");
+    return out;
+  })()`);
+  const claros = r.filter(([, l]) => l > 0.45);
+  ok(
+    r.filter(([, l]) => l >= 0).length >= 8 && !claros.length,
+    `fondos oscuros en el tema gris (${claros.length ? "claros: " + claros.map(([s]) => s).join(", ") : r.length + " revisados"})`
+  );
+});
 prueba(
   "Niveles de iluminación: EM.010 por defecto, criterio del proyectista, bajo norma y ambientes propios",
   async ok => {
