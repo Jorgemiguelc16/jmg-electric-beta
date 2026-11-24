@@ -38,11 +38,37 @@ $("fileOpen").addEventListener("change", () => {
     }
     // Con su plano DXF (respaldo completo): el plano vuelve a la base del navegador
     o = await guardarPlanoDeArchivo(o);
-    aplicar(o);
-    $("openMsg").textContent = "";
-    msg.textContent = `Proyecto «${o.p_nombre || "sin nombre"}» abierto.`;
-    setTab("calculo");
-    abrirSegunFlujo();
+    /* El mismo proyecto ya está en este navegador con cambios más recientes que el archivo: abrir el archivo con su
+       identificador reemplazaría ese trabajo. Se abre como una copia aparte (el proyecto del navegador no cambia). */
+    const loc = o.id ? libLoad()[o.id] : null,
+      fecha = d => {
+        const x = new Date(d);
+        return isNaN(x)
+          ? "—"
+          : `${x.toLocaleDateString("es-PE")} a las ${x.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}`;
+      };
+    const abrir = p => {
+      aplicar(p);
+      saveDraft();
+      $("openMsg").textContent = "";
+      msg.textContent = `Proyecto «${p.p_nombre || "sin nombre"}» abierto.`;
+      setTab("calculo");
+      abrirSegunFlujo();
+    };
+    if (loc && String(loc.savedAt || "") > String(o.savedAt || "")) {
+      const copia = { ...o, id: nuevoId(), p_nombre: `${o.p_nombre || "Proyecto"} (archivo del ${fecha(o.savedAt)})` };
+      confirmar(
+        "Este proyecto tiene cambios más recientes en el navegador",
+        `<p>El archivo es del <b>${fecha(o.savedAt)}</b>, pero en este navegador «${esc(loc.p_nombre || "")}» se guardó el <b>${fecha(loc.savedAt)}</b>.</p><p>Para no perder esos cambios, el archivo se abre como una <b>copia aparte</b>: «${esc(copia.p_nombre)}». El proyecto del navegador sigue en Proyectos, sin cambios.</p>`,
+        "Abrir como copia",
+        ok => {
+          if (ok) abrir(copia);
+        },
+        "Proteger su trabajo"
+      );
+      return;
+    }
+    abrir(o);
   };
   rd.readAsText(f);
 });

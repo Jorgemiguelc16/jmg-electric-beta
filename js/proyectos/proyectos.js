@@ -201,6 +201,24 @@ async function alTodo(pre) {
     r.onerror = () => mal(r.error);
   });
 }
+// Claves (sin leer los valores) de los registros cuya clave empieza con el prefijo
+async function alClaves(pre) {
+  const db = await alDb();
+  return new Promise((ok, mal) => {
+    const out = [],
+      r = db
+        .transaction("p")
+        .objectStore("p")
+        .openKeyCursor(IDBKeyRange.bound(pre, pre + "￿"));
+    r.onsuccess = () => {
+      const c = r.result;
+      if (!c) return ok(out);
+      out.push(c.key);
+      c.continue();
+    };
+    r.onerror = () => mal(r.error);
+  });
+}
 async function alLeer(k) {
   const db = await alDb();
   return new Promise((ok, mal) => {
@@ -273,6 +291,33 @@ function alProgramar() {
   clearTimeout(AL_T);
   AL_T = setTimeout(alEscribir, 250);
 }
+/* Versiones anteriores de cada proyecto (en la misma base): una copia cada AL_V_PASO como máximo mientras se trabaja,
+   las AL_V_MAX más recientes. Si algo pisa el trabajo (un archivo .json antiguo, otra pestaña, otro equipo), la versión
+   se recupera desde Proyectos › Versiones. Claves «…#v/id/fecha», fuera del rango de la biblioteca («…/id»). */
+const AL_VPRE = LKEY + "#v/",
+  AL_V_MAX = 20,
+  AL_V_PASO = 10 * 60 * 1000,
+  AL_VULT = new Map();
+async function alVersion(o, forzar = false) {
+  if (!AL_HAY || !o || !o.id || o._idb || !o.savedAt) return;
+  const pre = AL_VPRE + o.id + "/";
+  if (!AL_VULT.has(o.id)) {
+    const ks = await alClaves(pre);
+    AL_VULT.set(o.id, ks.length ? Date.parse(ks[ks.length - 1].slice(pre.length)) || 0 : 0);
+  }
+  const t = Date.parse(o.savedAt) || Date.now();
+  if (!forzar && t - AL_VULT.get(o.id) < AL_V_PASO) return;
+  await alPut(pre + o.savedAt, o);
+  AL_VULT.set(o.id, t);
+  const ks = await alClaves(pre);
+  for (const k of ks.slice(0, Math.max(0, ks.length - AL_V_MAX))) await alPut(k);
+}
+// Versiones guardadas de un proyecto, de la más reciente a la más antigua: [{ k, f }]
+async function alVersiones(id) {
+  if (!AL_HAY) return [];
+  const pre = AL_VPRE + id + "/";
+  return (await alClaves(pre)).map(k => ({ k, f: k.slice(pre.length) })).reverse();
+}
 async function alEscribir() {
   if (!AL_LISTO) return alProgramar();
   try {
@@ -280,6 +325,7 @@ async function alEscribir() {
       if (o && o.id && !o._idb && AL_ESCRITO.get(o.id) !== o.savedAt) {
         await alPut(LKEY + "/" + o.id, o);
         AL_ESCRITO.set(o.id, o.savedAt);
+        await alVersion(o);
       }
     for (const id of [...AL_ESCRITO.keys()])
       if (!LIB[id]) {
@@ -389,13 +435,121 @@ function guardarBorrador(s, o) {
   if (!AL_HAY) return;
   AL_BORR = o;
   clearTimeout(AL_BT);
-  AL_BT = setTimeout(() => alPut(SKEY, AL_BORR).catch(() => {}), 250);
+  AL_PEND = true;
+  AL_BT = setTimeout(
+    () =>
+      alPut(SKEY, AL_BORR)
+        .then(() => (AL_PEND = false))
+        .catch(e =>
+          toast(
+            "No se pudo guardar el proyecto en el navegador: " +
+              (e && e.message ? e.message : e) +
+              ". Descargue una copia .json ahora."
+          )
+        ),
+    250
+  );
+}
+let AL_PEND = false;
+/* Al cerrar o recargar la pestaña con algo por guardar (el diseño del editor en su medio segundo de espera, o la
+   escritura a la base aún en curso): se guarda en el momento y el navegador pregunta antes de cerrar */
+addEventListener("beforeunload", e => {
+  const ed = typeof ED !== "undefined" && ED.tAuto;
+  if (ed && typeof edGuardarYa === "function") edGuardarYa();
+  if (
+    ed ||
+    AL_PEND ||
+    (typeof AL_T !== "undefined" &&
+      AL_T &&
+      LIB &&
+      Object.values(LIB).some(o => o && o.id && !o._idb && AL_ESCRITO.get(o.id) !== o.savedAt))
+  ) {
+    if (AL_HAY && AL_BORR) alPut(SKEY, AL_BORR).catch(() => {});
+    if (AL_HAY) alEscribir();
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+/* El mismo proyecto abierto en dos pestañas: cada una tiene su copia en memoria, y la que quedó atrás, al guardar,
+   pisaría el trabajo de la otra. Cada guardado se anuncia a las demás pestañas (BroadcastChannel); la que tiene el
+   mismo proyecto deja de guardar y pide recargarse, para seguir con lo último. */
+const PESTANA = Math.random().toString(36).slice(2),
+  AL_CANAL =
+    typeof BroadcastChannel !== "undefined"
+      ? new BroadcastChannel((BETA ? "jmg-electric-beta" : "jmg-electric") + "-pestanas")
+      : null;
+let PESTANA_VIEJA = false,
+  PESTANA_AV = 0;
+function avisoPestana() {
+  if (Date.now() - PESTANA_AV < 20000) return;
+  PESTANA_AV = Date.now();
+  confirmar(
+    "Este proyecto se guardó en otra pestaña",
+    `<p>«${esc($("p_nombre").value.trim() || "Proyecto")}» está abierto también en otra pestaña o ventana, y allí se guardaron cambios más recientes.</p><p>Para no pisar ese trabajo, <b>esta pestaña ya no guarda</b>. Recárguela para seguir con lo último (o siga trabajando en la otra).</p>`,
+    "Recargar esta pestaña",
+    ok => {
+      if (ok) location.reload();
+    },
+    "Proteger su trabajo"
+  );
+}
+if (AL_CANAL)
+  AL_CANAL.onmessage = e => {
+    const m = e.data || {};
+    if (m.t === "guardado" && m.id && m.id === PID && m.tab !== PESTANA && !PESTANA_VIEJA) {
+      PESTANA_VIEJA = true;
+      avisoPestana();
+      guardadoEstado();
+      if (typeof edEstado === "function" && typeof ED !== "undefined" && ED.abierto) edEstado();
+    }
+  };
+/* Último guardado del proyecto (hora) para el estado de la barra: «Guardado a las 10:42» */
+let GUARDADO_T = 0;
+const hhmm = t => new Date(t).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
+// Texto del estado del guardado (barra de título y barra de estado)
+function guardadoTxt() {
+  const n = $("p_nombre").value.trim();
+  if (PESTANA_VIEJA) return "⚠ No guarda: abierto en otra pestaña";
+  if (!n) return "Sin nombre · no se guarda";
+  if (/^EJEMPLO\b/.test(n)) return "Ejemplo · no se guarda";
+  return GUARDADO_T ? `Guardado a las ${hhmm(GUARDADO_T)}` : "Se guarda solo";
+}
+function guardadoEstado() {
+  const el = $("gdEstado");
+  if (el) {
+    el.textContent = guardadoTxt();
+    el.classList.toggle("mal", PESTANA_VIEJA);
+  }
+}
+/* Guardar (botón de la barra y Ctrl+S): el guardado es automático, y además este botón guarda en el momento y deja
+   una versión con fecha (Proyectos › Versiones), un punto al que se puede volver */
+async function guardarAhora() {
+  const n = $("p_nombre").value.trim();
+  if (!n || /^EJEMPLO\b/.test(n)) {
+    guardadoEstado();
+    return toast(
+      n ? "Los ejemplos no se guardan: póngale otro nombre al proyecto" : "Asigne un nombre al proyecto para guardarlo"
+    );
+  }
+  if (PESTANA_VIEJA) return avisoPestana();
+  saveDraft();
+  try {
+    await alEscribir();
+    const o = libLoad()[PID];
+    if (o) await alVersion(o, true);
+    toast(`Proyecto guardado a las ${hhmm(GUARDADO_T || Date.now())} · versión creada (Proyectos › Versiones)`);
+  } catch (e) {
+    toast("No se pudo guardar en el navegador: " + (e && e.message ? e.message : e) + ". Descargue una copia .json.");
+  }
+  if (typeof hdrEstado === "function") hdrEstado();
 }
 function saveDraft() {
+  if (PESTANA_VIEJA) return avisoPestana();
   if (esEjemplo()) {
     PID = null;
     const s = JSON.stringify(estado());
-    return guardarBorrador(s, JSON.parse(s));
+    guardarBorrador(s, JSON.parse(s));
+    return guardadoEstado();
   }
   if ($("p_nombre").value.trim() && !PID) PID = nuevoId();
   // Una copia (no los mismos arreglos de la pantalla, que siguen cambiando)
@@ -406,7 +560,10 @@ function saveDraft() {
     const L = libLoad();
     L[PID] = o;
     libSave(L);
+    if (AL_CANAL) AL_CANAL.postMessage({ t: "guardado", id: PID, tab: PESTANA });
+    GUARDADO_T = Date.now();
   }
+  guardadoEstado();
 }
 function loadDraftLocal() {
   let o = null;
@@ -1007,6 +1164,8 @@ function aplicar(o) {
   }
   const n = normalizar(o);
   PID = n.id;
+  // El estado del guardado muestra la hora del proyecto abierto
+  GUARDADO_T = Date.parse(o && o.savedAt) || 0;
   KEYS.forEach(k => {
     if (n.campos[k] !== undefined) ponerDato(k, n.campos[k]);
   });
@@ -1144,7 +1303,9 @@ function cargarEjemplo(m) {
   calcularAhora();
   irSec("resultados");
 }
-let DELQ = null;
+let DELQ = null,
+  // Proyecto con su lista de versiones abierta y las versiones leídas ({ id, vs })
+  VERQ = null;
 function renderProy() {
   const L = libLoad(),
     arr = Object.values(L)
@@ -1172,8 +1333,18 @@ function renderProy() {
     <td class="t"><div class="acts-row">${
       DELQ === o.id
         ? `<span class="hint">¿Eliminar?</span><button type="button" class="btn sm" data-pa="del-ok" data-id="${o.id}">Sí, eliminar</button><button type="button" class="btn sec sm" data-pa="del-no">Cancelar</button>`
-        : `<button type="button" class="btn sm" data-pa="open" data-id="${o.id}">Abrir</button><button type="button" class="btn sec sm" data-pa="dup" data-id="${o.id}">Duplicar</button><button type="button" class="btn sec sm" data-pa="exp" data-id="${o.id}">Exportar</button><button type="button" class="btn sec sm" data-pa="del" data-id="${o.id}">Eliminar</button>`
-    }</div></td></tr>`
+        : `<button type="button" class="btn sm" data-pa="open" data-id="${o.id}">Abrir</button><button type="button" class="btn sec sm" data-pa="dup" data-id="${o.id}">Duplicar</button><button type="button" class="btn sec sm" data-pa="exp" data-id="${o.id}">Exportar</button><button type="button" class="btn sec sm" data-pa="ver" data-id="${o.id}" title="Copias guardadas mientras trabajaba (una cada 10 minutos, las 20 más recientes)">Versiones</button><button type="button" class="btn sec sm" data-pa="del" data-id="${o.id}">Eliminar</button>`
+    }</div></td></tr>${
+      VERQ && VERQ.id === o.id
+        ? `<tr class="ver-fila"><td class="t" colspan="5"><div class="ver-lista"><b>Versiones anteriores de «${esc(o.p_nombre)}»</b> <span class="hint">· se restauran como una copia; el proyecto actual no cambia</span>${
+            !VERQ.vs
+              ? '<p class="hint">Leyendo…</p>'
+              : !VERQ.vs.length
+                ? '<p class="hint">Aún no hay versiones guardadas de este proyecto (se guarda una cada 10 minutos mientras trabaja).</p>'
+                : `<ul>${VERQ.vs.map(v => `<li><span>${f(v.f)}</span><button type="button" class="btn sec sm" data-pa="ver-rest" data-id="${o.id}" data-k="${esc(v.k)}">Restaurar como copia</button></li>`).join("")}</ul>`
+          }<button type="button" class="btn sec sm" data-pa="ver-no">Cerrar</button></div></td></tr>`
+        : ""
+    }`
       )
       .join("")}</tbody></table><p class="hint al-uso" id="alUso"></p>`;
   alUso();
@@ -1213,6 +1384,36 @@ $("projList").addEventListener("click", async e => {
       if (downloads) await downloads.save({ filename: `JMG-ELECTRIC - ${nm}.json`, data: blob });
       else descargarLocal(blob, `JMG-ELECTRIC - ${nm}.json`);
     } catch (err) {}
+  }
+  if (a === "ver" && o) {
+    VERQ = { id: o.id, vs: null };
+    renderProy();
+    try {
+      VERQ.vs = await alVersiones(o.id);
+    } catch (err) {
+      VERQ.vs = [];
+    }
+  }
+  if (a === "ver-no") VERQ = null;
+  if (a === "ver-rest" && o) {
+    try {
+      const v = await alLeer(b.dataset.k);
+      if (v && v.app === "JMG-ELECTRIC") {
+        const id = nuevoId(),
+          fv = new Date(v.savedAt);
+        L[id] = {
+          ...v,
+          id,
+          p_nombre: `${v.p_nombre} (versión del ${fv.toLocaleDateString("es-PE")} ${fv.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })})`,
+          savedAt: new Date().toISOString()
+        };
+        libSave(L);
+        VERQ = null;
+        toast(`Versión restaurada como «${L[id].p_nombre}»: ábrala desde la lista`);
+      } else toast("Esa versión ya no está en el navegador");
+    } catch (err) {
+      toast("No se pudo leer la versión: " + (err && err.message ? err.message : err));
+    }
   }
   if (a === "del") DELQ = b.dataset.id;
   if (a === "del-no") DELQ = null;

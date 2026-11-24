@@ -1134,3 +1134,15 @@ body.arrastrando * {
     display: none;
   }
 }
+
+/* Estado del guardado junto a los botones de acceso rápido: «Guardado a las 10:42» */
+.gd-estado {
+  margin-left: 8px;
+  font: 500 11.5px var(--f-body);
+  color: #9fd8a8;
+  white-space: nowrap;
+}
+.gd-estado.mal {
+  color: #ff9b8f;
+  font-weight: 700;
+}

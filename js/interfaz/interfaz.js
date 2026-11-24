@@ -178,6 +178,7 @@ function hdrEstado() {
   b.hidden = !(n && !/^EJEMPLO\b/.test(n));
   b.querySelector("b").textContent = n;
   b.dataset.ayuda = n ? `Abrir «${n}» en el espacio de trabajo` : "";
+  if (typeof guardadoEstado === "function") guardadoEstado();
 }
 /* Datos que salen del plano con «Calcular con el diseño» (ids de los campos): no se revisan ni se piden */
 function planoOmitidos(D) {

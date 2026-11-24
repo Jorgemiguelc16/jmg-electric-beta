@@ -40,6 +40,23 @@
 .ed-b.ok:hover {
   background: #d68b3a;
 }
+/* Descartar cambios: secundario y apartado de Guardar y Volver al proyecto */
+.ed-b.sec {
+  border-color: transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+.ed-b.sec:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+.ed-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.25);
+}
 .ed-b:disabled {
   opacity: 0.4;
   cursor: default;
@@ -52,6 +69,11 @@
 }
 .ed-sucio.ok {
   color: #9fd8a8;
+}
+/* Otra pestaña guardó el proyecto: esta ya no guarda */
+.ed-sucio.mal {
+  color: #ff9b8f;
+  font-weight: 700;
 }
 /* Cuerpo: plantas y capas | plano | propiedades */
 .ed-main {

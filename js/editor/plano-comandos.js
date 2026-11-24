@@ -479,16 +479,30 @@ function edAutoguardar(forzar) {
   ED.recT = t;
   const s = edSnap();
   try {
-    if (s === ED.base) localStorage.removeItem(ED_REC);
-    else localStorage.setItem(ED_REC, JSON.stringify({ f: t, p: $("p_nombre").value.trim(), s }));
-  } catch (e) {}
+    if (s === ED.base) {
+      localStorage.removeItem(ED_REC);
+      if (typeof alPut === "function" && AL_HAY) alPut(ED_REC).catch(() => {});
+    } else localStorage.setItem(ED_REC, JSON.stringify({ f: t, p: $("p_nombre").value.trim(), s }));
+  } catch (e) {
+    /* Un diseño grande no cabe en el almacenamiento pequeño (unos 5 MB): la copia va a la base del navegador y aquí
+       queda una marca con su fecha */
+    if (typeof alPut === "function" && AL_HAY) {
+      const r = { f: t, p: $("p_nombre").value.trim(), s };
+      alPut(ED_REC, r).catch(() => {});
+      try {
+        localStorage.setItem(ED_REC, JSON.stringify({ f: t, p: r.p, idb: true }));
+      } catch (e2) {}
+    }
+  }
 }
 setInterval(() => edAutoguardar(true), 30000);
 addEventListener("pagehide", () => edAutoguardar(true));
-function edRecuperar() {
+async function edRecuperar() {
   let r = null;
   try {
     r = JSON.parse(localStorage.getItem(ED_REC) || "null");
+    // La copia grande está en la base del navegador
+    if (r && r.idb && typeof alLeer === "function") r = (await alLeer(ED_REC)) || null;
   } catch (e) {}
   if (!r || r.f >= (ED.t0 || 0) || r.p !== $("p_nombre").value.trim() || r.s === ED.base) return;
   const f = new Date(r.f);
@@ -499,6 +513,7 @@ function edRecuperar() {
     ok => {
       try {
         localStorage.removeItem(ED_REC);
+        if (typeof alPut === "function" && AL_HAY) alPut(ED_REC).catch(() => {});
       } catch (e) {}
       if (!ok) return;
       EPL = JSON.parse(r.s);

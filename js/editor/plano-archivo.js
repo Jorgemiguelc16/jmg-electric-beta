@@ -319,6 +319,13 @@ function edGuardarLuego() {
 function edGuardarYa() {
   clearTimeout(ED.tAuto);
   ED.tAuto = null;
+  /* Otra pestaña guardó este proyecto después: aquí no se guarda (pisaría ese trabajo); los cambios de esta pestaña
+     quedan en la copia de recuperación del editor y se avisa que hay que recargar */
+  if (typeof PESTANA_VIEJA !== "undefined" && PESTANA_VIEJA) {
+    if (ED.abierto) edAutoguardar(true);
+    avisoPestana();
+    return edEstado();
+  }
   if (ED.abierto && edSnap() !== ED.base) {
     PLANO = EPL ? clon(EPL) : null;
     ED.base = edSnap();
@@ -359,9 +366,16 @@ function edEstado() {
     cambio = pend || ED.base !== ED.ini;
   $("edUndo").disabled = ED.hist.length < 2;
   $("edRedo").disabled = !ED.redo.length;
-  $("edSucio").hidden = !cambio;
-  $("edSucio").textContent = pend ? "Guardando…" : "✓ Guardado en el proyecto";
-  $("edSucio").classList.toggle("ok", !pend);
+  // Otra pestaña guardó este proyecto después: esta ya no guarda (js/proyectos/proyectos.js, PESTANA_VIEJA)
+  const vieja = typeof PESTANA_VIEJA !== "undefined" && PESTANA_VIEJA;
+  $("edSucio").hidden = !cambio && !vieja;
+  $("edSucio").textContent = vieja
+    ? "⚠ Sin guardar: el proyecto se guardó en otra pestaña (recargue)"
+    : pend
+      ? "Guardando…"
+      : "✓ Guardado en el proyecto";
+  $("edSucio").classList.toggle("ok", !pend && !vieja);
+  $("edSucio").classList.toggle("mal", vieja);
   $("edDescartar").disabled = !cambio;
 }
 /* Guarda ya el diseño en el proyecto (al volver al proyecto): entra al historial de deshacer del proyecto y, la
@@ -405,10 +419,15 @@ function edCancelar() {
   if (edSnap() === ED.ini) return edCerrar();
   confirmar(
     "¿Descartar los cambios del diseño?",
-    "<p>El diseño se guarda solo en el proyecto mientras trabaja. <b>Descartar cambios</b> lo vuelve a como estaba al abrir el editor: se pierden el plano, la escala, las capas, las plantas y los elementos que agregó o cambió desde entonces.</p>",
+    "<p>El diseño se guarda solo en el proyecto mientras trabaja. <b>Descartar cambios</b> lo vuelve a como estaba al abrir el editor: se quitan el plano, la escala, las capas, las plantas y los elementos que agregó o cambió desde entonces.</p><p>Antes se guarda una <b>versión</b> con lo actual: si se arrepiente, la recupera en Proyectos › Versiones.</p>",
     "Descartar cambios",
     ok => {
       if (!ok) return edEstado();
+      // Una versión con lo actual (Proyectos › Versiones), por si el descarte fue un error
+      try {
+        const o = JSON.parse(JSON.stringify(estado()));
+        if (o.id && o.p_nombre && typeof alVersion === "function") alVersion(o, true).catch(() => {});
+      } catch (e) {}
       try {
         localStorage.removeItem(ED_REC);
       } catch (e) {}

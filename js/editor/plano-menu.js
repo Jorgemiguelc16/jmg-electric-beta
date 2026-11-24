@@ -786,7 +786,10 @@ $("editor").addEventListener("click", e => {
     if (a === "undo") edHist(-1);
     else if (a === "redo") edHist(1);
     else if (a === "aplicar") edAplicar();
-    else if (a === "aceptar") {
+    else if (a === "guardar") {
+      edAplicar();
+      guardarAhora();
+    } else if (a === "aceptar") {
       edAplicar();
       edCerrar();
     } else if (a === "cancelar") edCancelar();

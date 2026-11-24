@@ -3962,6 +3962,108 @@ prueba("Tema gris: las ventanas del editor y la hoja de cuentas sin fondos blanc
     `fondos oscuros en el tema gris (${claros.length ? "claros: " + claros.map(([s]) => s).join(", ") : r.length + " revisados"})`
   );
 });
+prueba("Guardar: botón y Ctrl+S, estado «Guardado a las…» y una versión con fecha", async ok => {
+  await ejemplo("uni");
+  ok((await ev("$('gdEstado').textContent")) === "Ejemplo · no se guarda", "un ejemplo no se guarda y lo dice");
+  await poner("#p_nombre", "Prueba del botón Guardar");
+  await esperar(300);
+  const id = await ev("PID");
+  const v0 = JSON.parse(await ev(`(async () => JSON.stringify((await alVersiones(${JSON.stringify(id)})).length))()`));
+  await cdp("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "s",
+    code: "KeyS",
+    windowsVirtualKeyCode: 83,
+    modifiers: 2
+  });
+  await esperar(600);
+  const st = await ev("$('gdEstado').textContent");
+  ok(/^Guardado a las \d{1,2}:\d{2}/.test(st), `Ctrl+S guarda y la barra lo dice («${st}»)`);
+  const v1 = JSON.parse(await ev(`(async () => JSON.stringify((await alVersiones(${JSON.stringify(id)})).length))()`));
+  ok(v1 === v0 + 1, `Guardar deja una versión con fecha (${v0} → ${v1})`);
+  ok(
+    await ev(
+      "!!document.querySelector('#editor [data-ed=\"guardar\"]') && document.querySelector('#edDescartar').classList.contains('sec')"
+    ),
+    "el editor tiene su botón Guardar y «Descartar cambios» queda apartado"
+  );
+  await ev(
+    `(async () => { for (const x of await alVersiones(${JSON.stringify(id)})) await alPut(x.k); const L = libLoad(); delete L[${JSON.stringify(id)}]; libSave(L); return 1; })()`
+  );
+});
+prueba("Proteger el trabajo: .json antiguo como copia, otra pestaña y versiones anteriores", async ok => {
+  await ejemplo("uni");
+  // Un proyecto con nombre (los ejemplos no se guardan en la biblioteca)
+  await poner("#p_nombre", "Prueba de guardado");
+  await ev("saveDraft(); 1");
+  await esperar(400);
+  const id0 = await ev("PID");
+  ok(!!id0 && (await ev(`!!libLoad()[${JSON.stringify(id0)}]`)), "el proyecto está en la biblioteca");
+  // 1. Un archivo .json más antiguo del mismo proyecto: se abre como copia y el del navegador no cambia
+  const viejo = await J(
+    `(o => ({ ...o, savedAt: "2020-01-01T00:00:00.000Z", p_prop: "DEL ARCHIVO VIEJO" }))(JSON.parse(JSON.stringify(libLoad()[${JSON.stringify(id0)}])))`
+  );
+  const dir = mkdtempSync(join(tmpdir(), "jmg-json-")),
+    arch = join(dir, "viejo.json");
+  writeFileSync(arch, JSON.stringify(viejo));
+  await cdp("DOM.enable");
+  const doc = await cdp("DOM.getDocument", {});
+  const q = await cdp("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: "#fileOpen" });
+  await cdp("DOM.setFileInputFiles", { nodeId: q.result.nodeId, files: [arch] });
+  for (let i = 0; i < 30 && (await ev("$('cfmDlg').hidden")); i++) await esperar(100);
+  ok(
+    await ev("!$('cfmDlg').hidden && /más recientes en el navegador/.test($('cfmT').textContent)"),
+    "al abrir el .json antiguo se avisa que el navegador tiene cambios más recientes"
+  );
+  await clic('#cfmDlg [data-cf="si"]');
+  await esperar(500);
+  const r1 = await J(
+    `(() => { const L = libLoad(), o = L[${JSON.stringify(id0)}]; return { pid: PID, prop0: o.p_prop, copia: (L[PID] || {}).p_nombre || "" }; })()`
+  );
+  ok(
+    r1.pid !== id0 && r1.prop0 !== "DEL ARCHIVO VIEJO" && /\(archivo del /.test(r1.copia),
+    `se abre como copia («${r1.copia}») y el proyecto del navegador no cambia`
+  );
+  // 2. Otra pestaña guarda el mismo proyecto: esta deja de guardar y pide recargar
+  await ev(`(() => { const L = libLoad(); aplicar(L[${JSON.stringify(id0)}]); return 1; })()`);
+  const f0 = await ev(`libLoad()[${JSON.stringify(id0)}].savedAt`);
+  await ev(
+    `new BroadcastChannel((BETA ? "jmg-electric-beta" : "jmg-electric") + "-pestanas").postMessage({ t: "guardado", id: ${JSON.stringify(id0)}, tab: "otra" }); 1`
+  );
+  await esperar(300);
+  ok(await ev("PESTANA_VIEJA && !$('cfmDlg').hidden"), "el aviso pide recargar esta pestaña");
+  await ev("cerrarCfm(false); 1");
+  await poner("#p_prop", "CAMBIO EN LA PESTAÑA VIEJA");
+  await ev("saveDraft(); cerrarCfm(false); 1");
+  await esperar(300);
+  ok(
+    (await ev(`libLoad()[${JSON.stringify(id0)}].savedAt`)) === f0 &&
+      (await ev(`libLoad()[${JSON.stringify(id0)}].p_prop`)) !== "CAMBIO EN LA PESTAÑA VIEJA",
+    "la pestaña vieja ya no guarda (no pisa el trabajo de la otra)"
+  );
+  await ev("PESTANA_VIEJA = false; 1");
+  // 3. Versiones anteriores: una cada 10 minutos, se listan y se restauran como copia
+  const vs = JSON.parse(
+    await ev(`(async () => {
+      const o = { ...JSON.parse(JSON.stringify(libLoad()[${JSON.stringify(id0)}])), id: "versiones-prueba" };
+      await alVersion({ ...o, savedAt: "2026-01-01T10:00:00.000Z" });
+      await alVersion({ ...o, savedAt: "2026-01-01T10:05:00.000Z" });
+      await alVersion({ ...o, savedAt: "2026-01-01T10:12:00.000Z" });
+      const v = await alVersiones("versiones-prueba");
+      for (const x of v) await alPut(x.k);
+      return JSON.stringify(v.map(x => x.f));
+    })()`)
+  );
+  ok(
+    JSON.stringify(vs) === JSON.stringify(["2026-01-01T10:12:00.000Z", "2026-01-01T10:00:00.000Z"]),
+    `versiones cada 10 minutos, la más reciente primero (${vs.join(", ")})`
+  );
+  await ev("renderProy(); 1");
+  ok(await ev("!!document.querySelector('#projList [data-pa=\"ver\"]')"), "botón «Versiones» en la lista de proyectos");
+  await ev(
+    `(() => { const L = libLoad(); Object.keys(L).filter(k => /Prueba de guardado/.test(L[k].p_nombre)).forEach(k => delete L[k]); libSave(L); return 1; })()`
+  );
+});
 prueba(
   "Niveles de iluminación: EM.010 por defecto, criterio del proyectista, bajo norma y ambientes propios",
   async ok => {

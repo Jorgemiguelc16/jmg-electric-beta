@@ -1795,3 +1795,31 @@ input::placeholder {
 .how .deliv {
   border-top: 0;
 }
+/* Proyectos › Versiones: lista de las copias guardadas de un proyecto, bajo su fila */
+.ver-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel2);
+}
+.ver-lista ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow: auto;
+}
+.ver-lista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ver-lista > .btn {
+  align-self: flex-start;
+}

@@ -264,6 +264,13 @@ function histGo(dir) {
   qaHist();
   toast(dir < 0 ? "Cambio deshecho" : "Cambio rehecho");
 }
+// Ctrl+S: guardar (también con el editor de diseño abierto, que primero pasa su diseño al proyecto)
+addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s" || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  if (document.body.classList.contains("ed-on") && typeof edGuardarYa === "function") edGuardarYa();
+  guardarAhora();
+});
 addEventListener("keydown", e => {
   // Con el editor de diseño abierto, Ctrl+Z deshace en el editor (js/editor/plano-*.js)
   if ($("ws").hidden || !(e.ctrlKey || e.metaKey) || document.body.classList.contains("ed-on")) return;
@@ -285,8 +292,7 @@ function wsRefresh(F) {
   $("ws").dataset.mode = MODE;
   const r = LAST;
   panelProyecto();
-  const ok = r && r.alims.every(a => a.ok) && r.circ.every(q => q.ok),
-    hh = new Date().toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
+  const ok = r && r.alims.every(a => a.ok) && r.circ.every(q => q.ok);
   $("wsStatus").innerHTML =
     `<div>Modo edición</div><div>${AUTO ? `<span class="g">●</span> Cálculo automático` : `<span class="w">●</span> Cálculo manual · F9`}</div>` +
     (r
@@ -295,7 +301,7 @@ function wsRefresh(F) {
           vivoDatos(r)
         )
       : `<div class="w">${WSF.length} dato${WSF.length === 1 ? "" : "s"} pendiente${WSF.length === 1 ? "" : "s"}</div>`) +
-    `<div class="r">${n && !/^EJEMPLO\b/.test(n) ? `Guardado ${hh}` : /^EJEMPLO\b/.test(n) ? "Ejemplo · no se guarda" : "Sin nombre · no se guarda"}${typeof nubeTxt === "function" ? " · " + nubeTxt() : ""} · ${VERSION}</div>`;
+    `<div class="r">${guardadoTxt()}${typeof nubeTxt === "function" ? " · " + nubeTxt() : ""} · ${VERSION}</div>`;
   if (!$("ws").hidden) exTree();
   if (FC_KEY && !FC_APL) renderFicha();
   if (TC_PEND) tcSync();
@@ -333,13 +339,8 @@ $("ws").addEventListener("click", e => {
   else if (a === "lux") luxAbrir();
   else if (a === "precios") preciosUnitarios(true);
   else if (a === "json") $("btnSave").click();
-  else if (a === "guardar") {
-    saveDraft();
-    hdrEstado();
-    toast(
-      $("p_nombre").value.trim() ? "Proyecto guardado en este navegador" : "Asigne un nombre al proyecto para guardarlo"
-    );
-  } else if (a === "salir") cerrarWS(false);
+  else if (a === "guardar") guardarAhora();
+  else if (a === "salir") cerrarWS(false);
   else if (a === "modo") {
     // Abre Datos del proyecto con el tipo de edificación enfocado: el cambio, que es grande, se confirma al aplicar
     abrirDatos("proy");
