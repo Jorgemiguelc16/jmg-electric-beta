@@ -5,5 +5,13 @@
   "singleQuote": false,
   "trailingComma": "none",
   "arrowParens": "avoid",
-  "endOfLine": "crlf"
+  "endOfLine": "crlf",
+  "overrides": [
+    {
+      "files": "index.html",
+      "options": {
+        "htmlWhitespaceSensitivity": "strict"
+      }
+    }
+  ]
 }

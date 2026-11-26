@@ -366,7 +366,7 @@ function edEstado() {
     cambio = pend || ED.base !== ED.ini;
   $("edUndo").disabled = ED.hist.length < 2;
   $("edRedo").disabled = !ED.redo.length;
-  // Otra pestaña guardó este proyecto después: esta ya no guarda (js/proyectos/proyectos.js, PESTANA_VIEJA)
+  // Otra pestaña guardó este proyecto después: esta ya no guarda (js/proyectos/almacen.js, PESTANA_VIEJA)
   const vieja = typeof PESTANA_VIEJA !== "undefined" && PESTANA_VIEJA;
   $("edSucio").hidden = !cambio && !vieja;
   $("edSucio").textContent = vieja

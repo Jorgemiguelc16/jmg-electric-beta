@@ -508,14 +508,6 @@ span.jmg-mono.ap-logo {
   width: 20px;
   height: auto;
 }
-.ex-cv-top .jmg-sello {
-  box-shadow: none;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-}
-.ex-cv-top .jmg-sello svg {
-  width: 120px;
-}
 @media (max-width: 560px) {
   .jmg-sello svg {
     width: 104px;

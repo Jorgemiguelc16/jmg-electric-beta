@@ -24,9 +24,10 @@ El detalle de la arquitectura está en **`GUIA-DEL-CODIGO.md`** → leer la secc
 | `planos/` | láminas SVG: unifilar, tableros, medidores, rótulo; piezas comunes en `dibujo.js` |
 | `exportar/` | Excel (ExcelJS), expediente, descargas |
 | `ventanas/` | ventanas modales (`ventana.js` es la base) |
-| `interfaz/`, `resultados/`, `proyectos/`, `cuenta/` | UI general, resultados/metrado/presupuesto, guardar/respaldo, Firebase (acceso, admin, nube) |
+| `interfaz/`, `resultados/`, `cuenta/` | UI general, resultados/metrado/presupuesto, Firebase (acceso, admin, nube) |
+| `proyectos/` | datos del proyecto (`proyectos.js`), validar al abrir (`validar.js`), almacén, guardado y versiones (`almacen.js`), lista (`biblioteca.js`), .json y respaldo |
 
-Todo se carga con `<script>` en `index.html` (orden importa; `npm run revisar` lo controla). Estilos en `css/` (10 archivos, tokens en `temas.css`/`paletas.css`).
+Todo se carga con `<script>` en `index.html` (orden importa; `npm run revisar` lo controla). Estilos en `css/` (12 archivos, tokens en `temas.css`/`paletas.css`).
 
 ### Vocabulario del editor (nombres en el código)
 

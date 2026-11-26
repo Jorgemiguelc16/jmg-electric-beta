@@ -218,100 +218,6 @@
     padding-left: 22px;
     font-size: 9pt;
   }
-  .ex-cover {
-    height: 257mm;
-    display: flex;
-    flex-direction: column;
-    border: 1.5px solid #14304f;
-    padding: 16mm 14mm 10mm;
-    break-after: page;
-  }
-  .ex-cv-top {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding-bottom: 12px;
-    border-bottom: 3px solid #9a5a23;
-  }
-  .ex-cv-top img {
-    width: 64px;
-    height: 64px;
-  }
-  .ex-cv-top b {
-    display: block;
-    font-size: 17pt;
-    color: #14304f;
-    letter-spacing: 0.04em;
-  }
-  .ex-cv-top span {
-    font-size: 9pt;
-    color: #5a6775;
-  }
-  .ex-cv-mid {
-    margin: auto 0;
-  }
-  .ex-cv-eye {
-    font:
-      600 10pt "IBM Plex Mono",
-      monospace;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: #9a5a23;
-    margin: 0;
-  }
-  .ex-cv-mid h1 {
-    font:
-      600 30pt/1.1 "IBM Plex Serif",
-      Georgia,
-      serif;
-    color: #14304f;
-    margin: 8px 0 6px;
-  }
-  .ex-cv-sub {
-    font-size: 13pt;
-    color: #3b4856;
-    margin: 0;
-  }
-  .ex-cv-mid h2 {
-    font:
-      600 17pt/1.25 "IBM Plex Serif",
-      Georgia,
-      serif;
-    color: #14212e;
-    margin: 22px 0 0;
-    padding-left: 12px;
-    border-left: 4px solid #9a5a23;
-  }
-  .ex-cv-dl {
-    display: grid;
-    grid-template-columns: 150px 1fr;
-    gap: 6px 14px;
-    margin: 0 0 18px;
-    font-size: 10pt;
-    border-top: 1px solid #c9d1da;
-    padding-top: 14px;
-  }
-  .ex-cv-dl dt {
-    color: #5a6775;
-    text-transform: uppercase;
-    font-size: 8pt;
-    letter-spacing: 0.08em;
-    align-self: center;
-  }
-  .ex-cv-dl dd {
-    margin: 0;
-    font-weight: 500;
-  }
-  .ex-cv-foot {
-    display: flex;
-    justify-content: space-between;
-    font:
-      8.5pt "IBM Plex Mono",
-      monospace;
-    color: #5a6775;
-    border-top: 1px solid #14304f;
-    padding-top: 8px;
-  }
   .ex-firmas {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -419,9 +325,7 @@
   }
   .ex-formal .ex-h1,
   .ex-formal .ex-h2,
-  .ex-formal .card > h2,
-  .ex-formal .ex-cv-mid h1,
-  .ex-formal .ex-cv-mid h2 {
+  .ex-formal .card > h2 {
     font-family: Arial, Helvetica, sans-serif !important;
     font-weight: 700;
     color: #000 !important;
@@ -437,7 +341,6 @@
   .ex-formal .ex-h2 span,
   .ex-formal .ex-toc li span,
   .ex-formal .ex-cap,
-  .ex-formal .ex-cv-eye,
   .ex-formal .ex-firma-t,
   .ex-formal .ex-toc li.l0,
   .ex-formal .ex-calc h4,
@@ -516,27 +419,6 @@
   .ex-formal .ex-calc dt,
   .ex-formal .ex-calc h4 span {
     color: #333;
-  }
-  .ex-formal .ex-cover {
-    border: 1pt solid #000;
-  }
-  .ex-formal .ex-cv-top {
-    border-bottom: 1.5pt solid #000;
-  }
-  .ex-formal .ex-cv-top b {
-    color: #000;
-    letter-spacing: 0.02em;
-  }
-  .ex-formal .ex-cv-mid h2 {
-    border-left-color: #000;
-  }
-  .ex-formal .ex-cv-foot {
-    border-top-color: #000;
-    color: #000;
-    font-family: Arial, Helvetica, sans-serif;
-  }
-  .ex-formal .ex-cv-eye {
-    font-family: Arial, Helvetica, sans-serif;
   }
   .ex-formal .ex-unif svg {
     filter: grayscale(1);

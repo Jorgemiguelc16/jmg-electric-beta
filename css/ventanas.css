@@ -1446,9 +1446,6 @@
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
-.dx-cards.dx-tres {
-  grid-template-columns: 1fr;
-}
 .dx-card .sw {
   margin-left: auto;
   flex: none;
@@ -1471,9 +1468,6 @@
 #dxfDlg .dx-card input {
   width: auto;
   height: auto;
-}
-#dxfDlg .dx-cards.dx-tres .dx-card {
-  padding: 7px 10px;
 }
 /* Dos columnas: las láminas a la izquierda y las opciones a la derecha; en una ventana angosta, una sola */
 #dxfDlg .dx-cuerpo {

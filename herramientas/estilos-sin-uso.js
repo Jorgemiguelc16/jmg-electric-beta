@@ -7,7 +7,8 @@ const path = require("path");
 const postcss = require("postcss");
 const { raiz, archivosCss } = require("./estilos");
 
-const CONSERVAR = new Set(["ex-f", "ex-formal", "ex-color"]);
+// ex-jmg: estilo a color del expediente (ex-${estilo}); p-a, p-u, p-n: prioridad de las tareas de la agenda (p-${x.p})
+const CONSERVAR = new Set(["ex-f", "ex-formal", "ex-color", "ex-jmg", "p-a", "p-u", "p-n"]);
 const leer = f => fs.readFileSync(path.join(raiz, f), "utf8");
 const textos =
   leer("index.html") +

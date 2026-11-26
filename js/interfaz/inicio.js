@@ -13,7 +13,7 @@ try {
 ayudas();
 if (draft) aplicar(draft);
 else aplicar(proyectoVacio("uni"));
-// La biblioteca y el proyecto abierto desde la base de datos del navegador (js/proyectos/proyectos.js)
+// La biblioteca y el proyecto abierto desde la base de datos del navegador (js/proyectos/almacen.js)
 alCargar();
 
 /* Bienvenida (se abre al iniciar sesión, desde js/cuenta/acceso.js). Si la persona ya tiene proyectos guardados,

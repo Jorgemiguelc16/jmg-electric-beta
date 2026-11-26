@@ -103,7 +103,6 @@ body.ws-on {
 }
 .ap-ver {
   font-family: var(--f-mono);
-  font-size: 11px;
   border: 1px solid rgba(255, 255, 255, 0.35);
   padding: 1px 7px;
   margin-right: 6px;

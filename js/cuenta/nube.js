@@ -1,7 +1,7 @@
 /* PROYECTOS EN LA NUBE (Firestore, plan gratuito de Firebase)
    Con la cuenta aprobada, cada proyecto guardado se copia a la cuenta y se trae de ella: al ingresar desde otra
    computadora aparecen los mismos proyectos, con sus planos DXF. El navegador sigue siendo el almacén de trabajo
-   (js/proyectos/proyectos.js); la nube es su copia.
+   (js/proyectos/almacen.js); la nube es su copia.
    · proyectos/{uid}/p/{id}: resumen del proyecto (nombre, fecha savedAt, partes n) y, en su colección «partes», el
      proyecto en texto, en trozos de hasta NUBE_PARTE caracteres (un documento de Firestore admite hasta 1 MB).
      Las partes llevan la fecha del proyecto: si no coinciden con el resumen (se está subiendo), se espera.
@@ -90,7 +90,7 @@ function nubeError(e) {
     nubeProgramar(30000);
   }
 }
-/* Cada vez que la biblioteca cambia (js/proyectos/proyectos.js, libSave): sube lo nuevo 30 s después (el plan gratuito admite
+/* Cada vez que la biblioteca cambia (js/proyectos/almacen.js, libSave): sube lo nuevo 30 s después (el plan gratuito admite
    unas 20 000 escrituras al día entre todas las cuentas) y, sin esperar, al cerrar o dejar la pestaña */
 function nubeProgramar(ms = 30000) {
   if (!NUBE.uid) return;

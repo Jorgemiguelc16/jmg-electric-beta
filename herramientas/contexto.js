@@ -31,7 +31,9 @@ const MOTOR = [
   "js/resultados/resultados.js",
   "js/resultados/metrado.js",
   "js/resultados/presupuesto.js",
-  "js/proyectos/proyectos.js"
+  "js/proyectos/proyectos.js",
+  "js/proyectos/validar.js",
+  "js/proyectos/almacen.js"
 ];
 
 // Crea el contexto con el motor y, después, los archivos extra (por ejemplo, los de los planos)
@@ -62,10 +64,11 @@ function crearContexto(extra = []) {
     const id = (m[0].match(/\bid="([^"]+)"/) || [])[1];
     if (id) defv[id] = (m[0].match(/\bvalue="([^"]*)"/) || [, ""])[1];
   }
-  for (const m of html.matchAll(/<select\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+  // index.html va formateado con Prettier (modo estricto): una etiqueta puede cerrar en la línea siguiente («</select\n>»)
+  for (const m of html.matchAll(/<select\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/select\s*>/g)) {
     const ops = [...m[2].matchAll(/<option\b([^>]*)>([^<]*)/g)].map(o => [
       o[1],
-      (o[1].match(/value="([^"]*)"/) || [, o[2]])[1]
+      (o[1].match(/value="([^"]*)"/) || [, o[2].trim()])[1]
     ]);
     defv[m[1]] = (ops.find(o => /\bselected\b/.test(o[0])) || ops[0] || [, ""])[1];
   }
